@@ -78,6 +78,17 @@ Cron (default `0 23 * * *`, `Asia/Kolkata`), rolling window (default 3 days), **
 
 `videos.insert` costs 1,600 units of the 10,000/day default per Google project → **~6 uploads/day per channel** (each channel has its own project). On a heavy backfill day, extra videos are parked in `error` and complete on following days — that's the design working, not failing. Need more? Request a quota increase in that channel's Google project.
 
+## Branches & deploys
+
+| Branch | Railway service | Command |
+|---|---|---|
+| `master` (production) | `videorouter` | `npm run deploy:prod` |
+| `orbitq` (staging) | `videorouter-staging` | `npm run deploy:staging` |
+
+The deploy scripts refuse to run from the wrong branch or with uncommitted changes
+(`railway up` ships the working directory, not a git ref). Staging has its own
+Postgres, secrets, and domain — connect test accounts there, never production ones.
+
 ## Develop / test locally
 
 ```bash

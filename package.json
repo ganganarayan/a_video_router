@@ -9,7 +9,9 @@
   },
   "scripts": {
     "start": "node src/index.js",
-    "test": "node --test"
+    "test": "node --test",
+    "deploy:prod": "node scripts/deploy.mjs prod",
+    "deploy:staging": "node scripts/deploy.mjs staging"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
