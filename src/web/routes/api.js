@@ -5,6 +5,7 @@ import { query, getConfigMap, setConfigValue } from '../../db.js';
 import { encrypt } from '../../lib/secrets.js';
 import { requireApiAuth, updateAccount, setSessionCookie } from '../auth.js';
 import { runPipeline, isRunning } from '../../pipeline/run.js';
+import { enqueuePush, getJobs } from '../../pipeline/manual.js';
 import { reschedule, getSchedule } from '../../scheduler.js';
 import * as zoom from '../../providers/zoom.js';
 import * as fathom from '../../providers/fathom.js';
@@ -141,6 +142,30 @@ apiRouter.get('/sources', wrap(async (req, res) => {
   }
 
   res.json(result);
+}));
+
+// Queue a manual per-video push (upload to a chosen channel and/or push to a
+// chosen LMS course). Jobs run sequentially in the background.
+apiRouter.post('/push', wrap(async (req, res) => {
+  const { source, source_id, title, channel_id, lms_course_id, lms_module_id } = req.body;
+  if (!['zoom', 'fathom'].includes(source)) return res.status(400).json({ error: 'source must be zoom or fathom' });
+  if (!source_id) return res.status(400).json({ error: 'source_id is required' });
+  if (!channel_id && !lms_course_id) {
+    return res.status(400).json({ error: 'Pick a YouTube channel and/or an LMS course to push to.' });
+  }
+  const { job, duplicate } = enqueuePush({
+    source,
+    source_id: String(source_id),
+    title,
+    channel_id: channel_id ? Number(channel_id) : null,
+    lms_course_id: lms_course_id?.trim() || null,
+    lms_module_id: lms_module_id?.trim() || null,
+  });
+  res.json({ ok: true, jobId: job.id, duplicate });
+}));
+
+apiRouter.get('/push-queue', wrap(async (_req, res) => {
+  res.json(getJobs());
 }));
 
 // Manual Zoom delete — same safety gate as the pipeline: only rows that hold a

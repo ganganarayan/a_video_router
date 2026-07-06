@@ -1,13 +1,24 @@
 <%- include('partials/head') %>
 <h1>Source videos</h1>
 <p class="muted">Live listing from Zoom and Fathom (last 30 days), matched against the pipeline log.
-The <b>Delete from Zoom</b> button unlocks only after that recording has a YouTube link —
-until then the source is protected. Fathom cannot be deleted via API (storage is unlimited).</p>
+Pick a destination per row and press <b>Push</b> — jobs queue up and process one by one.
+<b>Delete from Zoom</b> unlocks only after that recording has a YouTube link.
+Fathom cannot be deleted via API (storage is unlimited).</p>
 
 <p class="row">
   <button id="refresh" class="primary">Refresh listing</button>
   <span class="muted" id="loading"></span>
 </p>
+
+<div class="card" id="queue-card" style="display:none">
+  <h2>Push queue</h2>
+  <div class="table-wrap">
+    <table id="queue-table">
+      <thead><tr><th>#</th><th>Video</th><th>Source</th><th>Status</th><th>Result</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
 
 <div class="card">
   <h2>On Zoom <span class="muted" id="zoom-note"></span></h2>
@@ -15,7 +26,7 @@ until then the source is protected. Fathom cannot be deleted via API (storage is
     <table id="zoom-table">
       <thead><tr>
         <th>Title</th><th>Recorded</th><th>Length</th><th>Size on Zoom</th><th>Speaker view</th>
-        <th>Pipeline status</th><th>YouTube link</th><th></th>
+        <th>Pipeline status</th><th>YouTube link</th><th>Push to…</th><th></th>
       </tr></thead>
       <tbody></tbody>
     </table>
@@ -27,7 +38,7 @@ until then the source is protected. Fathom cannot be deleted via API (storage is
   <div class="table-wrap">
     <table id="fathom-table">
       <thead><tr>
-        <th>Title</th><th>Recorded</th><th>Length</th><th>Pipeline status</th><th>YouTube link</th>
+        <th>Title</th><th>Recorded</th><th>Length</th><th>Pipeline status</th><th>YouTube link</th><th>Push to…</th>
       </tr></thead>
       <tbody></tbody>
     </table>
@@ -54,6 +65,42 @@ function ytCell(item) {
 }
 
 let current = { zoom: [], fathom: [] };
+let channels = [];
+let lmsOptions = []; // {label, course_id, module_id}
+let queueTimer = null;
+
+function channelSelect(source, i, item) {
+  if (item.youtube_url) return '<span class="muted">on YouTube ✓</span>';
+  const opts = channels.map(c =>
+    `<option value="${c.id}">${esc(c.label)}${c.connected ? '' : ' (not connected)'}</option>`).join('');
+  return `<select data-ch="${source}:${i}" title="YouTube channel to upload to">
+    <option value="">YouTube channel…</option>${opts}</select>`;
+}
+
+function lmsSelect(source, i, item) {
+  if (!lmsOptions.length) return '';
+  if (item.lms_lesson_url) return '<span class="muted">in LMS ✓</span>';
+  const opts = lmsOptions.map((o, k) =>
+    `<option value="${k}">${esc(o.label)}</option>`).join('');
+  return `<select data-lms="${source}:${i}" title="LMS course to push into">
+    <option value="">LMS course…</option>${opts}</select>`;
+}
+
+function pushCell(source, i, item) {
+  return `<div class="row" style="min-width:200px">
+    ${channelSelect(source, i, item)}
+    ${lmsSelect(source, i, item)}
+    <button data-push="${source}:${i}">Push</button>
+  </div>`;
+}
+
+async function loadMeta() {
+  const [conn, rules] = await Promise.all([api('/connections'), api('/rules')]);
+  channels = conn.channels;
+  lmsOptions = rules
+    .filter(r => r.lms_course_id)
+    .map(r => ({ label: `${r.pattern} → ${r.lms_course_id}`, course_id: r.lms_course_id, module_id: r.lms_module_id }));
+}
 
 async function load() {
   const btn = document.getElementById('refresh');
@@ -70,6 +117,15 @@ async function load() {
     btn.disabled = false;
     document.getElementById('loading').textContent = '';
   }
+}
+
+function bindRowActions(tbody) {
+  tbody.querySelectorAll('[data-push]').forEach((btn) => {
+    btn.onclick = () => pushRow(btn.dataset.push, btn);
+  });
+  tbody.querySelectorAll('[data-zoom-del]').forEach((btn) => {
+    btn.onclick = () => deleteFromZoom(Number(btn.dataset.zoomDel), btn);
+  });
 }
 
 function renderZoom(s) {
@@ -90,6 +146,7 @@ function renderZoom(s) {
       <td>${z.has_target_view ? '✓' : '<span class="badge warn">missing</span>'}</td>
       <td>${pipelineBadge(z)}${z.source_deleted ? ' <span class="badge ok">deleted on Zoom</span>' : ''}</td>
       <td>${ytCell(z)}</td>
+      <td>${pushCell('zoom', i, z)}</td>
       <td>
         <button class="danger" data-zoom-del="${i}" ${z.can_delete ? '' : 'disabled'}
           title="${z.can_delete
@@ -99,11 +156,8 @@ function renderZoom(s) {
         </button>
       </td>
     </tr>
-  `).join('') || '<tr><td colspan="8" class="muted">No recordings on Zoom in this window.</td></tr>';
-
-  tbody.querySelectorAll('[data-zoom-del]').forEach((btn) => {
-    btn.onclick = () => deleteFromZoom(Number(btn.dataset.zoomDel), btn);
-  });
+  `).join('') || '<tr><td colspan="9" class="muted">No recordings on Zoom in this window.</td></tr>';
+  bindRowActions(tbody);
 }
 
 function renderFathom(s) {
@@ -115,15 +169,85 @@ function renderFathom(s) {
     return;
   }
   note.textContent = `— ${s.fathom.length} recording(s) in the last ${s.windowDays} days`;
-  tbody.innerHTML = s.fathom.map((f) => `
+  tbody.innerHTML = s.fathom.map((f, i) => `
     <tr>
       <td>${esc(f.title)}</td>
       <td>${fmtDate(f.recorded_at)}</td>
       <td>${fmtMin(f.duration_minutes)}</td>
       <td>${pipelineBadge(f)}</td>
       <td>${ytCell(f)}</td>
+      <td>${pushCell('fathom', i, f)}</td>
     </tr>
-  `).join('') || '<tr><td colspan="5" class="muted">No recordings on Fathom in this window.</td></tr>';
+  `).join('') || '<tr><td colspan="6" class="muted">No recordings on Fathom in this window.</td></tr>';
+  bindRowActions(tbody);
+}
+
+async function pushRow(key, btn) {
+  const [source, iStr] = key.split(':');
+  const item = current[source][Number(iStr)];
+  if (!item) return;
+  const chSel = document.querySelector(`[data-ch="${key}"]`);
+  const lmsSel = document.querySelector(`[data-lms="${key}"]`);
+  const channelId = chSel?.value || null;
+  const lmsOpt = lmsSel?.value !== '' && lmsSel ? lmsOptions[Number(lmsSel.value)] : null;
+
+  if (!item.youtube_url && !channelId) {
+    return toast('Pick a YouTube channel — this video is not uploaded yet.', 'err');
+  }
+  if (item.youtube_url && !lmsOpt) {
+    return toast('Already on YouTube — pick an LMS course to push it into the LMS.', 'err');
+  }
+  btn.disabled = true;
+  try {
+    const r = await api('/push', { method: 'POST', body: {
+      source,
+      source_id: item.source_id,
+      title: item.title,
+      channel_id: channelId,
+      lms_course_id: lmsOpt?.course_id || null,
+      lms_module_id: lmsOpt?.module_id || null,
+    }});
+    toast(r.duplicate ? 'Already queued.' : `Queued as job #${r.jobId}: ${item.title}`);
+    pollQueue();
+  } catch (e) {
+    toast(e.message, 'err');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function queueBadge(j) {
+  const cls = { queued: 'warn', processing: 'warn', done: 'ok', failed: 'err' }[j.status] || '';
+  return `<span class="badge ${cls}">${j.status}</span>`;
+}
+
+async function pollQueue() {
+  clearTimeout(queueTimer);
+  try {
+    const jobs = await api('/push-queue');
+    const card = document.getElementById('queue-card');
+    if (!jobs.length) { card.style.display = 'none'; return; }
+    card.style.display = '';
+    document.querySelector('#queue-table tbody').innerHTML = jobs.map(j => `
+      <tr>
+        <td>${j.id}</td>
+        <td>${esc(j.title)}</td>
+        <td>${esc(j.source)}</td>
+        <td>${queueBadge(j)}</td>
+        <td>${j.status === 'failed' ? esc(j.message)
+          : [j.youtube_url ? `<a href="${esc(j.youtube_url)}" target="_blank">YouTube</a>` : '',
+             j.lms_lesson_url ? `<a href="${esc(j.lms_lesson_url)}" target="_blank">LMS lesson</a>` : '',
+             esc(j.message || '')].filter(Boolean).join(' · ')}</td>
+      </tr>
+    `).join('');
+    const active = jobs.some(j => j.status === 'queued' || j.status === 'processing');
+    if (active) {
+      queueTimer = setTimeout(pollQueue, 4000);
+    } else if (window._queueWasActive) {
+      load(); // statuses changed — refresh the listing
+    }
+    window._queueWasActive = active;
+  } catch { /* transient */ }
 }
 
 async function deleteFromZoom(index, btn) {
@@ -142,6 +266,7 @@ async function deleteFromZoom(index, btn) {
 }
 
 document.getElementById('refresh').onclick = load;
-load();
+loadMeta().then(load).catch(e => toast(e.message, 'err'));
+pollQueue();
 </script>
 <%- include('partials/foot') %>

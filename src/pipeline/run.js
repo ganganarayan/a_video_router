@@ -7,6 +7,7 @@ import { getChannelById, uploadVideo, ensurePlaylist, addToPlaylist } from '../p
 import { matchRule, buildVideoTitle } from './router.js';
 import { STATES, RETRYABLE_STATES, canDeleteZoomSource } from './states.js';
 import { tempFilePath, cleanupTemp, downloadFathomVideo } from './download.js';
+import { lock, unlock, isLocked, recordingKey } from './locks.js';
 import { sendRunSummary } from '../notifier.js';
 
 let running = false;
@@ -171,6 +172,7 @@ async function downloadUploadFinish(ctx, rec, rule, downloadFn, counts, details)
 // --- per-source processing ---
 
 async function processZoomRecording(ctx, rec, meeting, counts, details) {
+  if (isLocked(recordingKey('zoom', rec.source_id))) return; // manual push in flight
   if (rec.youtube_video_id) {
     // already uploaded — only the safe post-steps remain
     const rule = matchRule(ctx.rules, 'zoom', rec.title);
@@ -198,6 +200,7 @@ async function processZoomRecording(ctx, rec, meeting, counts, details) {
 }
 
 async function processFathomRecording(ctx, rec, shareUrl, counts, details) {
+  if (isLocked(recordingKey('fathom', rec.source_id))) return; // manual push in flight
   if (rec.youtube_video_id) {
     const rule = matchRule(ctx.rules, 'fathom', rec.title);
     return postUploadSteps(ctx, rec, rule, details); // no delete for fathom (read-only API)
@@ -326,6 +329,116 @@ async function zoomDeleteSweep(ctx, details) {
   );
   for (const rec of rows) {
     await tryZoomDelete(ctx, rec, details);
+  }
+}
+
+// --- manual per-video push (used by the Sources page queue) ---
+// Uploads to an explicitly chosen channel and/or pushes to an explicitly chosen
+// LMS course, bypassing routing rules for this one recording. Throws on failure
+// so the queue can surface the message.
+
+export async function manualPush(job) {
+  const key = recordingKey(job.source, job.source_id);
+  if (!lock(key)) throw new Error('This recording is already being processed.');
+  try {
+    const cfg = await getConfigMap();
+    const ctx = {
+      cfg,
+      windowDays: 30,
+      zoomDeleteMode: cfg.zoom_delete_mode || 'off',
+      zoomAccount: await zoom.getZoomAccount(),
+      lmsAccount: await lms.getLmsAccount(),
+      rules: await getRules(),
+    };
+
+    let rec;
+    let meeting = null;
+    let shareUrl = null;
+    if (job.source === 'zoom') {
+      if (!ctx.zoomAccount) throw new Error('Zoom is not connected.');
+      meeting = await zoom.getMeetingRecordings(ctx.zoomAccount, job.source_id);
+      if (!meeting) throw new Error('Recording not found on Zoom (deleted or expired).');
+      ({ rec } = await ensureRow('zoom', job.source_id, {
+        title: meeting.topic,
+        recorded_at: meeting.start_time || null,
+        duration_minutes: meeting.duration ?? null,
+      }));
+    } else {
+      const account = await fathom.getFathomAccount();
+      if (!account) throw new Error('Fathom is not connected.');
+      const meetings = await fathom.listMeetings(account, 30);
+      const m = meetings.find((x) => x.recordingId === String(job.source_id));
+      ({ rec } = await ensureRow('fathom', job.source_id, {
+        title: m?.title || `Fathom recording ${job.source_id}`,
+        recorded_at: m?.recordedAt || null,
+        duration_minutes: m?.durationMinutes ?? null,
+        source_meta: m?.shareUrl ? { share_url: m.shareUrl } : {},
+      }));
+      shareUrl = m?.shareUrl || rec.source_meta?.share_url || null;
+    }
+
+    rec = await getRec(rec.id);
+    const rule = {
+      pattern: rec.matched_tag || 'manual push',
+      channel_id: job.channel_id || rec.channel_id || null,
+      playlist_name: job.playlist_name || null,
+      privacy: 'unlisted',
+      keep_prefix: true,
+      lms_course_id: job.lms_course_id || null,
+      lms_module_id: job.lms_module_id || null,
+    };
+    const counts = { found: 0, uploaded: 0, skipped: 0, errors: 0 };
+    const details = { posted: [], skipped: [], errors: [], warnings: [] };
+
+    if (!rec.youtube_video_id) {
+      if (!rule.channel_id) {
+        throw new Error('Pick a YouTube channel — this video has not been uploaded yet.');
+      }
+      if (job.source === 'zoom') {
+        const file = zoom.pickRecordingFile(meeting);
+        if (!file) throw new Error('No shared_screen_with_speaker_view MP4 on this Zoom meeting.');
+        await updateRec(rec.id, { source_file_id: file.id || null });
+        await downloadUploadFinish(
+          ctx, rec, rule,
+          (dest) => zoom.downloadRecording(ctx.zoomAccount, file.download_url, dest),
+          counts, details,
+        );
+      } else {
+        if (!shareUrl) throw new Error('No Fathom share URL available for this recording.');
+        await downloadUploadFinish(
+          ctx, rec, rule,
+          (dest) => downloadFathomVideo(shareUrl, dest),
+          counts, details,
+        );
+      }
+      rec = await getRec(rec.id);
+      if (!rec.youtube_video_id) {
+        throw new Error(rec.error_message || details.errors[0]?.message || 'Upload failed.');
+      }
+    } else if (rule.lms_course_id) {
+      await tryLmsPush(ctx, rec, rule, details);
+      rec = await getRec(rec.id);
+      if (rec.lms_status !== 'pushed') {
+        throw new Error(details.warnings.at(-1)?.message || 'LMS push failed.');
+      }
+    } else {
+      return {
+        message: 'Already on YouTube — pick an LMS course to push it into the LMS.',
+        youtube_url: rec.youtube_url,
+        lms_lesson_url: rec.lms_lesson_url,
+      };
+    }
+
+    rec = await getRec(rec.id);
+    const warn = details.warnings.length ? ` (${details.warnings.map((w) => w.message).join('; ')})` : '';
+    return {
+      message: `done${warn}`,
+      youtube_url: rec.youtube_url,
+      lms_lesson_url: rec.lms_lesson_url,
+      status: rec.status,
+    };
+  } finally {
+    unlock(key);
   }
 }
 
