@@ -1,0 +1,83 @@
+<%- include('partials/head') %>
+<h1>Settings</h1>
+
+<div class="grid">
+  <div class="card">
+    <h2>Schedule & pipeline</h2>
+    <label>Cron expression</label><input id="s-cron" placeholder="0 23 * * *">
+    <label>Timezone</label><input id="s-tz" placeholder="Asia/Kolkata">
+    <label>Rolling window (days)</label><input id="s-window" type="number" min="1">
+    <label>Zoom delete mode</label>
+    <select id="s-delete">
+      <option value="off">off — never delete Zoom sources</option>
+      <option value="trash">trash — recoverable for 30 days</option>
+      <option value="delete">delete — permanent, frees the 10 GB</option>
+    </select>
+    <p class="muted">Zoom sources are only ever deleted after a verified YouTube upload
+    (the row must hold a YouTube video ID).</p>
+    <p><button class="primary" id="s-save">Save settings</button></p>
+  </div>
+
+  <div class="card">
+    <h2>Daily log email</h2>
+    <label>Send to</label><input id="s-email-to" type="email">
+    <label>Send from (Gmail address)</label><input id="s-email-from" type="email">
+    <label>Gmail app password <span class="muted" id="s-pass-state"></span></label>
+    <input id="s-email-pass" type="password" placeholder="enter to save/replace">
+    <p class="muted">Uses a Gmail app password (Google Account → Security → App passwords).
+    A summary is sent after every run — including “No new recordings”.</p>
+  </div>
+
+  <div class="card">
+    <h2>Admin password</h2>
+    <label>Current password</label><input id="p-current" type="password">
+    <label>New password (min 8 chars)</label><input id="p-new" type="password">
+    <p><button id="p-save">Change password</button></p>
+  </div>
+</div>
+
+<script>
+async function load() {
+  const s = await api('/settings');
+  document.getElementById('s-cron').value = s.cron_expression;
+  document.getElementById('s-tz').value = s.timezone;
+  document.getElementById('s-window').value = s.rolling_window_days;
+  document.getElementById('s-delete').value = s.zoom_delete_mode || 'off';
+  document.getElementById('s-email-to').value = s.email_to;
+  document.getElementById('s-email-from').value = s.email_from;
+  document.getElementById('s-pass-state').textContent = s.gmail_app_password_set ? '(saved)' : '(not set)';
+}
+
+document.getElementById('s-save').onclick = async () => {
+  try {
+    const body = {
+      cron_expression: document.getElementById('s-cron').value,
+      timezone: document.getElementById('s-tz').value,
+      rolling_window_days: document.getElementById('s-window').value,
+      zoom_delete_mode: document.getElementById('s-delete').value,
+      email_to: document.getElementById('s-email-to').value,
+      email_from: document.getElementById('s-email-from').value,
+    };
+    const pass = document.getElementById('s-email-pass').value;
+    if (pass) body.gmail_app_password = pass;
+    await api('/settings', { method: 'POST', body });
+    toast('Settings saved — schedule updated');
+    document.getElementById('s-email-pass').value = '';
+    load();
+  } catch (e) { toast(e.message, 'err'); }
+};
+
+document.getElementById('p-save').onclick = async () => {
+  try {
+    await api('/settings/password', { method: 'POST', body: {
+      current_password: document.getElementById('p-current').value,
+      new_password: document.getElementById('p-new').value,
+    }});
+    toast('Password changed');
+    document.getElementById('p-current').value = document.getElementById('p-new').value = '';
+  } catch (e) { toast(e.message, 'err'); }
+};
+
+load().catch(e => toast(e.message, 'err'));
+</script>
+<%- include('partials/foot') %>

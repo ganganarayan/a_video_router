@@ -1,0 +1,143 @@
+<%- include('partials/head') %>
+<h1>Routing rules</h1>
+<p class="muted">A recording's title is matched against these rules — lowest priority number first,
+then longest pattern. No match → the video is held as <span class="mono">skipped_no_route</span>
+(never uploaded to a wrong channel, never deleted) and auto-processes once a rule exists.</p>
+
+<div class="card">
+  <h2 id="form-title">Add rule</h2>
+  <div class="row">
+    <div class="field"><label>Pattern</label><input id="r-pattern" placeholder="Online - 90 Day"></div>
+    <div class="field"><label>Match</label>
+      <select id="r-match"><option>contains</option><option>prefix</option><option>regex</option></select></div>
+    <div class="field"><label>Source</label>
+      <select id="r-source"><option>any</option><option>zoom</option><option>fathom</option></select></div>
+    <div class="field"><label>Channel</label><select id="r-channel"></select></div>
+    <div class="field"><label>Playlist</label><input id="r-playlist" placeholder="90 Day"></div>
+  </div>
+  <div class="row">
+    <div class="field"><label>Privacy</label>
+      <select id="r-privacy"><option>unlisted</option><option>private</option><option>public</option></select></div>
+    <div class="field"><label>Keep tag in title</label>
+      <select id="r-keep"><option value="true">yes</option><option value="false">no</option></select></div>
+    <div class="field"><label>LMS course ID</label><input id="r-course"></div>
+    <div class="field"><label>LMS module ID</label><input id="r-module"></div>
+    <div class="field"><label>Priority</label><input id="r-priority" type="number" value="100"></div>
+    <button class="primary" id="r-save">Save rule</button>
+    <button id="r-cancel" style="display:none">Cancel edit</button>
+  </div>
+</div>
+
+<div class="card table-wrap">
+  <table id="rules-table">
+    <thead><tr>
+      <th>Prio</th><th>Source</th><th>Match</th><th>Pattern</th><th>Channel</th><th>Playlist</th>
+      <th>Privacy</th><th>Keep tag</th><th>LMS course/module</th><th>Enabled</th><th></th>
+    </tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<script>
+let editingId = null;
+let channels = [];
+
+async function loadChannels() {
+  const c = await api('/connections');
+  channels = c.channels;
+  document.getElementById('r-channel').innerHTML =
+    channels.map(ch => `<option value="${ch.id}">${esc(ch.label)}${ch.connected ? '' : ' (not connected)'}</option>`).join('')
+    || '<option value="">— add a channel first —</option>';
+}
+
+async function loadRules() {
+  const rules = await api('/rules');
+  document.querySelector('#rules-table tbody').innerHTML = rules.map(r => `
+    <tr>
+      <td>${r.priority}</td><td>${esc(r.source)}</td><td>${esc(r.match_type)}</td>
+      <td class="mono">${esc(r.pattern)}</td>
+      <td>${esc(r.channel_label || '?')}</td><td>${esc(r.playlist_name || '—')}</td>
+      <td>${esc(r.privacy)}</td><td>${r.keep_prefix ? 'yes' : 'no'}</td>
+      <td class="mono">${esc(r.lms_course_id || '—')}${r.lms_module_id ? ' / ' + esc(r.lms_module_id) : ''}</td>
+      <td>${r.enabled ? statusBadge('connected').replace('connected', 'on') : statusBadge('disconnected').replace('disconnected', 'off')}</td>
+      <td class="row">
+        <button onclick='editRule(${JSON.stringify(r).replace(/'/g, "&#39;")})'>Edit</button>
+        <button onclick="toggleRule(${r.id}, ${!r.enabled})">${r.enabled ? 'Disable' : 'Enable'}</button>
+        <button class="danger" onclick="delRule(${r.id})">Delete</button>
+      </td>
+    </tr>
+  `).join('') || '<tr><td colspan="11" class="muted">No rules yet — everything will be held as skipped_no_route.</td></tr>';
+  window._rules = rules;
+}
+
+function formValues() {
+  return {
+    pattern: document.getElementById('r-pattern').value,
+    match_type: document.getElementById('r-match').value,
+    source: document.getElementById('r-source').value,
+    channel_id: Number(document.getElementById('r-channel').value),
+    playlist_name: document.getElementById('r-playlist').value,
+    privacy: document.getElementById('r-privacy').value,
+    keep_prefix: document.getElementById('r-keep').value === 'true',
+    lms_course_id: document.getElementById('r-course').value,
+    lms_module_id: document.getElementById('r-module').value,
+    priority: Number(document.getElementById('r-priority').value) || 100,
+    enabled: true,
+  };
+}
+
+function editRule(r) {
+  editingId = r.id;
+  document.getElementById('form-title').textContent = 'Edit rule #' + r.id;
+  document.getElementById('r-pattern').value = r.pattern;
+  document.getElementById('r-match').value = r.match_type;
+  document.getElementById('r-source').value = r.source;
+  document.getElementById('r-channel').value = r.channel_id;
+  document.getElementById('r-playlist').value = r.playlist_name || '';
+  document.getElementById('r-privacy').value = r.privacy;
+  document.getElementById('r-keep').value = String(r.keep_prefix);
+  document.getElementById('r-course').value = r.lms_course_id || '';
+  document.getElementById('r-module').value = r.lms_module_id || '';
+  document.getElementById('r-priority').value = r.priority;
+  document.getElementById('r-cancel').style.display = '';
+  scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function resetForm() {
+  editingId = null;
+  document.getElementById('form-title').textContent = 'Add rule';
+  document.getElementById('r-cancel').style.display = 'none';
+  ['r-pattern', 'r-playlist', 'r-course', 'r-module'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('r-priority').value = 100;
+}
+
+document.getElementById('r-save').onclick = async () => {
+  const body = formValues();
+  if (editingId) {
+    const existing = window._rules.find(x => x.id === editingId);
+    body.enabled = existing ? existing.enabled : true;
+  }
+  try {
+    await api(editingId ? '/rules/' + editingId : '/rules', { method: editingId ? 'PUT' : 'POST', body });
+    toast('Rule saved'); resetForm(); loadRules();
+  } catch (e) { toast(e.message, 'err'); }
+};
+document.getElementById('r-cancel').onclick = resetForm;
+
+async function toggleRule(id, enabled) {
+  const r = window._rules.find(x => x.id === id);
+  try {
+    await api('/rules/' + id, { method: 'PUT', body: { ...r, enabled } });
+    loadRules();
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+async function delRule(id) {
+  if (!confirm('Delete this rule?')) return;
+  try { await api('/rules/' + id, { method: 'DELETE' }); loadRules(); }
+  catch (e) { toast(e.message, 'err'); }
+}
+
+loadChannels().then(loadRules).catch(e => toast(e.message, 'err'));
+</script>
+<%- include('partials/foot') %>

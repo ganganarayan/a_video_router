@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VideoRouter — <%= title %></title>
+  <link rel="stylesheet" href="/public/style.css">
+  <script src="/public/app.js"></script>
+</head>
+<body>
+<nav>
+  <span class="brand">VideoRouter</span>
+  <a class="tab <%= page === 'runs' ? 'active' : '' %>" href="/runs">Runs</a>
+  <a class="tab <%= page === 'connections' ? 'active' : '' %>" href="/connections">Connections</a>
+  <a class="tab <%= page === 'routing' ? 'active' : '' %>" href="/routing">Routing</a>
+  <a class="tab <%= page === 'settings' ? 'active' : '' %>" href="/settings">Settings</a>
+  <form method="post" action="/logout"><button type="submit">Log out</button></form>
+</nav>
+<main>

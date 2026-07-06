@@ -1,0 +1,112 @@
+<%- include('partials/head') %>
+<h1>Runs & video log</h1>
+
+<div class="grid">
+  <div class="card stat"><div class="num" id="stat-uploaded">–</div><div class="lbl">videos uploaded</div></div>
+  <div class="card stat"><div class="num" id="stat-skipped">–</div><div class="lbl">currently skipped</div></div>
+  <div class="card stat"><div class="num" id="stat-errors">–</div><div class="lbl">in error (auto-retried)</div></div>
+  <div class="card stat">
+    <div class="num"><button class="primary" id="run-now">Run now</button></div>
+    <div class="lbl" id="run-state"></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Schedule</h2>
+  <p class="muted">
+    Last run: <span id="last-run">–</span> &nbsp;·&nbsp;
+    Next scheduled run: <span id="next-run">–</span> &nbsp;·&nbsp;
+    Cron: <span class="mono" id="cron">–</span>
+  </p>
+  <div class="table-wrap">
+    <table id="runs-table">
+      <thead><tr><th>#</th><th>Type</th><th>Started</th><th>Finished</th><th>Found</th><th>Uploaded</th><th>Skipped</th><th>Errors</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Processed recordings (your link-log)</h2>
+  <div class="row">
+    <div class="field"><input id="search" placeholder="Search title or tag…"></div>
+    <div class="field">
+      <select id="status-filter">
+        <option value="">All statuses</option>
+        <option>uploaded</option><option>lms_pushed</option><option>deleted</option>
+        <option>error</option><option>skipped_no_route</option><option>skipped_no_matching_view</option>
+        <option>discovered</option><option>downloading</option><option>uploading</option>
+      </select>
+    </div>
+    <button id="refresh">Refresh</button>
+  </div>
+  <div class="table-wrap">
+    <table id="rec-table">
+      <thead><tr>
+        <th>Timestamp</th><th>File name</th><th>Source</th><th>YouTube link</th>
+        <th>LMS lesson link</th><th>Status</th><th>Src deleted</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+async function loadOverview() {
+  const o = await api('/overview');
+  document.getElementById('stat-uploaded').textContent = o.totals.uploaded;
+  document.getElementById('stat-skipped').textContent = o.totals.skipped;
+  document.getElementById('stat-errors').textContent = o.totals.errors;
+  document.getElementById('last-run').textContent = o.lastRun ? fmtDate(o.lastRun.started_at) : 'never';
+  document.getElementById('next-run').textContent = o.nextRun ? fmtDate(o.nextRun) : 'not scheduled';
+  document.getElementById('cron').textContent = o.schedule.expression
+    ? o.schedule.expression + ' (' + o.schedule.timezone + ')' : '–';
+  document.getElementById('run-state').textContent = o.running ? 'run in progress…' : 'manual trigger';
+  document.getElementById('run-now').disabled = o.running;
+}
+
+async function loadRuns() {
+  const runs = await api('/runs');
+  document.querySelector('#runs-table tbody').innerHTML = runs.map(r => `
+    <tr><td>${r.id}</td><td>${esc(r.run_type)}</td><td>${fmtDate(r.started_at)}</td>
+    <td>${r.finished_at ? fmtDate(r.finished_at) : '<span class="badge warn">running</span>'}</td>
+    <td>${r.found}</td><td>${r.uploaded}</td><td>${r.skipped}</td><td>${r.errors}</td></tr>
+  `).join('') || '<tr><td colspan="8" class="muted">No runs yet.</td></tr>';
+}
+
+async function loadRecordings() {
+  const q = encodeURIComponent(document.getElementById('search').value);
+  const st = encodeURIComponent(document.getElementById('status-filter').value);
+  const recs = await api(`/recordings?q=${q}&status=${st}`);
+  document.querySelector('#rec-table tbody').innerHTML = recs.map(r => `
+    <tr>
+      <td>${fmtDate(r.uploaded_at || r.discovered_at)}</td>
+      <td>${esc(r.title)}${r.error_message ? `<br><span class="badge err" title="${esc(r.error_message)}">error detail</span>` : ''}</td>
+      <td>${esc(r.source)}</td>
+      <td>${r.youtube_url ? `<a href="${esc(r.youtube_url)}" target="_blank">${esc(r.youtube_url)}</a>` : '—'}</td>
+      <td>${r.lms_lesson_url ? `<a href="${esc(r.lms_lesson_url)}" target="_blank">lesson</a>` : (r.lms_status === 'failed' ? '<span class="badge err">failed</span>' : '—')}</td>
+      <td>${statusBadge(r.status)}</td>
+      <td>${r.source_deleted ? '✓' : '—'}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="7" class="muted">Nothing processed yet.</td></tr>';
+}
+
+async function refreshAll() {
+  await Promise.all([loadOverview(), loadRuns(), loadRecordings()]).catch(e => toast(e.message, 'err'));
+}
+
+document.getElementById('run-now').onclick = async () => {
+  try {
+    await api('/run-now', { method: 'POST' });
+    toast('Run started — refreshing…');
+    setTimeout(refreshAll, 2000);
+  } catch (e) { toast(e.message, 'err'); }
+};
+document.getElementById('refresh').onclick = refreshAll;
+document.getElementById('search').addEventListener('keydown', e => { if (e.key === 'Enter') loadRecordings(); });
+document.getElementById('status-filter').onchange = loadRecordings;
+
+refreshAll();
+setInterval(loadOverview, 15000);
+</script>
+<%- include('partials/foot') %>

@@ -1,0 +1,155 @@
+<%- include('partials/head') %>
+<h1>Connections</h1>
+<p class="muted">All credentials are stored encrypted (AES-256-GCM) in Postgres — nothing lives in environment variables.</p>
+
+<div class="grid">
+  <div class="card">
+    <h2>Zoom (Server-to-Server OAuth) <span id="zoom-status"></span></h2>
+    <label>Account ID</label><input id="zoom-account-id">
+    <label>Client ID</label><input id="zoom-client-id">
+    <label>Client Secret</label><input id="zoom-client-secret" type="password" placeholder="enter to save/replace">
+    <p class="row">
+      <button class="primary" id="zoom-save">Save</button>
+      <button id="zoom-test">Test connection</button>
+    </p>
+    <p class="muted">Needs scopes <span class="mono">cloud_recording:read</span> + <span class="mono">cloud_recording:write</span>.</p>
+  </div>
+
+  <div class="card">
+    <h2>Fathom <span id="fathom-status"></span></h2>
+    <label>API key</label><input id="fathom-api-key" type="password" placeholder="enter to save/replace">
+    <p class="row">
+      <button class="primary" id="fathom-save">Save</button>
+      <button id="fathom-test">Test connection</button>
+    </p>
+    <p class="muted">Fathom is read-only: sources are never deleted there (storage is unlimited).</p>
+  </div>
+
+  <div class="card">
+    <h2>LMS — myappz.ai <span id="lms-status"></span></h2>
+    <label>Base URL</label><input id="lms-base-url" placeholder="https://login.applygitawisdom.com">
+    <label>API key</label><input id="lms-api-key" type="password" placeholder="enter to save/replace">
+    <p class="row">
+      <button class="primary" id="lms-save">Save</button>
+      <button id="lms-test">Test connection</button>
+    </p>
+    <p class="muted">Optional — until connected, uploads stay <span class="mono">lms_status=pending</span> and are pushed automatically once you connect. Per-tag course/module IDs are set on each routing rule.</p>
+  </div>
+</div>
+
+<div class="card">
+  <h2>YouTube channels</h2>
+  <p class="muted">One Google Cloud project (own OAuth client) per channel for quota isolation.
+  Authorized redirect URI to add in each Google OAuth client:
+  <span class="mono" id="callback-url">…</span></p>
+  <div class="table-wrap">
+    <table id="channels-table">
+      <thead><tr><th>Label</th><th>Channel</th><th>OAuth client</th><th>Status</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <h2 style="margin-top:16px">Add channel</h2>
+  <div class="row">
+    <div class="field"><label>Label</label><input id="ch-label" placeholder="Gita main"></div>
+    <div class="field"><label>OAuth Client ID</label><input id="ch-client-id"></div>
+    <div class="field"><label>OAuth Client Secret</label><input id="ch-client-secret" type="password"></div>
+    <button class="primary" id="ch-add">Add & connect</button>
+  </div>
+</div>
+
+<script>
+function connBadge(el, status) {
+  document.getElementById(el).innerHTML = status ? statusBadge(status) : '<span class="badge">not set up</span>';
+}
+
+async function load() {
+  const c = await api('/connections');
+  document.getElementById('callback-url').textContent = c.oauthCallbackUrl;
+  if (c.zoom) {
+    document.getElementById('zoom-account-id').value = c.zoom.account_id;
+    document.getElementById('zoom-client-id').value = c.zoom.client_id;
+  }
+  connBadge('zoom-status', c.zoom?.status);
+  connBadge('fathom-status', c.fathom?.status);
+  if (c.lms) document.getElementById('lms-base-url').value = c.lms.base_url;
+  connBadge('lms-status', c.lms?.status);
+
+  document.querySelector('#channels-table tbody').innerHTML = c.channels.map(ch => `
+    <tr>
+      <td>${esc(ch.label)}</td>
+      <td>${ch.channel_handle ? esc(ch.channel_handle) : (ch.channel_id ? esc(ch.channel_id) : '—')}</td>
+      <td class="mono">${esc((ch.oauth_client_id || '').slice(0, 24))}…</td>
+      <td>${ch.connected ? statusBadge('connected') : statusBadge('disconnected')}</td>
+      <td class="row">
+        <a href="/oauth/youtube/start/${ch.id}"><button>${ch.connected ? 'Reconnect' : 'Connect'}</button></a>
+        <button class="danger" onclick="delChannel(${ch.id})">Delete</button>
+      </td>
+    </tr>
+  `).join('') || '<tr><td colspan="5" class="muted">No channels yet — add one below.</td></tr>';
+}
+
+async function saveTest(kind, saveBody, statusEl) {
+  try {
+    if (saveBody) await api('/connections/' + kind, { method: 'POST', body: saveBody });
+    const r = await api(`/connections/${kind}/test`, { method: 'POST' });
+    toast(r.detail || 'Connection OK');
+  } catch (e) { toast(e.message, 'err'); }
+  load();
+}
+
+document.getElementById('zoom-save').onclick = async () => {
+  try {
+    await api('/connections/zoom', { method: 'POST', body: {
+      account_id: document.getElementById('zoom-account-id').value,
+      client_id: document.getElementById('zoom-client-id').value,
+      client_secret: document.getElementById('zoom-client-secret').value,
+    }});
+    toast('Zoom credentials saved'); load();
+  } catch (e) { toast(e.message, 'err'); }
+};
+document.getElementById('zoom-test').onclick = () => saveTest('zoom', null);
+
+document.getElementById('fathom-save').onclick = async () => {
+  try {
+    await api('/connections/fathom', { method: 'POST', body: { api_key: document.getElementById('fathom-api-key').value } });
+    toast('Fathom API key saved'); load();
+  } catch (e) { toast(e.message, 'err'); }
+};
+document.getElementById('fathom-test').onclick = () => saveTest('fathom', null);
+
+document.getElementById('lms-save').onclick = async () => {
+  try {
+    await api('/connections/lms', { method: 'POST', body: {
+      base_url: document.getElementById('lms-base-url').value,
+      api_key: document.getElementById('lms-api-key').value,
+    }});
+    toast('LMS settings saved'); load();
+  } catch (e) { toast(e.message, 'err'); }
+};
+document.getElementById('lms-test').onclick = () => saveTest('lms', null);
+
+document.getElementById('ch-add').onclick = async () => {
+  try {
+    const r = await api('/channels', { method: 'POST', body: {
+      label: document.getElementById('ch-label').value,
+      oauth_client_id: document.getElementById('ch-client-id').value,
+      oauth_client_secret: document.getElementById('ch-client-secret').value,
+    }});
+    location.href = r.connectUrl; // straight into the Google consent flow
+  } catch (e) { toast(e.message, 'err'); }
+};
+
+async function delChannel(id) {
+  if (!confirm('Delete this channel entry? (The YouTube channel itself is untouched.)')) return;
+  try { await api('/channels/' + id, { method: 'DELETE' }); toast('Channel removed'); }
+  catch (e) { toast(e.message, 'err'); }
+  load();
+}
+
+const params = new URLSearchParams(location.search);
+if (params.get('yt') === 'connected') toast('YouTube channel connected: ' + (params.get('title') || ''));
+if (params.get('yt') === 'error') toast('YouTube connect failed: ' + (params.get('message') || ''), 'err');
+
+load();
+</script>
+<%- include('partials/foot') %>

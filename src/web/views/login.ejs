@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VideoRouter — Login</title>
+  <link rel="stylesheet" href="/public/style.css">
+</head>
+<body>
+<main>
+  <div class="card login-box">
+    <h1>VideoRouter</h1>
+    <% if (error) { %><p class="badge err"><%= error %></p><% } %>
+    <form method="post" action="/login">
+      <label>Email</label>
+      <input type="email" name="email" required autofocus>
+      <label>Password</label>
+      <input type="password" name="password" required>
+      <p><button class="primary" type="submit">Log in</button></p>
+    </form>
+  </div>
+</main>
+</body>
+</html>
