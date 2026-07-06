@@ -10,8 +10,9 @@ import * as zoom from '../../providers/zoom.js';
 import * as fathom from '../../providers/fathom.js';
 import * as lms from '../../providers/lms.js';
 import { getChannels } from '../../providers/youtube.js';
+import { canDeleteZoomSource } from '../../pipeline/states.js';
 import { config } from '../../config.js';
-import { logError } from '../../lib/logger.js';
+import { log, logError } from '../../lib/logger.js';
 
 export const apiRouter = express.Router();
 apiRouter.use(requireApiAuth);
@@ -77,6 +78,96 @@ apiRouter.post('/run-now', wrap(async (_req, res) => {
   if (isRunning()) return res.status(409).json({ error: 'A run is already in progress.' });
   runPipeline('manual').catch((err) => logError('manual run crashed:', err));
   res.json({ started: true });
+}));
+
+// ---------- source videos (live listing from Zoom/Fathom) ----------
+
+apiRouter.get('/sources', wrap(async (req, res) => {
+  // Zoom's list endpoint caps the range at 30 days per request.
+  const windowDays = Math.min(Math.max(Number(req.query.days) || 30, 1), 30);
+  const [zoomAccount, fathomAccount] = await Promise.all([
+    zoom.getZoomAccount(), fathom.getFathomAccount(),
+  ]);
+  const { rows: dbRows } = await query(
+    `SELECT source, source_id, status, youtube_url, youtube_video_id, source_deleted, lms_lesson_url
+     FROM processed_recordings`,
+  );
+  const byKey = new Map(dbRows.map((r) => [`${r.source}:${r.source_id}`, r]));
+  const result = { windowDays, zoom: null, fathom: null, errors: {} };
+
+  if (zoomAccount) {
+    try {
+      const meetings = await zoom.listRecordings(zoomAccount, windowDays);
+      result.zoom = meetings.map((m) => {
+        const rec = byKey.get(`zoom:${m.uuid}`) || null;
+        return {
+          source_id: m.uuid,
+          title: m.topic,
+          recorded_at: m.start_time || null,
+          duration_minutes: m.duration ?? null,
+          total_bytes: (m.recording_files || []).reduce((s, f) => s + (f.file_size || 0), 0),
+          has_target_view: Boolean(zoom.pickRecordingFile(m)),
+          status: rec?.status || 'not_processed',
+          youtube_url: rec?.youtube_url || null,
+          lms_lesson_url: rec?.lms_lesson_url || null,
+          source_deleted: rec?.source_deleted || false,
+          // delete stays inactive until the YouTube link exists on this exact row
+          can_delete: Boolean(rec?.youtube_video_id) && !rec?.source_deleted,
+        };
+      });
+    } catch (err) {
+      result.errors.zoom = err.message;
+    }
+  }
+
+  if (fathomAccount) {
+    try {
+      const meetings = await fathom.listMeetings(fathomAccount, windowDays);
+      result.fathom = meetings.map((m) => {
+        const rec = byKey.get(`fathom:${m.recordingId}`) || null;
+        return {
+          source_id: m.recordingId,
+          title: m.title,
+          recorded_at: m.recordedAt,
+          duration_minutes: m.durationMinutes,
+          status: rec?.status || 'not_processed',
+          youtube_url: rec?.youtube_url || null,
+          lms_lesson_url: rec?.lms_lesson_url || null,
+        };
+      });
+    } catch (err) {
+      result.errors.fathom = err.message;
+    }
+  }
+
+  res.json(result);
+}));
+
+// Manual Zoom delete — same safety gate as the pipeline: only rows that hold a
+// verified YouTube video id can ever be deleted at the source.
+apiRouter.post('/sources/zoom/delete', wrap(async (req, res) => {
+  const sourceId = String(req.body.source_id || '');
+  if (!sourceId) return res.status(400).json({ error: 'source_id is required' });
+  const account = await zoom.getZoomAccount();
+  if (!account) return res.status(400).json({ error: 'Zoom is not connected.' });
+
+  const { rows: [rec] } = await query(
+    `SELECT * FROM processed_recordings WHERE source = 'zoom' AND source_id = $1`, [sourceId],
+  );
+  const cfg = await getConfigMap();
+  const mode = cfg.zoom_delete_mode === 'trash' ? 'trash' : 'delete';
+  if (!rec || !canDeleteZoomSource(rec, mode)) {
+    return res.status(400).json({
+      error: 'Blocked: this recording has no verified YouTube upload yet (or is already deleted). Run the pipeline first.',
+    });
+  }
+  await zoom.deleteMeetingRecordings(account, sourceId, mode);
+  await query(
+    `UPDATE processed_recordings SET status = 'deleted', source_deleted = true WHERE id = $1`,
+    [rec.id],
+  );
+  log(`manual zoom delete (${mode}): ${rec.title}`);
+  res.json({ ok: true, mode });
 }));
 
 // ---------- connections ----------

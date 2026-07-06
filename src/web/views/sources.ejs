@@ -1,0 +1,147 @@
+<%- include('partials/head') %>
+<h1>Source videos</h1>
+<p class="muted">Live listing from Zoom and Fathom (last 30 days), matched against the pipeline log.
+The <b>Delete from Zoom</b> button unlocks only after that recording has a YouTube link —
+until then the source is protected. Fathom cannot be deleted via API (storage is unlimited).</p>
+
+<p class="row">
+  <button id="refresh" class="primary">Refresh listing</button>
+  <span class="muted" id="loading"></span>
+</p>
+
+<div class="card">
+  <h2>On Zoom <span class="muted" id="zoom-note"></span></h2>
+  <div class="table-wrap">
+    <table id="zoom-table">
+      <thead><tr>
+        <th>Title</th><th>Recorded</th><th>Length</th><th>Size on Zoom</th><th>Speaker view</th>
+        <th>Pipeline status</th><th>YouTube link</th><th></th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <h2>On Fathom <span class="muted" id="fathom-note"></span></h2>
+  <div class="table-wrap">
+    <table id="fathom-table">
+      <thead><tr>
+        <th>Title</th><th>Recorded</th><th>Length</th><th>Pipeline status</th><th>YouTube link</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+function fmtBytes(n) {
+  if (!n) return '—';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let i = 0;
+  while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+  return n.toFixed(i ? 1 : 0) + ' ' + units[i];
+}
+function fmtMin(m) { return m == null ? '—' : m + ' min'; }
+function pipelineBadge(item) {
+  if (item.status === 'not_processed') return '<span class="badge">not processed yet</span>';
+  return statusBadge(item.status);
+}
+function ytCell(item) {
+  return item.youtube_url
+    ? `<a href="${esc(item.youtube_url)}" target="_blank">${esc(item.youtube_url)}</a>`
+    : '<span class="muted">— not uploaded yet</span>';
+}
+
+let current = { zoom: [], fathom: [] };
+
+async function load() {
+  const btn = document.getElementById('refresh');
+  btn.disabled = true;
+  document.getElementById('loading').textContent = 'Fetching from Zoom & Fathom… (can take ~10s)';
+  try {
+    const s = await api('/sources');
+    current = s;
+    renderZoom(s);
+    renderFathom(s);
+  } catch (e) {
+    toast(e.message, 'err');
+  } finally {
+    btn.disabled = false;
+    document.getElementById('loading').textContent = '';
+  }
+}
+
+function renderZoom(s) {
+  const note = document.getElementById('zoom-note');
+  const tbody = document.querySelector('#zoom-table tbody');
+  if (s.zoom === null) {
+    note.textContent = s.errors.zoom ? '— error: ' + s.errors.zoom : '— Zoom is not connected';
+    tbody.innerHTML = '';
+    return;
+  }
+  note.textContent = `— ${s.zoom.length} recording(s) in the last ${s.windowDays} days`;
+  tbody.innerHTML = s.zoom.map((z, i) => `
+    <tr>
+      <td>${esc(z.title)}</td>
+      <td>${fmtDate(z.recorded_at)}</td>
+      <td>${fmtMin(z.duration_minutes)}</td>
+      <td>${fmtBytes(z.total_bytes)}</td>
+      <td>${z.has_target_view ? '✓' : '<span class="badge warn">missing</span>'}</td>
+      <td>${pipelineBadge(z)}${z.source_deleted ? ' <span class="badge ok">deleted on Zoom</span>' : ''}</td>
+      <td>${ytCell(z)}</td>
+      <td>
+        <button class="danger" data-zoom-del="${i}" ${z.can_delete ? '' : 'disabled'}
+          title="${z.can_delete
+            ? 'Deletes this recording from Zoom (frees storage). The YouTube copy stays.'
+            : 'Inactive until this recording has been uploaded to YouTube.'}">
+          Delete from Zoom
+        </button>
+      </td>
+    </tr>
+  `).join('') || '<tr><td colspan="8" class="muted">No recordings on Zoom in this window.</td></tr>';
+
+  tbody.querySelectorAll('[data-zoom-del]').forEach((btn) => {
+    btn.onclick = () => deleteFromZoom(Number(btn.dataset.zoomDel), btn);
+  });
+}
+
+function renderFathom(s) {
+  const note = document.getElementById('fathom-note');
+  const tbody = document.querySelector('#fathom-table tbody');
+  if (s.fathom === null) {
+    note.textContent = s.errors.fathom ? '— error: ' + s.errors.fathom : '— Fathom is not connected';
+    tbody.innerHTML = '';
+    return;
+  }
+  note.textContent = `— ${s.fathom.length} recording(s) in the last ${s.windowDays} days`;
+  tbody.innerHTML = s.fathom.map((f) => `
+    <tr>
+      <td>${esc(f.title)}</td>
+      <td>${fmtDate(f.recorded_at)}</td>
+      <td>${fmtMin(f.duration_minutes)}</td>
+      <td>${pipelineBadge(f)}</td>
+      <td>${ytCell(f)}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="5" class="muted">No recordings on Fathom in this window.</td></tr>';
+}
+
+async function deleteFromZoom(index, btn) {
+  const item = current.zoom[index];
+  if (!item) return;
+  if (!confirm(`Delete "${item.title}" from Zoom?\n\nThe YouTube copy stays:\n${item.youtube_url}`)) return;
+  btn.disabled = true;
+  try {
+    const r = await api('/sources/zoom/delete', { method: 'POST', body: { source_id: item.source_id } });
+    toast(`Deleted from Zoom (${r.mode}): ${item.title}`);
+    load();
+  } catch (e) {
+    toast(e.message, 'err');
+    btn.disabled = !item.can_delete;
+  }
+}
+
+document.getElementById('refresh').onclick = load;
+load();
+</script>
+<%- include('partials/foot') %>

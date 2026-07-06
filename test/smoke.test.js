@@ -26,7 +26,7 @@ test('every EJS view renders', async () => {
   const views = path.join(root, 'src', 'web', 'views');
   await ejs.renderFile(path.join(views, 'login.ejs'), { error: null });
   await ejs.renderFile(path.join(views, 'login.ejs'), { error: 'Bad password' });
-  for (const page of ['runs', 'connections', 'routing', 'settings']) {
+  for (const page of ['runs', 'connections', 'routing', 'sources', 'settings']) {
     const html = await ejs.renderFile(path.join(views, `${page}.ejs`), { page, title: page });
     assert.ok(html.includes('</html>'), `${page} view did not render fully`);
   }
