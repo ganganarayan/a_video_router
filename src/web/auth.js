@@ -52,14 +52,25 @@ export async function login(email, password) {
   return bcrypt.compare(String(password || ''), rows[0].password_hash);
 }
 
-export async function changePassword(email, currentPassword, newPassword) {
-  if (!newPassword || newPassword.length < 8) {
+// Change the admin email and/or password (current password required for either).
+export async function updateAccount(email, currentPassword, { newEmail, newPassword }) {
+  if (!newEmail && !newPassword) {
+    return { ok: false, error: 'Provide a new email and/or a new password.' };
+  }
+  if (newPassword && newPassword.length < 8) {
     return { ok: false, error: 'New password must be at least 8 characters.' };
+  }
+  if (newEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+    return { ok: false, error: 'New email is not a valid address.' };
   }
   if (!(await login(email, currentPassword))) {
     return { ok: false, error: 'Current password is incorrect.' };
   }
-  const hash = await bcrypt.hash(newPassword, 10);
-  await query('UPDATE admin_users SET password_hash = $1 WHERE email = $2', [hash, email]);
-  return { ok: true };
+  const sets = [];
+  const params = [];
+  if (newEmail) { params.push(newEmail.toLowerCase()); sets.push(`email = $${params.length}`); }
+  if (newPassword) { params.push(await bcrypt.hash(newPassword, 10)); sets.push(`password_hash = $${params.length}`); }
+  params.push(email);
+  await query(`UPDATE admin_users SET ${sets.join(', ')} WHERE email = $${params.length}`, params);
+  return { ok: true, email: newEmail ? newEmail.toLowerCase() : email };
 }

@@ -3,7 +3,7 @@ import cron from 'node-cron';
 import cronParser from 'cron-parser';
 import { query, getConfigMap, setConfigValue } from '../../db.js';
 import { encrypt } from '../../lib/secrets.js';
-import { requireApiAuth, changePassword } from '../auth.js';
+import { requireApiAuth, updateAccount, setSessionCookie } from '../auth.js';
 import { runPipeline, isRunning } from '../../pipeline/run.js';
 import { reschedule, getSchedule } from '../../scheduler.js';
 import * as zoom from '../../providers/zoom.js';
@@ -308,8 +308,12 @@ apiRouter.post('/settings', wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
-apiRouter.post('/settings/password', wrap(async (req, res) => {
-  const result = await changePassword(req.user, req.body.current_password, req.body.new_password);
+apiRouter.post('/settings/account', wrap(async (req, res) => {
+  const result = await updateAccount(req.user, req.body.current_password, {
+    newEmail: req.body.new_email?.trim() || null,
+    newPassword: req.body.new_password || null,
+  });
   if (!result.ok) return res.status(400).json({ error: result.error });
-  res.json({ ok: true });
+  setSessionCookie(res, result.email); // keep the session valid under the new email
+  res.json({ ok: true, email: result.email });
 }));

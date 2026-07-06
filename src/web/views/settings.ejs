@@ -29,10 +29,11 @@
   </div>
 
   <div class="card">
-    <h2>Admin password</h2>
-    <label>Current password</label><input id="p-current" type="password">
-    <label>New password (min 8 chars)</label><input id="p-new" type="password">
-    <p><button id="p-save">Change password</button></p>
+    <h2>Admin account</h2>
+    <label>Current password (required for any change)</label><input id="p-current" type="password">
+    <label>New email (leave blank to keep)</label><input id="p-email" type="email">
+    <label>New password (leave blank to keep, min 8 chars)</label><input id="p-new" type="password">
+    <p><button id="p-save">Update account</button></p>
   </div>
 </div>
 
@@ -69,12 +70,13 @@ document.getElementById('s-save').onclick = async () => {
 
 document.getElementById('p-save').onclick = async () => {
   try {
-    await api('/settings/password', { method: 'POST', body: {
+    const r = await api('/settings/account', { method: 'POST', body: {
       current_password: document.getElementById('p-current').value,
+      new_email: document.getElementById('p-email').value,
       new_password: document.getElementById('p-new').value,
     }});
-    toast('Password changed');
-    document.getElementById('p-current').value = document.getElementById('p-new').value = '';
+    toast('Account updated — login email is ' + r.email);
+    ['p-current', 'p-email', 'p-new'].forEach(id => document.getElementById(id).value = '');
   } catch (e) { toast(e.message, 'err'); }
 };
 
