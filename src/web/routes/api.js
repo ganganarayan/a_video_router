@@ -6,11 +6,11 @@ import { encrypt } from '../../lib/secrets.js';
 import { requireApiAuth, updateAccount, setSessionCookie } from '../auth.js';
 import { runPipeline, isRunning } from '../../pipeline/run.js';
 import { enqueuePush, getJobs } from '../../pipeline/manual.js';
-import { reschedule, getSchedule } from '../../scheduler.js';
+import { reloadSchedules, getSchedules } from '../../scheduler.js';
 import * as zoom from '../../providers/zoom.js';
 import * as fathom from '../../providers/fathom.js';
 import * as lms from '../../providers/lms.js';
-import { getChannels } from '../../providers/youtube.js';
+import { getChannels, getChannelById, getVideoSnippet, updateVideoSnippet } from '../../providers/youtube.js';
 import { canDeleteZoomSource } from '../../pipeline/states.js';
 import { config } from '../../config.js';
 import { log, logError } from '../../lib/logger.js';
@@ -31,15 +31,104 @@ apiRouter.get('/overview', wrap(async (_req, res) => {
             count(*) FILTER (WHERE status LIKE 'skipped%')::int AS skipped
      FROM processed_recordings`,
   );
-  const schedule = getSchedule();
+  const schedules = await getSchedules();
+  const enabled = schedules.filter((s) => s.enabled);
   let nextRun = null;
+  for (const s of enabled) {
+    try {
+      const n = cronParser.parseExpression(s.cron_expression, { tz: s.timezone }).next().toISOString();
+      if (!nextRun || n < nextRun) nextRun = n;
+    } catch { /* skip invalid */ }
+  }
+  res.json({
+    lastRun: lastRun || null,
+    nextRun,
+    activeSchedules: enabled.length,
+    totalSchedules: schedules.length,
+    totals,
+    running: isRunning(),
+  });
+}));
+
+// ---------- schedules (recurring runs) ----------
+
+function nextRunOf(s) {
+  if (!s.enabled) return null;
   try {
-    if (schedule.expression) {
-      nextRun = cronParser.parseExpression(schedule.expression, { tz: schedule.timezone })
-        .next().toISOString();
-    }
-  } catch { /* leave null */ }
-  res.json({ lastRun: lastRun || null, nextRun, schedule, totals, running: isRunning() });
+    return cronParser.parseExpression(s.cron_expression, { tz: s.timezone }).next().toISOString();
+  } catch {
+    return null;
+  }
+}
+
+apiRouter.get('/schedules', wrap(async (_req, res) => {
+  const rows = await getSchedules();
+  res.json(rows.map((s) => ({ ...s, nextRun: nextRunOf(s) })));
+}));
+
+apiRouter.post('/schedules', wrap(async (req, res) => {
+  const { name, cron_expression, timezone, enabled } = req.body;
+  if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
+  if (!cron.validate(cron_expression || '')) return res.status(400).json({ error: 'invalid cron expression' });
+  await query(
+    'INSERT INTO schedules (name, cron_expression, timezone, enabled) VALUES ($1, $2, $3, $4)',
+    [name.trim(), cron_expression.trim(), (timezone || 'Asia/Kolkata').trim(), enabled !== false],
+  );
+  await reloadSchedules();
+  res.json({ ok: true });
+}));
+
+apiRouter.put('/schedules/:id', wrap(async (req, res) => {
+  const { name, cron_expression, timezone, enabled } = req.body;
+  if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
+  if (!cron.validate(cron_expression || '')) return res.status(400).json({ error: 'invalid cron expression' });
+  await query(
+    'UPDATE schedules SET name = $1, cron_expression = $2, timezone = $3, enabled = $4 WHERE id = $5',
+    [name.trim(), cron_expression.trim(), (timezone || 'Asia/Kolkata').trim(), enabled !== false, Number(req.params.id)],
+  );
+  await reloadSchedules();
+  res.json({ ok: true });
+}));
+
+// Stop / resume a schedule.
+apiRouter.post('/schedules/:id/toggle', wrap(async (req, res) => {
+  await query('UPDATE schedules SET enabled = $1 WHERE id = $2',
+    [req.body.enabled !== false, Number(req.params.id)]);
+  await reloadSchedules();
+  res.json({ ok: true });
+}));
+
+apiRouter.delete('/schedules/:id', wrap(async (req, res) => {
+  await query('DELETE FROM schedules WHERE id = $1', [Number(req.params.id)]);
+  await reloadSchedules();
+  res.json({ ok: true });
+}));
+
+// ---------- edit an uploaded video's YouTube title/description ----------
+
+async function channelForRecording(id) {
+  const { rows: [rec] } = await query('SELECT * FROM processed_recordings WHERE id = $1', [id]);
+  if (!rec) throw Object.assign(new Error('recording not found'), { status: 404 });
+  if (!rec.youtube_video_id) throw Object.assign(new Error('this recording has no YouTube video yet'), { status: 400 });
+  const channel = await getChannelById(rec.channel_id);
+  if (!channel?.refresh_token) throw Object.assign(new Error('the recording\'s YouTube channel is not connected'), { status: 400 });
+  return { rec, channel };
+}
+
+apiRouter.get('/recordings/:id/youtube', wrap(async (req, res) => {
+  const { rec, channel } = await channelForRecording(Number(req.params.id));
+  const snippet = await getVideoSnippet(channel, rec.youtube_video_id);
+  res.json({ title: snippet.title, description: snippet.description, url: rec.youtube_url });
+}));
+
+apiRouter.post('/recordings/:id/youtube', wrap(async (req, res) => {
+  const { rec, channel } = await channelForRecording(Number(req.params.id));
+  const title = String(req.body.title || '').trim();
+  if (!title) return res.status(400).json({ error: 'title cannot be empty' });
+  await updateVideoSnippet(channel, rec.youtube_video_id, { title, description: req.body.description || '' });
+  // keep the link-log title in step with the YouTube title
+  await query('UPDATE processed_recordings SET title = $1 WHERE id = $2', [title, rec.id]);
+  res.json({ ok: true });
 }));
 
 apiRouter.get('/runs', wrap(async (req, res) => {
@@ -154,7 +243,8 @@ apiRouter.get('/sources', wrap(async (req, res) => {
 // Queue a manual per-video push (upload to a chosen channel and/or push to a
 // chosen LMS course). Jobs run sequentially in the background.
 apiRouter.post('/push', wrap(async (req, res) => {
-  const { source, source_id, file_id, title, channel_id, lms_course_id, lms_module_id } = req.body;
+  const { source, source_id, file_id, title, video_title, description,
+    channel_id, lms_course_id, lms_module_id } = req.body;
   if (!['zoom', 'fathom'].includes(source)) return res.status(400).json({ error: 'source must be zoom or fathom' });
   if (!source_id) return res.status(400).json({ error: 'source_id is required' });
   if (!channel_id && !lms_course_id) {
@@ -165,6 +255,8 @@ apiRouter.post('/push', wrap(async (req, res) => {
     source_id: String(source_id),
     file_id: file_id ? String(file_id) : null,
     title,
+    video_title: video_title?.trim() || null,
+    description: description?.trim() || null,
     channel_id: channel_id ? Number(channel_id) : null,
     lms_course_id: lms_course_id?.trim() || null,
     lms_module_id: lms_module_id?.trim() || null,
@@ -400,8 +492,8 @@ apiRouter.delete('/rules/:id', wrap(async (req, res) => {
 
 // ---------- settings ----------
 
-const SETTING_KEYS = ['cron_expression', 'timezone', 'rolling_window_days',
-  'zoom_delete_mode', 'email_to', 'email_from'];
+// Cron/timezone moved to the Schedules page; these are the remaining settings.
+const SETTING_KEYS = ['rolling_window_days', 'zoom_delete_mode', 'email_to', 'email_from'];
 
 apiRouter.get('/settings', wrap(async (_req, res) => {
   const cfg = await getConfigMap();
@@ -413,9 +505,6 @@ apiRouter.get('/settings', wrap(async (_req, res) => {
 
 apiRouter.post('/settings', wrap(async (req, res) => {
   const body = req.body;
-  if (body.cron_expression && !cron.validate(body.cron_expression)) {
-    return res.status(400).json({ error: 'Invalid cron expression.' });
-  }
   if (body.zoom_delete_mode && !['off', 'trash', 'delete'].includes(body.zoom_delete_mode)) {
     return res.status(400).json({ error: 'zoom_delete_mode must be off, trash or delete.' });
   }
@@ -428,7 +517,6 @@ apiRouter.post('/settings', wrap(async (req, res) => {
   if (body.gmail_app_password) {
     await setConfigValue('gmail_app_password', encrypt(String(body.gmail_app_password).trim()));
   }
-  await reschedule();
   res.json({ ok: true });
 }));
 

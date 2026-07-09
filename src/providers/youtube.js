@@ -203,6 +203,33 @@ export async function ensurePlaylist(channelRow, playlistName) {
   return created.id;
 }
 
+// Read a video's current title/description (for the edit-later UI).
+export async function getVideoSnippet(channelRow, videoId) {
+  const yt = google.youtube({ version: 'v3', auth: buildOAuthClient(channelRow) });
+  const { data } = await yt.videos.list({ part: 'snippet', id: videoId });
+  const s = data.items?.[0]?.snippet;
+  if (!s) throw new Error('Video not found on this channel.');
+  return { title: s.title, description: s.description || '', categoryId: s.categoryId || '22' };
+}
+
+// Update title/description. videos.update requires categoryId on the snippet,
+// so preserve the current one.
+export async function updateVideoSnippet(channelRow, videoId, { title, description }) {
+  const yt = google.youtube({ version: 'v3', auth: buildOAuthClient(channelRow) });
+  const current = await getVideoSnippet(channelRow, videoId);
+  await yt.videos.update({
+    part: 'snippet',
+    requestBody: {
+      id: videoId,
+      snippet: {
+        title: (title ?? current.title).slice(0, 100),
+        description: description ?? current.description,
+        categoryId: current.categoryId,
+      },
+    },
+  });
+}
+
 export async function addToPlaylist(channelRow, playlistId, videoId) {
   const auth = buildOAuthClient(channelRow);
   const yt = google.youtube({ version: 'v3', auth });

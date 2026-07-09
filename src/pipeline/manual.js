@@ -24,6 +24,8 @@ export function enqueuePush(payload) {
     source_id: payload.source_id,
     file_id: payload.file_id || null,
     title: payload.title || payload.source_id,
+    video_title: payload.video_title || null,
+    description: payload.description || null,
     channel_id: payload.channel_id || null,
     lms_course_id: payload.lms_course_id || null,
     lms_module_id: payload.lms_module_id || null,

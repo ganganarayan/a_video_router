@@ -101,8 +101,18 @@ function fileSelect(source, i, item) {
   return `<select data-file="${source}:${i}" title="Which recording file to upload">${opts}</select>`;
 }
 
+// Title + description to use for the YouTube upload (shown only before upload).
+function titleDescFields(source, i, item) {
+  if (item.youtube_url) return '';
+  return `<input data-title="${source}:${i}" value="${esc(item.title)}"
+      title="YouTube video title" placeholder="YouTube title" style="min-width:220px">
+    <input data-desc="${source}:${i}" placeholder="description (optional)"
+      title="YouTube description" style="min-width:220px">`;
+}
+
 function pushCell(source, i, item) {
-  return `<div class="row" style="min-width:200px">
+  return `<div class="row" style="min-width:220px">
+    ${titleDescFields(source, i, item)}
     ${fileSelect(source, i, item)}
     ${channelSelect(source, i, item)}
     ${lmsSelect(source, i, item)}
@@ -205,9 +215,15 @@ async function pushRow(key, btn) {
   const chSel = document.querySelector(`[data-ch="${key}"]`);
   const lmsSel = document.querySelector(`[data-lms="${key}"]`);
   const fileSel = document.querySelector(`[data-file="${key}"]`);
+  const titleEl = document.querySelector(`[data-title="${key}"]`);
+  const descEl = document.querySelector(`[data-desc="${key}"]`);
   const channelId = chSel?.value || null;
   const fileId = fileSel?.value || null;
   const lmsOpt = lmsSel?.value !== '' && lmsSel ? lmsOptions[Number(lmsSel.value)] : null;
+
+  if (!item.youtube_url && titleEl && !titleEl.value.trim()) {
+    return toast('Enter a YouTube title.', 'err');
+  }
 
   if (!item.youtube_url && !channelId) {
     return toast('Pick a YouTube channel — this video is not uploaded yet.', 'err');
@@ -225,6 +241,8 @@ async function pushRow(key, btn) {
       source_id: item.source_id,
       file_id: fileId,
       title: item.title,
+      video_title: titleEl?.value || null,
+      description: descEl?.value || null,
       channel_id: channelId,
       lms_course_id: lmsOpt?.course_id || null,
       lms_module_id: lmsOpt?.module_id || null,

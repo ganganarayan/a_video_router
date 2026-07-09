@@ -3,9 +3,7 @@
 
 <div class="grid">
   <div class="card">
-    <h2>Schedule & pipeline</h2>
-    <label>Cron expression</label><input id="s-cron" placeholder="0 23 * * *">
-    <label>Timezone</label><input id="s-tz" placeholder="Asia/Kolkata">
+    <h2>Pipeline</h2>
     <label>Rolling window (days)</label><input id="s-window" type="number" min="1">
     <label>Zoom delete mode</label>
     <select id="s-delete">
@@ -14,7 +12,8 @@
       <option value="delete">delete — permanent, frees the 10 GB</option>
     </select>
     <p class="muted">Zoom sources are only ever deleted after a verified YouTube upload
-    (the row must hold a YouTube video ID).</p>
+    (the row must hold a YouTube video ID). Recurring run times are managed on the
+    <a href="/schedules">Schedules</a> page.</p>
     <p><button class="primary" id="s-save">Save settings</button></p>
   </div>
 
@@ -40,8 +39,6 @@
 <script>
 async function load() {
   const s = await api('/settings');
-  document.getElementById('s-cron').value = s.cron_expression;
-  document.getElementById('s-tz').value = s.timezone;
   document.getElementById('s-window').value = s.rolling_window_days;
   document.getElementById('s-delete').value = s.zoom_delete_mode || 'off';
   document.getElementById('s-email-to').value = s.email_to;
@@ -52,8 +49,6 @@ async function load() {
 document.getElementById('s-save').onclick = async () => {
   try {
     const body = {
-      cron_expression: document.getElementById('s-cron').value,
-      timezone: document.getElementById('s-tz').value,
       rolling_window_days: document.getElementById('s-window').value,
       zoom_delete_mode: document.getElementById('s-delete').value,
       email_to: document.getElementById('s-email-to').value,
@@ -62,7 +57,7 @@ document.getElementById('s-save').onclick = async () => {
     const pass = document.getElementById('s-email-pass').value;
     if (pass) body.gmail_app_password = pass;
     await api('/settings', { method: 'POST', body });
-    toast('Settings saved — schedule updated');
+    toast('Settings saved');
     document.getElementById('s-email-pass').value = '';
     load();
   } catch (e) { toast(e.message, 'err'); }

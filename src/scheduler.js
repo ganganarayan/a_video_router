@@ -1,33 +1,40 @@
 import cron from 'node-cron';
-import { getConfigMap } from './db.js';
+import { query } from './db.js';
 import { runPipeline } from './pipeline/run.js';
 import { log, logError } from './lib/logger.js';
 
-let task = null;
-let current = { expression: null, timezone: null };
+// id -> node-cron task, for the currently-enabled schedules.
+const tasks = new Map();
 
-export function getSchedule() {
-  return { ...current };
+export async function getSchedules() {
+  const { rows } = await query('SELECT * FROM schedules ORDER BY id');
+  return rows;
 }
 
-// Reads cron_expression + timezone from app_config and (re)schedules the pull job.
-// Called at boot and again whenever Settings are saved.
-export async function startScheduler() {
-  const cfg = await getConfigMap();
-  const expression = cfg.cron_expression || '0 23 * * *';
-  const timezone = cfg.timezone || 'Asia/Kolkata';
-
-  if (!cron.validate(expression)) {
-    logError(`invalid cron expression "${expression}" — scheduler NOT started`);
-    return false;
+// Stop every running cron task and re-create one per enabled schedule. Called at
+// boot and after any schedule create/update/toggle/delete.
+export async function reloadSchedules() {
+  for (const task of tasks.values()) task.stop();
+  tasks.clear();
+  const { rows } = await query('SELECT * FROM schedules WHERE enabled = true ORDER BY id');
+  for (const s of rows) {
+    if (!cron.validate(s.cron_expression)) {
+      logError(`schedule #${s.id} "${s.name}" has invalid cron "${s.cron_expression}" — skipped`);
+      continue;
+    }
+    const task = cron.schedule(
+      s.cron_expression,
+      () => {
+        log(`schedule "${s.name}" (#${s.id}) firing`);
+        runPipeline('scheduled').catch((err) => logError('scheduled run crashed:', err));
+      },
+      { timezone: s.timezone || 'Asia/Kolkata' },
+    );
+    tasks.set(s.id, task);
   }
-  if (task) task.stop();
-  task = cron.schedule(expression, () => {
-    runPipeline('scheduled').catch((err) => logError('scheduled run crashed:', err));
-  }, { timezone });
-  current = { expression, timezone };
-  log(`scheduler active: "${expression}" (${timezone})`);
-  return true;
+  log(`scheduler: ${tasks.size} active schedule(s)`);
+  return tasks.size;
 }
 
-export const reschedule = startScheduler;
+export const startScheduler = reloadSchedules;
+export const activeCount = () => tasks.size;

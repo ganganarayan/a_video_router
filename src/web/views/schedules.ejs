@@ -1,0 +1,101 @@
+<%- include('partials/head') %>
+<h1>Schedules</h1>
+<p class="muted">Recurring automatic pull runs. Each schedule fires the whole pipeline (Zoom + Fathom)
+on its cron. Paused schedules never fire. Cron format: <span class="mono">min hour day month weekday</span>
+— e.g. <span class="mono">0 23 * * *</span> = every day at 23:00.</p>
+
+<div class="card">
+  <h2 id="form-title">Add schedule</h2>
+  <div class="row">
+    <div class="field"><label>Name</label><input id="s-name" placeholder="Daily pull"></div>
+    <div class="field"><label>Cron expression</label><input id="s-cron" placeholder="0 23 * * *"></div>
+    <div class="field"><label>Timezone</label><input id="s-tz" value="Asia/Kolkata"></div>
+    <div class="field"><label>Enabled</label>
+      <select id="s-enabled"><option value="true">yes</option><option value="false">no (paused)</option></select></div>
+    <button class="primary" id="s-save">Save schedule</button>
+    <button id="s-cancel" style="display:none">Cancel edit</button>
+  </div>
+</div>
+
+<div class="card table-wrap">
+  <table id="sched-table">
+    <thead><tr><th>Name</th><th>Cron</th><th>Timezone</th><th>State</th><th>Next run</th><th></th></tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<script>
+let editingId = null;
+
+async function load() {
+  const rows = await api('/schedules');
+  window._scheds = rows;
+  document.querySelector('#sched-table tbody').innerHTML = rows.map(s => `
+    <tr>
+      <td>${esc(s.name)}</td>
+      <td class="mono">${esc(s.cron_expression)}</td>
+      <td>${esc(s.timezone)}</td>
+      <td>${s.enabled ? '<span class="badge ok">active</span>' : '<span class="badge warn">paused</span>'}</td>
+      <td>${s.nextRun ? fmtDate(s.nextRun) : '—'}</td>
+      <td class="row">
+        <button onclick='editSched(${JSON.stringify(s).replace(/'/g, "&#39;")})'>Edit</button>
+        <button onclick="toggleSched(${s.id}, ${!s.enabled})">${s.enabled ? 'Stop' : 'Resume'}</button>
+        <button class="danger" onclick="delSched(${s.id})">Delete</button>
+      </td>
+    </tr>
+  `).join('') || '<tr><td colspan="6" class="muted">No schedules — nothing runs automatically. Add one, or run manually from the Runs page.</td></tr>';
+}
+
+function formValues() {
+  return {
+    name: document.getElementById('s-name').value,
+    cron_expression: document.getElementById('s-cron').value,
+    timezone: document.getElementById('s-tz').value,
+    enabled: document.getElementById('s-enabled').value === 'true',
+  };
+}
+
+function editSched(s) {
+  editingId = s.id;
+  document.getElementById('form-title').textContent = 'Edit schedule #' + s.id;
+  document.getElementById('s-name').value = s.name;
+  document.getElementById('s-cron').value = s.cron_expression;
+  document.getElementById('s-tz').value = s.timezone;
+  document.getElementById('s-enabled').value = String(s.enabled);
+  document.getElementById('s-cancel').style.display = '';
+  scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function resetForm() {
+  editingId = null;
+  document.getElementById('form-title').textContent = 'Add schedule';
+  document.getElementById('s-cancel').style.display = 'none';
+  document.getElementById('s-name').value = '';
+  document.getElementById('s-cron').value = '';
+  document.getElementById('s-tz').value = 'Asia/Kolkata';
+  document.getElementById('s-enabled').value = 'true';
+}
+
+document.getElementById('s-save').onclick = async () => {
+  try {
+    await api(editingId ? '/schedules/' + editingId : '/schedules',
+      { method: editingId ? 'PUT' : 'POST', body: formValues() });
+    toast('Schedule saved'); resetForm(); load();
+  } catch (e) { toast(e.message, 'err'); }
+};
+document.getElementById('s-cancel').onclick = resetForm;
+
+async function toggleSched(id, enabled) {
+  try { await api('/schedules/' + id + '/toggle', { method: 'POST', body: { enabled } });
+    toast(enabled ? 'Schedule resumed' : 'Schedule stopped'); load(); }
+  catch (e) { toast(e.message, 'err'); }
+}
+async function delSched(id) {
+  if (!confirm('Delete this schedule?')) return;
+  try { await api('/schedules/' + id, { method: 'DELETE' }); load(); }
+  catch (e) { toast(e.message, 'err'); }
+}
+
+load().catch(e => toast(e.message, 'err'));
+</script>
+<%- include('partials/foot') %>

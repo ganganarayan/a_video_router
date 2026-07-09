@@ -34,7 +34,7 @@ export function createServer() {
   });
 
   app.get('/', (_req, res) => res.redirect('/runs'));
-  const pages = { connections: 'Connections', routing: 'Routing', runs: 'Runs', sources: 'Sources', settings: 'Settings' };
+  const pages = { connections: 'Connections', routing: 'Routing', runs: 'Runs', sources: 'Sources', schedules: 'Schedules', settings: 'Settings' };
   for (const [route, title] of Object.entries(pages)) {
     app.get(`/${route}`, requirePageAuth, (_req, res) => res.render(route, { page: route, title }));
   }
@@ -45,7 +45,7 @@ export function createServer() {
   // eslint-disable-next-line no-unused-vars
   app.use((err, _req, res, _next) => {
     console.error(new Date().toISOString(), 'ERROR web:', err);
-    res.status(500).json({ error: err.message || 'internal error' });
+    res.status(err.status || 500).json({ error: err.message || 'internal error' });
   });
 
   return app;

@@ -133,10 +133,12 @@ async function downloadUploadFinish(ctx, rec, rule, downloadFn, counts, details,
     progress?.finishPhase();
 
     await updateRec(rec.id, { status: STATES.UPLOADING, file_size_bytes: size });
-    const ytTitle = buildVideoTitle(rec.title, rule.pattern, rule.keep_prefix);
+    // Manual pushes may supply an exact title/description; otherwise derive from the tag.
+    const ytTitle = rule.custom_title || buildVideoTitle(rec.title, rule.pattern, rule.keep_prefix);
     progress?.startPhase('upload', size);
     const { videoId, url } = await uploadVideo(channel, temp, {
       title: ytTitle,
+      description: rule.custom_description || '',
       privacy: rule.privacy || 'unlisted',
       onProgress: (done, total) => progress?.update(done, total),
     });
@@ -395,6 +397,8 @@ export async function manualPush(job) {
       playlist_name: job.playlist_name || null,
       privacy: 'unlisted',
       keep_prefix: true,
+      custom_title: job.video_title || null,       // explicit YouTube title override
+      custom_description: job.description || null,  // explicit YouTube description
       lms_course_id: job.lms_course_id || null,
       lms_module_id: job.lms_module_id || null,
     };

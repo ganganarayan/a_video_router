@@ -16,7 +16,7 @@
   <p class="muted">
     Last run: <span id="last-run">–</span> &nbsp;·&nbsp;
     Next scheduled run: <span id="next-run">–</span> &nbsp;·&nbsp;
-    Cron: <span class="mono" id="cron">–</span>
+    <span id="sched-count">–</span> — manage on the <a href="/schedules">Schedules</a> page.
   </p>
   <div class="table-wrap">
     <table id="runs-table">
@@ -44,7 +44,7 @@
     <table id="rec-table">
       <thead><tr>
         <th>Timestamp</th><th>File name</th><th>Source</th><th>YouTube link</th>
-        <th>LMS lesson link</th><th>Status</th><th>Src deleted</th>
+        <th>LMS lesson link</th><th>Status</th><th>Src deleted</th><th></th>
       </tr></thead>
       <tbody></tbody>
     </table>
@@ -58,9 +58,9 @@ async function loadOverview() {
   document.getElementById('stat-skipped').textContent = o.totals.skipped;
   document.getElementById('stat-errors').textContent = o.totals.errors;
   document.getElementById('last-run').textContent = o.lastRun ? fmtDate(o.lastRun.started_at) : 'never';
-  document.getElementById('next-run').textContent = o.nextRun ? fmtDate(o.nextRun) : 'not scheduled';
-  document.getElementById('cron').textContent = o.schedule.expression
-    ? o.schedule.expression + ' (' + o.schedule.timezone + ')' : '–';
+  document.getElementById('next-run').textContent = o.nextRun ? fmtDate(o.nextRun) : 'none scheduled';
+  document.getElementById('sched-count').textContent =
+    `${o.activeSchedules} active / ${o.totalSchedules} schedule(s)`;
   document.getElementById('run-state').textContent = o.running ? 'run in progress…' : 'manual trigger';
   document.getElementById('run-now').disabled = o.running;
 }
@@ -87,8 +87,61 @@ async function loadRecordings() {
       <td>${r.lms_lesson_url ? `<a href="${esc(r.lms_lesson_url)}" target="_blank">lesson</a>` : (r.lms_status === 'failed' ? '<span class="badge err">failed</span>' : '—')}</td>
       <td>${statusBadge(r.status)}</td>
       <td>${r.source_deleted ? '✓' : '—'}</td>
+      <td>${r.youtube_video_id ? `<button data-edit="${r.id}">Edit title/desc</button>` : ''}</td>
     </tr>
-  `).join('') || '<tr><td colspan="7" class="muted">Nothing processed yet.</td></tr>';
+    <tr id="editrow-${r.id}" style="display:none"><td colspan="8">
+      <div class="card" style="margin:0">
+        <label>YouTube title</label><input id="et-${r.id}">
+        <label>YouTube description</label>
+        <textarea id="ed-${r.id}" rows="4" style="width:100%"></textarea>
+        <p class="row">
+          <button class="primary" data-save="${r.id}">Update on YouTube</button>
+          <button data-cancel="${r.id}">Cancel</button>
+          <span class="muted" id="es-${r.id}"></span>
+        </p>
+      </div>
+    </td></tr>
+  `).join('') || '<tr><td colspan="8" class="muted">Nothing processed yet.</td></tr>';
+  bindEditButtons();
+}
+
+function bindEditButtons() {
+  document.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openEditor(b.dataset.edit));
+  document.querySelectorAll('[data-cancel]').forEach(b => b.onclick = () => {
+    document.getElementById('editrow-' + b.dataset.cancel).style.display = 'none';
+  });
+  document.querySelectorAll('[data-save]').forEach(b => b.onclick = () => saveEditor(b.dataset.save));
+}
+
+async function openEditor(id) {
+  const row = document.getElementById('editrow-' + id);
+  const state = document.getElementById('es-' + id);
+  row.style.display = '';
+  state.textContent = 'loading current values from YouTube…';
+  try {
+    const d = await api('/recordings/' + id + '/youtube');
+    document.getElementById('et-' + id).value = d.title || '';
+    document.getElementById('ed-' + id).value = d.description || '';
+    state.textContent = '';
+  } catch (e) {
+    state.textContent = e.message;
+  }
+}
+
+async function saveEditor(id) {
+  const state = document.getElementById('es-' + id);
+  state.textContent = 'updating…';
+  try {
+    await api('/recordings/' + id + '/youtube', { method: 'POST', body: {
+      title: document.getElementById('et-' + id).value,
+      description: document.getElementById('ed-' + id).value,
+    }});
+    toast('YouTube video updated');
+    document.getElementById('editrow-' + id).style.display = 'none';
+    loadRecordings();
+  } catch (e) {
+    state.textContent = e.message;
+  }
 }
 
 async function refreshAll() {
