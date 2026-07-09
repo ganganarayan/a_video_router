@@ -6,7 +6,7 @@ A single always-on service that, on a schedule:
 2. routes each by its **title tag** to the right **YouTube channel + playlist** (unlisted, resumable upload),
 3. pushes the YouTube link into your **myappz.ai LMS** as a lesson (optional — dormant until connected),
 4. records every video + link in **Postgres** (your automatic link-log),
-5. deletes the Zoom source **only after a verified upload** (Fathom is never deleted — its API is read-only and storage unlimited),
+5. lets you **manually delete** a Zoom source from the dashboard once it has a verified YouTube link (never automatic; Fathom is never deleted — its API is read-only and storage unlimited),
 6. and emails you a run summary.
 
 Everything is managed from a JWT-protected **admin dashboard**: `/runs`, `/connections`, `/routing`, `/settings`. All provider credentials are stored **AES-256-GCM-encrypted in Postgres** — only six bootstrap environment variables exist.
@@ -64,12 +64,12 @@ Example rules:
 Matching is case-insensitive; lowest priority number wins, then the longest pattern. A title matching **no** rule is held as `skipped_no_route` — never uploaded to a wrong channel, never deleted — and processes automatically once you add a rule.
 
 ### Settings
-Cron (default `0 23 * * *`, `Asia/Kolkata`), rolling window (default 3 days), **Zoom delete mode** (`off` / `trash` / `delete`), and the Gmail address + **app password** for the run-summary email. Press **Run now** on the Runs page any time.
+Rolling window (default 3 days), **manual delete method** (`trash` / `delete` — used by the Sources-page Delete button; deletion is never automatic), and the Gmail address + **app password** for the run-summary email. Recurring run times live on the **Schedules** page. Press **Run now** on the Runs page any time.
 
 ## Safety model (why nothing breaks in between)
 
 - **Dedupe:** unique `(source, source_id)` — a recording is never processed twice.
-- **Delete-after-verify:** the Zoom delete runs only when the row holds a **non-null YouTube video ID** (and delete mode allows it). Failed upload → source untouched → retried next run.
+- **Manual delete, gated on verify:** the pipeline never deletes a Zoom source. You delete from the Sources page, and the button is inactive until the row holds a **non-null YouTube video ID** — so a source can never be deleted before its durable YouTube copy exists.
 - **Missing view:** no `shared_screen_with_speaker_view` MP4 → `skipped_no_matching_view`, no guessing, no deleting.
 - **LMS never blocks:** a failed LMS push marks `lms_status=failed` and retries next run; YouTube is the durable copy the LMS only links to.
 - **Resumable uploads** (survives network blips mid-upload), ffmpeg reconnect flags for Fathom's redirect-to-GCS chunk hosts, sequential processing, temp files removed in `finally`.

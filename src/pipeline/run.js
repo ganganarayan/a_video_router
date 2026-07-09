@@ -5,7 +5,7 @@ import * as fathom from '../providers/fathom.js';
 import * as lms from '../providers/lms.js';
 import { getChannelById, uploadVideo, ensurePlaylist, addToPlaylist } from '../providers/youtube.js';
 import { matchRule, buildVideoTitle } from './router.js';
-import { STATES, RETRYABLE_STATES, canDeleteZoomSource } from './states.js';
+import { STATES, RETRYABLE_STATES } from './states.js';
 import { tempFilePath, cleanupTemp, downloadFathomVideo } from './download.js';
 import { lock, unlock, isLocked, recordingKey } from './locks.js';
 import { ProgressTracker } from './progress.js';
@@ -85,30 +85,12 @@ async function tryLmsPush(ctx, rec, rule, details) {
   }
 }
 
-async function tryZoomDelete(ctx, rec, details) {
-  const mode = ctx.zoomDeleteMode;
-  const fresh = await getRec(rec.id);
-  if (!canDeleteZoomSource(fresh, mode)) return;
-  if (!ctx.zoomAccount) return;
-  try {
-    await updateRec(fresh.id, { status: STATES.DELETING });
-    await zoom.deleteMeetingRecordings(ctx.zoomAccount, fresh.source_id, mode);
-    await updateRec(fresh.id, { status: STATES.DELETED, source_deleted: true });
-    log(`zoom source deleted (${mode}): ${fresh.title}`);
-  } catch (err) {
-    // Upload is safe; delete retried next run. Keep the pre-delete status.
-    await updateRec(fresh.id, {
-      status: fresh.status === STATES.DELETING ? STATES.UPLOADED : fresh.status,
-      error_message: `zoom delete failed: ${err.message}`,
-    });
-    details.warnings.push({ title: fresh.title, message: `Zoom delete failed (upload is safe): ${err.message}` });
-    logError(`zoom delete failed for rec ${fresh.id}:`, err.message);
-  }
-}
-
+// NOTE: Zoom deletion is intentionally MANUAL only — the pipeline never deletes
+// a source. Deletion happens exclusively from the Sources page "Delete from Zoom"
+// button (POST /api/sources/zoom/delete), which stays inactive until the
+// recording has a verified YouTube link.
 async function postUploadSteps(ctx, rec, rule, details) {
   await tryLmsPush(ctx, rec, rule, details);
-  await tryZoomDelete(ctx, rec, details);
 }
 
 // --- the download → upload core, shared by both sources ---
@@ -326,21 +308,6 @@ async function lmsSweep(ctx, details) {
   }
 }
 
-// Delete any uploaded Zoom source that still exists (e.g. a delete that failed
-// earlier, or delete mode switched on later).
-async function zoomDeleteSweep(ctx, details) {
-  if (!ctx.zoomAccount) return;
-  if (ctx.zoomDeleteMode !== 'trash' && ctx.zoomDeleteMode !== 'delete') return;
-  const { rows } = await query(
-    `SELECT * FROM processed_recordings
-     WHERE source = 'zoom' AND youtube_video_id IS NOT NULL AND source_deleted = false
-     ORDER BY id`,
-  );
-  for (const rec of rows) {
-    await tryZoomDelete(ctx, rec, details);
-  }
-}
-
 // --- manual per-video push (used by the Sources page queue) ---
 // Uploads to an explicitly chosen channel and/or pushes to an explicitly chosen
 // LMS course, bypassing routing rules for this one recording. Throws on failure
@@ -488,7 +455,7 @@ export async function runPipeline(runType = 'manual') {
     await processFathomPhase(ctx, seen, counts, details);
     await retrySweep(ctx, seen, counts, details);
     await lmsSweep(ctx, details);
-    await zoomDeleteSweep(ctx, details);
+    // Zoom deletion is manual only — no automatic delete sweep here.
   } catch (err) {
     counts.errors++;
     details.errors.push({ title: '(run)', message: err.message });
