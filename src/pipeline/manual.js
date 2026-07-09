@@ -64,6 +64,7 @@ async function work() {
         job.message = result.message;
         job.youtube_url = result.youtube_url || null;
         job.lms_lesson_url = result.lms_lesson_url || null;
+        job.transfer = result.transfer || null;
       } catch (err) {
         job.status = 'failed';
         job.message = err.message;

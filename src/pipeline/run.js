@@ -8,6 +8,7 @@ import { matchRule, buildVideoTitle } from './router.js';
 import { STATES, RETRYABLE_STATES, canDeleteZoomSource } from './states.js';
 import { tempFilePath, cleanupTemp, downloadFathomVideo } from './download.js';
 import { lock, unlock, isLocked, recordingKey } from './locks.js';
+import { ProgressTracker } from './progress.js';
 import { sendRunSummary } from '../notifier.js';
 
 let running = false;
@@ -112,7 +113,7 @@ async function postUploadSteps(ctx, rec, rule, details) {
 
 // --- the download → upload core, shared by both sources ---
 
-async function downloadUploadFinish(ctx, rec, rule, downloadFn, counts, details) {
+async function downloadUploadFinish(ctx, rec, rule, downloadFn, counts, details, progress = null) {
   let temp = null;
   try {
     const channel = await getChannelById(rule.channel_id);
@@ -127,14 +128,19 @@ async function downloadUploadFinish(ctx, rec, rule, downloadFn, counts, details)
       error_message: null,
     });
     temp = tempFilePath(rec.id);
-    const size = await downloadFn(temp);
+    progress?.startPhase('download');
+    const size = await downloadFn(temp, (done, total) => progress?.update(done, total));
+    progress?.finishPhase();
 
     await updateRec(rec.id, { status: STATES.UPLOADING, file_size_bytes: size });
     const ytTitle = buildVideoTitle(rec.title, rule.pattern, rule.keep_prefix);
+    progress?.startPhase('upload', size);
     const { videoId, url } = await uploadVideo(channel, temp, {
       title: ytTitle,
       privacy: rule.privacy || 'unlisted',
+      onProgress: (done, total) => progress?.update(done, total),
     });
+    progress?.finishPhase();
 
     // Verified upload: from here on this row can never re-enter the upload path.
     await updateRec(rec.id, {
@@ -146,6 +152,7 @@ async function downloadUploadFinish(ctx, rec, rule, downloadFn, counts, details)
     counts.uploaded++;
     details.posted.push({ title: ytTitle, source: rec.source, url });
     log(`uploaded: ${ytTitle} -> ${url}`);
+    progress?.finish();
 
     if (rule.playlist_name) {
       try {
@@ -194,7 +201,7 @@ async function processZoomRecording(ctx, rec, meeting, counts, details) {
   await updateRec(rec.id, { source_file_id: file.id || null });
   await downloadUploadFinish(
     ctx, rec, rule,
-    (dest) => zoom.downloadRecording(ctx.zoomAccount, file.download_url, dest),
+    (dest, onProgress) => zoom.downloadRecording(ctx.zoomAccount, file.download_url, dest, onProgress),
     counts, details,
   );
 }
@@ -219,7 +226,7 @@ async function processFathomRecording(ctx, rec, shareUrl, counts, details) {
   }
   await downloadUploadFinish(
     ctx, rec, rule,
-    (dest) => downloadFathomVideo(shareUrl, dest),
+    (dest, onProgress) => downloadFathomVideo(shareUrl, dest, onProgress),
     counts, details,
   );
 }
@@ -340,6 +347,8 @@ async function zoomDeleteSweep(ctx, details) {
 export async function manualPush(job) {
   const key = recordingKey(job.source, job.source_id);
   if (!lock(key)) throw new Error('This recording is already being processed.');
+  // Live progress snapshot is written straight onto the job so the queue poll sees it.
+  const tracker = new ProgressTracker((snap) => { job.progress = snap; });
   try {
     const cfg = await getConfigMap();
     const ctx = {
@@ -406,15 +415,15 @@ export async function manualPush(job) {
         await updateRec(rec.id, { source_file_id: file.id || null });
         await downloadUploadFinish(
           ctx, rec, rule,
-          (dest) => zoom.downloadRecording(ctx.zoomAccount, file.download_url, dest),
-          counts, details,
+          (dest, onProgress) => zoom.downloadRecording(ctx.zoomAccount, file.download_url, dest, onProgress),
+          counts, details, tracker,
         );
       } else {
         if (!shareUrl) throw new Error('No Fathom share URL available for this recording.');
         await downloadUploadFinish(
           ctx, rec, rule,
-          (dest) => downloadFathomVideo(shareUrl, dest),
-          counts, details,
+          (dest, onProgress) => downloadFathomVideo(shareUrl, dest, onProgress),
+          counts, details, tracker,
         );
       }
       rec = await getRec(rec.id);
@@ -442,6 +451,7 @@ export async function manualPush(job) {
       youtube_url: rec.youtube_url,
       lms_lesson_url: rec.lms_lesson_url,
       status: rec.status,
+      transfer: tracker.transferSummary(),
     };
   } finally {
     unlock(key);

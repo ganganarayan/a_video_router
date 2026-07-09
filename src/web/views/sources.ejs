@@ -14,7 +14,10 @@ Fathom cannot be deleted via API (storage is unlimited).</p>
   <h2>Push queue</h2>
   <div class="table-wrap">
     <table id="queue-table">
-      <thead><tr><th>#</th><th>Video</th><th>Source</th><th>Status</th><th>Result</th></tr></thead>
+      <thead><tr>
+        <th>#</th><th>Video</th><th>Source</th><th>Status</th><th>Size</th><th>Speed</th>
+        <th>Elapsed</th><th>ETA</th><th>Progress</th><th>Log / result</th><th></th>
+      </tr></thead>
       <tbody></tbody>
     </table>
   </div>
@@ -239,6 +242,61 @@ function queueBadge(j) {
   const cls = { queued: 'warn', processing: 'warn', done: 'ok', failed: 'err' }[j.status] || '';
   return `<span class="badge ${cls}">${j.status}</span>`;
 }
+function fmtBps(bps) { return bps ? fmtBytes(bps) + '/s' : '—'; }
+function fmtDuration(ms) {
+  if (ms == null) return '—';
+  const s = Math.round(ms / 1000), m = Math.floor(s / 60);
+  return m ? `${m}m ${s % 60}s` : `${s}s`;
+}
+
+function qSize(j) {
+  const b = j.transfer?.fileSizeBytes || j.progress?.total || 0;
+  return b ? fmtBytes(b) : '—';
+}
+function qSpeed(j) {
+  if (j.status !== 'processing' || !j.progress) return '—';
+  const arrow = j.progress.phase === 'upload' ? '↑' : (j.progress.phase === 'download' ? '↓' : '');
+  return `${arrow} ${fmtBps(j.progress.speedBps)}`;
+}
+function qElapsed(j) {
+  if (j.status === 'done' && j.transfer) return fmtDuration(j.transfer.durationMs);
+  return j.progress ? fmtDuration(j.progress.elapsedMs) : '—';
+}
+function qEta(j) {
+  if (j.status !== 'processing' || !j.progress || j.progress.etaMs == null) return '—';
+  return fmtDuration(j.progress.etaMs);
+}
+function qProgress(j) {
+  if (j.status === 'done') return '<div class="pbar"><span style="width:100%"></span></div>';
+  if (j.status === 'failed') return '—';
+  const p = j.progress;
+  if (j.status === 'processing' && (!p || p.pct == null)) return '<div class="pbar indet"><span></span></div>';
+  if (!p || p.pct == null) return '<span class="muted">queued</span>';
+  return `<div class="pbar"><span style="width:${p.pct}%"></span></div> <span class="muted">${p.pct}%</span>`;
+}
+function qLog(j) {
+  const links = [
+    j.youtube_url ? `<a href="${esc(j.youtube_url)}" target="_blank">YouTube (unlisted)</a>` : '',
+    j.lms_lesson_url ? `<a href="${esc(j.lms_lesson_url)}" target="_blank">LMS lesson</a>` : '',
+  ].filter(Boolean).join(' · ');
+  if (j.status === 'failed') return `<span class="badge err">failed</span> ${esc(j.message || '')}`;
+  if (j.status === 'done') {
+    const t = j.transfer;
+    const stats = t
+      ? `avg ↓ ${fmtBps(t.avgDownloadBps)} · ↑ ${fmtBps(t.avgUploadBps)} · ${fmtBytes(t.fileSizeBytes)} · ${fmtDuration(t.durationMs)} · ${fmtDate(t.finishedAt)}`
+      : esc(j.message || '');
+    return `${stats}${links ? '<br>' + links : ''}`;
+  }
+  return `<span class="muted">${esc(j.progress?.phase || j.status)}…</span>`;
+}
+function qAction(j) {
+  // Delete-from-Zoom activates only once the YouTube (unlisted) link exists.
+  if (j.source !== 'zoom') return '';
+  const on = Boolean(j.youtube_url);
+  return `<button class="danger" data-qdel="${esc(j.source_id)}" ${on ? '' : 'disabled'}
+    title="${on ? 'Delete this recording from Zoom (the YouTube copy stays).' : 'Activates after the YouTube link exists.'}">
+    Delete from Zoom</button>`;
+}
 
 async function pollQueue() {
   clearTimeout(queueTimer);
@@ -247,26 +305,47 @@ async function pollQueue() {
     const card = document.getElementById('queue-card');
     if (!jobs.length) { card.style.display = 'none'; return; }
     card.style.display = '';
-    document.querySelector('#queue-table tbody').innerHTML = jobs.map(j => `
+    const tbody = document.querySelector('#queue-table tbody');
+    tbody.innerHTML = jobs.map(j => `
       <tr>
         <td>${j.id}</td>
         <td>${esc(j.title)}</td>
         <td>${esc(j.source)}</td>
         <td>${queueBadge(j)}</td>
-        <td>${j.status === 'failed' ? esc(j.message)
-          : [j.youtube_url ? `<a href="${esc(j.youtube_url)}" target="_blank">YouTube</a>` : '',
-             j.lms_lesson_url ? `<a href="${esc(j.lms_lesson_url)}" target="_blank">LMS lesson</a>` : '',
-             esc(j.message || '')].filter(Boolean).join(' · ')}</td>
+        <td class="nowrap">${qSize(j)}</td>
+        <td class="nowrap">${qSpeed(j)}</td>
+        <td class="nowrap">${qElapsed(j)}</td>
+        <td class="nowrap">${qEta(j)}</td>
+        <td class="nowrap">${qProgress(j)}</td>
+        <td>${qLog(j)}</td>
+        <td>${qAction(j)}</td>
       </tr>
     `).join('');
+    tbody.querySelectorAll('[data-qdel]').forEach((btn) => {
+      if (!btn.disabled) btn.onclick = () => queueDelete(btn.dataset.qdel, btn);
+    });
     const active = jobs.some(j => j.status === 'queued' || j.status === 'processing');
     if (active) {
-      queueTimer = setTimeout(pollQueue, 4000);
+      queueTimer = setTimeout(pollQueue, 1500); // fast refresh for live speed/progress
     } else if (window._queueWasActive) {
       load(); // statuses changed — refresh the listing
     }
     window._queueWasActive = active;
   } catch { /* transient */ }
+}
+
+async function queueDelete(sourceId, btn) {
+  if (!confirm('Delete this recording from Zoom?\n\nThe YouTube copy stays.')) return;
+  btn.disabled = true;
+  try {
+    const r = await api('/sources/zoom/delete', { method: 'POST', body: { source_id: sourceId } });
+    toast(`Deleted from Zoom (${r.mode}).`);
+    load();
+    pollQueue();
+  } catch (e) {
+    toast(e.message, 'err');
+    btn.disabled = false;
+  }
 }
 
 async function deleteFromZoom(index, btn) {

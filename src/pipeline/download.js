@@ -37,14 +37,24 @@ export function fathomFfmpegArgs(shareUrl, destPath) {
   ];
 }
 
-export function downloadFathomVideo(shareUrl, destPath) {
+export function downloadFathomVideo(shareUrl, destPath, onProgress) {
   return new Promise((resolve, reject) => {
     const args = fathomFfmpegArgs(shareUrl, destPath);
     const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
     let stderr = '';
     proc.stderr.on('data', (d) => { stderr += d; });
-    proc.on('error', (err) => reject(new Error(`ffmpeg spawn failed: ${err.message}`)));
+    // HLS has no known total up front, so report bytes-written as the output
+    // file grows (total 0 => the UI shows an indeterminate bar).
+    let poll = null;
+    if (onProgress) {
+      poll = setInterval(() => {
+        try { onProgress(fs.statSync(destPath).size, 0); } catch { /* not created yet */ }
+      }, 1000);
+    }
+    const stopPoll = () => { if (poll) clearInterval(poll); };
+    proc.on('error', (err) => { stopPoll(); reject(new Error(`ffmpeg spawn failed: ${err.message}`)); });
     proc.on('close', (code) => {
+      stopPoll();
       if (code === 0) {
         try {
           resolve(fs.statSync(destPath).size);

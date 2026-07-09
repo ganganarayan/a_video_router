@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { Transform } from 'node:stream';
 import { google } from 'googleapis';
 import { config } from '../config.js';
 import { query } from '../db.js';
@@ -80,7 +81,20 @@ function throwIfQuota(status, bodyText) {
   }
 }
 
-async function putChunk(sessionUrl, token, filePath, offset, size) {
+async function putChunk(sessionUrl, token, filePath, offset, size, onProgress) {
+  const fileStream = fs.createReadStream(filePath, { start: offset });
+  let body = fileStream;
+  if (onProgress) {
+    let sent = offset;
+    const counter = new Transform({
+      transform(chunk, _enc, cb) {
+        sent += chunk.length;
+        onProgress(sent, size);
+        cb(null, chunk);
+      },
+    });
+    body = fileStream.pipe(counter);
+  }
   return fetch(sessionUrl, {
     method: 'PUT',
     headers: {
@@ -88,7 +102,7 @@ async function putChunk(sessionUrl, token, filePath, offset, size) {
       'Content-Length': String(size - offset),
       'Content-Range': `bytes ${offset}-${size - 1}/${size}`,
     },
-    body: fs.createReadStream(filePath, { start: offset }),
+    body,
     duplex: 'half',
   });
 }
@@ -113,7 +127,7 @@ async function queryResumeOffset(sessionUrl, token, size) {
 
 // True resumable upload: init a session, stream the file, and on transient
 // failure query the session for the confirmed offset and resume from there.
-export async function uploadVideo(channelRow, filePath, { title, description = '', privacy = 'unlisted' }) {
+export async function uploadVideo(channelRow, filePath, { title, description = '', privacy = 'unlisted', onProgress }) {
   const auth = buildOAuthClient(channelRow);
   const { token } = await auth.getAccessToken();
   const size = fs.statSync(filePath).size;
@@ -145,7 +159,7 @@ export async function uploadVideo(channelRow, filePath, { title, description = '
   let offset = 0;
   for (let attempt = 1; attempt <= 6; attempt++) {
     try {
-      const res = await putChunk(sessionUrl, token, filePath, offset, size);
+      const res = await putChunk(sessionUrl, token, filePath, offset, size, onProgress);
       if (res.ok) {
         const data = await res.json();
         if (!data.id) throw new Error('YouTube upload finished without a video id');

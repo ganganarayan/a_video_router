@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { pipeline } from 'node:stream/promises';
-import { Readable } from 'node:stream';
+import { Readable, Transform } from 'node:stream';
 import { query } from '../db.js';
 import { decrypt } from '../lib/secrets.js';
 import { log } from '../lib/logger.js';
@@ -111,7 +111,7 @@ export async function findMeetingInWindow(account, meetingUuid, windowDays = 30)
   return meetings.find((m) => m.uuid === meetingUuid) || null;
 }
 
-export async function downloadRecording(account, downloadUrl, destPath) {
+export async function downloadRecording(account, downloadUrl, destPath, onProgress) {
   const token = await getAccessToken(account);
   const res = await fetch(`${downloadUrl}?access_token=${token}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -120,7 +120,16 @@ export async function downloadRecording(account, downloadUrl, destPath) {
   if (!res.ok || !res.body) {
     throw new Error(`Zoom download failed (${res.status}): ${(await res.text()).slice(0, 300)}`);
   }
-  await pipeline(Readable.fromWeb(res.body), fs.createWriteStream(destPath));
+  const total = Number(res.headers.get('content-length')) || 0;
+  let received = 0;
+  const counter = new Transform({
+    transform(chunk, _enc, cb) {
+      received += chunk.length;
+      onProgress?.(received, total);
+      cb(null, chunk);
+    },
+  });
+  await pipeline(Readable.fromWeb(res.body), counter, fs.createWriteStream(destPath));
   return fs.statSync(destPath).size;
 }
 
