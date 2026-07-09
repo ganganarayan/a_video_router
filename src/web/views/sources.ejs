@@ -29,7 +29,7 @@ Fathom cannot be deleted via API (storage is unlimited).</p>
     <table id="zoom-table">
       <thead><tr>
         <th>Title</th><th>Recorded</th><th>Length</th><th>Size on Zoom</th><th>Speaker view</th>
-        <th>Pipeline status</th><th>YouTube link</th><th>Push to…</th><th></th>
+        <th>Zoom status</th><th>Pipeline status</th><th>YouTube link</th><th>Push to…</th><th></th>
       </tr></thead>
       <tbody></tbody>
     </table>
@@ -170,6 +170,7 @@ function renderZoom(s) {
       <td>${fmtMin(z.duration_minutes)}</td>
       <td>${fmtBytes(z.total_bytes)}</td>
       <td>${z.has_target_view ? '✓' : '<span class="badge warn">missing</span>'}</td>
+      <td>${z.downloaded ? '<span class="badge ok">Downloaded</span>' : '<span class="badge">Not downloaded</span>'}</td>
       <td>${pipelineBadge(z)}${z.source_deleted ? ' <span class="badge ok">deleted on Zoom</span>' : ''}</td>
       <td>${ytCell(z)}</td>
       <td>${pushCell('zoom', i, z)}</td>
@@ -182,7 +183,7 @@ function renderZoom(s) {
         </button>
       </td>
     </tr>
-  `).join('') || '<tr><td colspan="9" class="muted">No recordings on Zoom in this window.</td></tr>';
+  `).join('') || '<tr><td colspan="10" class="muted">No recordings on Zoom in this window.</td></tr>';
   bindRowActions(tbody);
 }
 

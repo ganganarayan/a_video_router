@@ -179,7 +179,8 @@ apiRouter.get('/sources', wrap(async (req, res) => {
     zoom.getZoomAccount(), fathom.getFathomAccount(),
   ]);
   const { rows: dbRows } = await query(
-    `SELECT source, source_id, status, youtube_url, youtube_video_id, source_deleted, lms_lesson_url
+    `SELECT source, source_id, status, youtube_url, youtube_video_id, source_deleted,
+            lms_lesson_url, file_size_bytes
      FROM processed_recordings`,
   );
   const byKey = new Map(dbRows.map((r) => [`${r.source}:${r.source_id}`, r]));
@@ -205,6 +206,9 @@ apiRouter.get('/sources', wrap(async (req, res) => {
             is_default: f.recording_type === 'shared_screen_with_speaker_view',
           })),
           status: rec?.status || 'not_processed',
+          // Zoom download status = has the pipeline pulled this recording's bytes?
+          // True once file_size_bytes is recorded (download completed) or it's on YouTube.
+          downloaded: Boolean(rec?.file_size_bytes) || Boolean(rec?.youtube_video_id),
           youtube_url: rec?.youtube_url || null,
           lms_lesson_url: rec?.lms_lesson_url || null,
           source_deleted: rec?.source_deleted || false,
