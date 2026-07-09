@@ -86,8 +86,21 @@ function lmsSelect(source, i, item) {
     <option value="">LMS course…</option>${opts}</select>`;
 }
 
+// Zoom rows: pick the exact recording file to upload (avoids the "no
+// speaker-view" failure when a meeting only has other views).
+function fileSelect(source, i, item) {
+  if (source !== 'zoom' || item.youtube_url) return '';
+  const files = item.files || [];
+  if (!files.length) return '<span class="badge warn">no MP4 files</span>';
+  const opts = files.map(f =>
+    `<option value="${esc(f.id)}"${f.is_default ? ' selected' : ''}>${esc(f.recording_type)} (${fmtBytes(f.file_size)})</option>`
+  ).join('');
+  return `<select data-file="${source}:${i}" title="Which recording file to upload">${opts}</select>`;
+}
+
 function pushCell(source, i, item) {
   return `<div class="row" style="min-width:200px">
+    ${fileSelect(source, i, item)}
     ${channelSelect(source, i, item)}
     ${lmsSelect(source, i, item)}
     <button data-push="${source}:${i}">Push</button>
@@ -188,11 +201,16 @@ async function pushRow(key, btn) {
   if (!item) return;
   const chSel = document.querySelector(`[data-ch="${key}"]`);
   const lmsSel = document.querySelector(`[data-lms="${key}"]`);
+  const fileSel = document.querySelector(`[data-file="${key}"]`);
   const channelId = chSel?.value || null;
+  const fileId = fileSel?.value || null;
   const lmsOpt = lmsSel?.value !== '' && lmsSel ? lmsOptions[Number(lmsSel.value)] : null;
 
   if (!item.youtube_url && !channelId) {
     return toast('Pick a YouTube channel — this video is not uploaded yet.', 'err');
+  }
+  if (!item.youtube_url && source === 'zoom' && (item.files || []).length && !fileId) {
+    return toast('Pick which recording file to upload.', 'err');
   }
   if (item.youtube_url && !lmsOpt) {
     return toast('Already on YouTube — pick an LMS course to push it into the LMS.', 'err');
@@ -202,6 +220,7 @@ async function pushRow(key, btn) {
     const r = await api('/push', { method: 'POST', body: {
       source,
       source_id: item.source_id,
+      file_id: fileId,
       title: item.title,
       channel_id: channelId,
       lms_course_id: lmsOpt?.course_id || null,

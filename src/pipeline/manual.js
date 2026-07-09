@@ -22,6 +22,7 @@ export function enqueuePush(payload) {
     id: ++seq,
     source: payload.source,
     source_id: payload.source_id,
+    file_id: payload.file_id || null,
     title: payload.title || payload.source_id,
     channel_id: payload.channel_id || null,
     lms_course_id: payload.lms_course_id || null,

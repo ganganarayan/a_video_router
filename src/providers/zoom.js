@@ -85,11 +85,30 @@ export async function getMeetingRecordings(account, meetingUuid) {
   }
 }
 
-// The one file we want: screen share + speaker view, MP4.
+// The one file the automatic pipeline wants: screen share + speaker view, MP4.
 export function pickRecordingFile(meeting) {
   return (meeting.recording_files || []).find(
     (f) => f.recording_type === 'shared_screen_with_speaker_view' && f.file_type === 'MP4',
   ) || null;
+}
+
+// All uploadable (MP4) files of a meeting, for the manual per-file picker.
+export function listVideoFiles(meeting) {
+  return (meeting.recording_files || []).filter((f) => f.file_type === 'MP4');
+}
+
+// Resolve a specific file by its Zoom file id; fall back to the auto-pick when
+// no id is given (used by manual push).
+export function findFile(meeting, fileId) {
+  if (!fileId) return pickRecordingFile(meeting);
+  return (meeting.recording_files || []).find((f) => f.id === fileId) || null;
+}
+
+// Locate a meeting within the account-level listing (the endpoint that works
+// with the base recording scope) — avoids the granular per-meeting endpoint.
+export async function findMeetingInWindow(account, meetingUuid, windowDays = 30) {
+  const meetings = await listRecordings(account, windowDays);
+  return meetings.find((m) => m.uuid === meetingUuid) || null;
 }
 
 export async function downloadRecording(account, downloadUrl, destPath) {

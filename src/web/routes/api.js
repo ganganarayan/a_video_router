@@ -108,6 +108,13 @@ apiRouter.get('/sources', wrap(async (req, res) => {
           duration_minutes: m.duration ?? null,
           total_bytes: (m.recording_files || []).reduce((s, f) => s + (f.file_size || 0), 0),
           has_target_view: Boolean(zoom.pickRecordingFile(m)),
+          // uploadable MP4 files, so the row can offer an exact-file picker
+          files: zoom.listVideoFiles(m).map((f) => ({
+            id: f.id,
+            recording_type: f.recording_type,
+            file_size: f.file_size || 0,
+            is_default: f.recording_type === 'shared_screen_with_speaker_view',
+          })),
           status: rec?.status || 'not_processed',
           youtube_url: rec?.youtube_url || null,
           lms_lesson_url: rec?.lms_lesson_url || null,
@@ -147,7 +154,7 @@ apiRouter.get('/sources', wrap(async (req, res) => {
 // Queue a manual per-video push (upload to a chosen channel and/or push to a
 // chosen LMS course). Jobs run sequentially in the background.
 apiRouter.post('/push', wrap(async (req, res) => {
-  const { source, source_id, title, channel_id, lms_course_id, lms_module_id } = req.body;
+  const { source, source_id, file_id, title, channel_id, lms_course_id, lms_module_id } = req.body;
   if (!['zoom', 'fathom'].includes(source)) return res.status(400).json({ error: 'source must be zoom or fathom' });
   if (!source_id) return res.status(400).json({ error: 'source_id is required' });
   if (!channel_id && !lms_course_id) {
@@ -156,6 +163,7 @@ apiRouter.post('/push', wrap(async (req, res) => {
   const { job, duplicate } = enqueuePush({
     source,
     source_id: String(source_id),
+    file_id: file_id ? String(file_id) : null,
     title,
     channel_id: channel_id ? Number(channel_id) : null,
     lms_course_id: lms_course_id?.trim() || null,

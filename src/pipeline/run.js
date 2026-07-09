@@ -356,8 +356,10 @@ export async function manualPush(job) {
     let shareUrl = null;
     if (job.source === 'zoom') {
       if (!ctx.zoomAccount) throw new Error('Zoom is not connected.');
-      meeting = await zoom.getMeetingRecordings(ctx.zoomAccount, job.source_id);
-      if (!meeting) throw new Error('Recording not found on Zoom (deleted or expired).');
+      // Use the account-level listing (works with the base recording scope)
+      // instead of the granular per-meeting endpoint.
+      meeting = await zoom.findMeetingInWindow(ctx.zoomAccount, job.source_id, 30);
+      if (!meeting) throw new Error('Recording not found on Zoom (deleted or outside the 30-day window).');
       ({ rec } = await ensureRow('zoom', job.source_id, {
         title: meeting.topic,
         recorded_at: meeting.start_time || null,
@@ -395,8 +397,12 @@ export async function manualPush(job) {
         throw new Error('Pick a YouTube channel — this video has not been uploaded yet.');
       }
       if (job.source === 'zoom') {
-        const file = zoom.pickRecordingFile(meeting);
-        if (!file) throw new Error('No shared_screen_with_speaker_view MP4 on this Zoom meeting.');
+        const file = zoom.findFile(meeting, job.file_id);
+        if (!file) {
+          throw new Error(job.file_id
+            ? 'The selected Zoom file no longer exists — refresh the listing.'
+            : 'No shared_screen_with_speaker_view MP4 on this Zoom meeting — pick a specific file to push.');
+        }
         await updateRec(rec.id, { source_file_id: file.id || null });
         await downloadUploadFinish(
           ctx, rec, rule,
