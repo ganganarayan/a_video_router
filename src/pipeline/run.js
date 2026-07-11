@@ -118,7 +118,7 @@ async function downloadUploadFinish(ctx, rec, rule, downloadFn, counts, details,
     // Manual pushes may supply an exact title/description; otherwise derive from the tag.
     const ytTitle = rule.custom_title || buildVideoTitle(rec.title, rule.pattern, rule.keep_prefix);
     progress?.startPhase('upload', size);
-    const { videoId, url } = await uploadVideo(channel, temp, {
+    const { videoId, url, uploadStatus } = await uploadVideo(channel, temp, {
       title: ytTitle,
       description: rule.custom_description || '',
       privacy: rule.privacy || 'unlisted',
@@ -134,7 +134,7 @@ async function downloadUploadFinish(ctx, rec, rule, downloadFn, counts, details,
       uploaded_at: new Date(),
     });
     counts.uploaded++;
-    details.posted.push({ title: ytTitle, source: rec.source, url });
+    details.posted.push({ title: ytTitle, source: rec.source, url, uploadStatus });
     log(`uploaded: ${ytTitle} -> ${url}`);
     progress?.finish();
 
@@ -421,6 +421,7 @@ export async function manualPush(job) {
       message: `done${warn}`,
       youtube_url: rec.youtube_url,
       lms_lesson_url: rec.lms_lesson_url,
+      youtube_status: details.posted[0]?.uploadStatus || null,
       status: rec.status,
       transfer: tracker.transferSummary(),
     };

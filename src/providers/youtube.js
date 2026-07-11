@@ -163,8 +163,22 @@ export async function uploadVideo(channelRow, filePath, { title, description = '
       if (res.ok) {
         const data = await res.json();
         if (!data.id) throw new Error('YouTube upload finished without a video id');
-        log(`youtube upload complete: ${data.id} (${size} bytes)`);
-        return { videoId: data.id, url: `https://youtu.be/${data.id}` };
+        // Authoritative confirmation: ask YouTube for the video's own uploadStatus
+        // so "complete" means YouTube itself acknowledges the bytes, not just our
+        // HTTP response. (videos.list costs 1 quota unit vs 1600 for the insert.)
+        let uploadStatus = data.status?.uploadStatus || null;
+        try {
+          const yt = google.youtube({ version: 'v3', auth });
+          const chk = await yt.videos.list({ part: 'status,processingDetails', id: data.id });
+          uploadStatus = chk.data.items?.[0]?.status?.uploadStatus || uploadStatus;
+        } catch (e) {
+          log(`youtube upload confirm check failed (non-fatal): ${e.message}`);
+        }
+        if (uploadStatus === 'rejected' || uploadStatus === 'failed') {
+          throw new Error(`YouTube did not accept the upload (status: ${uploadStatus})`);
+        }
+        log(`youtube upload complete: ${data.id} (${size} bytes, status: ${uploadStatus || 'unknown'})`);
+        return { videoId: data.id, url: `https://youtu.be/${data.id}`, uploadStatus };
       }
       const text = await res.text();
       throwIfQuota(res.status, text);

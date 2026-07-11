@@ -293,6 +293,12 @@ function qProgress(j) {
   if (!p || p.pct == null) return '<span class="muted">queued</span>';
   return `<div class="pbar"><span style="width:${p.pct}%"></span></div> <span class="muted">${p.pct}%</span>`;
 }
+function ytStatusNote(status) {
+  if (!status) return '';
+  if (status === 'uploaded') return ' · <span class="muted">YouTube: received, now processing</span>';
+  if (status === 'processed') return ' · <span class="badge ok">YouTube: processed</span>';
+  return ` · <span class="muted">YouTube: ${esc(status)}</span>`;
+}
 function qLog(j) {
   const links = [
     j.youtube_url ? `<a href="${esc(j.youtube_url)}" target="_blank">YouTube (unlisted)</a>` : '',
@@ -302,11 +308,13 @@ function qLog(j) {
   if (j.status === 'done') {
     const t = j.transfer;
     const stats = t
-      ? `avg ↓ ${fmtBps(t.avgDownloadBps)} · ↑ ${fmtBps(t.avgUploadBps)} · ${fmtBytes(t.fileSizeBytes)} · ${fmtDuration(t.durationMs)} · ${fmtDate(t.finishedAt)}`
+      ? `transfer: avg ↓ ${fmtBps(t.avgDownloadBps)} · ↑ ${fmtBps(t.avgUploadBps)} · ${fmtBytes(t.fileSizeBytes)} · ${fmtDuration(t.durationMs)} · ${fmtDate(t.finishedAt)}`
       : esc(j.message || '');
-    return `${stats}${links ? '<br>' + links : ''}`;
+    return `${stats}${ytStatusNote(j.youtube_status)}${links ? '<br>' + links : ''}`;
   }
-  return `<span class="muted">${esc(j.progress?.phase || j.status)}…</span>`;
+  const phase = j.progress?.phase;
+  const label = phase === 'upload' ? 'uploading to YouTube' : (phase === 'download' ? 'downloading' : (j.status || ''));
+  return `<span class="muted">${esc(label)}…</span>`;
 }
 function qAction(j) {
   // Delete-from-Zoom activates only once the YouTube (unlisted) link exists.
