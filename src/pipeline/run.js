@@ -19,6 +19,7 @@ const UPDATABLE = new Set([
   'lms_lesson_id', 'lms_lesson_url', 'lms_status', 'status', 'file_size_bytes',
   'source_deleted', 'error_message', 'recorded_at', 'duration_minutes', 'source_meta',
   'source_file_id', 'uploaded_at',
+  'download_ms', 'upload_ms', 'download_bps', 'upload_bps',
 ]);
 
 async function updateRec(id, fields) {
@@ -111,27 +112,36 @@ async function downloadUploadFinish(ctx, rec, rule, downloadFn, counts, details,
     });
     temp = tempFilePath(rec.id);
     progress?.startPhase('download');
+    const dlStart = Date.now();
     const size = await downloadFn(temp, (done, total) => progress?.update(done, total));
+    const dlMs = Date.now() - dlStart;
     progress?.finishPhase();
 
     await updateRec(rec.id, { status: STATES.UPLOADING, file_size_bytes: size });
     // Manual pushes may supply an exact title/description; otherwise derive from the tag.
     const ytTitle = rule.custom_title || buildVideoTitle(rec.title, rule.pattern, rule.keep_prefix);
     progress?.startPhase('upload', size);
+    const ulStart = Date.now();
     const { videoId, url, uploadStatus } = await uploadVideo(channel, temp, {
       title: ytTitle,
       description: rule.custom_description || '',
       privacy: rule.privacy || 'unlisted',
       onProgress: (done, total) => progress?.update(done, total),
     });
+    const ulMs = Date.now() - ulStart;
     progress?.finishPhase();
 
     // Verified upload: from here on this row can never re-enter the upload path.
+    // Persist transfer metrics (for the Logs page) — captured for scheduled and manual alike.
     await updateRec(rec.id, {
       status: STATES.UPLOADED,
       youtube_video_id: videoId,
       youtube_url: url,
       uploaded_at: new Date(),
+      download_ms: dlMs,
+      upload_ms: ulMs,
+      download_bps: dlMs > 0 ? Math.round(size / (dlMs / 1000)) : 0,
+      upload_bps: ulMs > 0 ? Math.round(size / (ulMs / 1000)) : 0,
     });
     counts.uploaded++;
     details.posted.push({ title: ytTitle, source: rec.source, url, uploadStatus });

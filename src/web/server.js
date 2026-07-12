@@ -34,7 +34,7 @@ export function createServer() {
   });
 
   app.get('/', (_req, res) => res.redirect('/runs'));
-  const pages = { connections: 'Connections', routing: 'Routing', runs: 'Runs', sources: 'Sources', schedules: 'Schedules', settings: 'Settings' };
+  const pages = { connections: 'Connections', routing: 'Routing', runs: 'Runs', sources: 'Sources', logs: 'Logs', schedules: 'Schedules', settings: 'Settings' };
   for (const [route, title] of Object.entries(pages)) {
     app.get(`/${route}`, requirePageAuth, (_req, res) => res.render(route, { page: route, title }));
   }

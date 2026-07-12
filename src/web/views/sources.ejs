@@ -111,6 +111,8 @@ function titleDescFields(source, i, item) {
 }
 
 function pushCell(source, i, item) {
+  // Once a recording is on YouTube there is nothing to push — show a marker, no button.
+  if (item.youtube_url) return '<span class="muted">on YouTube ✓</span>';
   return `<div class="row" style="min-width:220px">
     ${titleDescFields(source, i, item)}
     ${fileSelect(source, i, item)}
@@ -169,7 +171,9 @@ function renderZoom(s) {
       <td>${fmtDate(z.recorded_at)}</td>
       <td>${fmtMin(z.duration_minutes)}</td>
       <td>${fmtBytes(z.total_bytes)}</td>
-      <td>${z.has_target_view ? '✓' : '<span class="badge warn">missing</span>'}</td>
+      <td>${z.speaker_view
+        ? `<span class="badge ok" title="${esc(z.speaker_view)}">✓</span>`
+        : '<span class="badge warn">missing</span>'}</td>
       <td>${z.downloaded ? '<span class="badge ok">Downloaded</span>' : '<span class="badge">Not downloaded</span>'}</td>
       <td>${pipelineBadge(z)}${z.source_deleted ? ' <span class="badge ok">deleted on Zoom</span>' : ''}</td>
       <td>${ytCell(z)}</td>

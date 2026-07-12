@@ -28,8 +28,14 @@ apiRouter.get('/overview', wrap(async (_req, res) => {
     `SELECT count(*)::int AS total,
             count(*) FILTER (WHERE youtube_video_id IS NOT NULL)::int AS uploaded,
             count(*) FILTER (WHERE status = 'error')::int AS errors,
-            count(*) FILTER (WHERE status LIKE 'skipped%')::int AS skipped
+            count(*) FILTER (WHERE status LIKE 'skipped%')::int AS skipped,
+            round(avg(download_bps) FILTER (WHERE download_bps > 0))::bigint AS avg_download_bps,
+            round(avg(upload_bps) FILTER (WHERE upload_bps > 0))::bigint AS avg_upload_bps
      FROM processed_recordings`,
+  );
+  const { rows: [chan] } = await query(
+    `SELECT count(*) FILTER (WHERE refresh_token IS NOT NULL)::int AS connected,
+            count(*)::int AS total FROM youtube_channels`,
   );
   const schedules = await getSchedules();
   const enabled = schedules.filter((s) => s.enabled);
@@ -45,9 +51,37 @@ apiRouter.get('/overview', wrap(async (_req, res) => {
     nextRun,
     activeSchedules: enabled.length,
     totalSchedules: schedules.length,
+    connectedChannels: chan.connected,
+    totalChannels: chan.total,
+    avgDownloadBps: Number(totals.avg_download_bps) || 0,
+    avgUploadBps: Number(totals.avg_upload_bps) || 0,
     totals,
     running: isRunning(),
   });
+}));
+
+// ---------- logs: completed transfers with full detail ----------
+
+apiRouter.get('/logs', wrap(async (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 500, 2000);
+  const q = String(req.query.q || '').trim();
+  const params = [];
+  let where = 'p.youtube_video_id IS NOT NULL';
+  if (q) {
+    params.push(`%${q}%`);
+    where += ` AND (p.title ILIKE $${params.length} OR p.matched_tag ILIKE $${params.length})`;
+  }
+  params.push(limit);
+  const { rows } = await query(
+    `SELECT p.*, c.label AS channel_label
+     FROM processed_recordings p
+     LEFT JOIN youtube_channels c ON c.id = p.channel_id
+     WHERE ${where}
+     ORDER BY coalesce(p.uploaded_at, p.discovered_at) DESC
+     LIMIT $${params.length}`,
+    params,
+  );
+  res.json(rows);
 }));
 
 // ---------- schedules (recurring runs) ----------
@@ -198,6 +232,14 @@ apiRouter.get('/sources', wrap(async (req, res) => {
           duration_minutes: m.duration ?? null,
           total_bytes: (m.recording_files || []).reduce((s, f) => s + (f.file_size || 0), 0),
           has_target_view: Boolean(zoom.pickRecordingFile(m)),
+          // A speaker view exists if either the screen+speaker composite OR the
+          // active_speaker file is present (active_speaker IS the speaker view).
+          speaker_view: (() => {
+            const types = (m.recording_files || []).filter((f) => f.file_type === 'MP4').map((f) => f.recording_type);
+            if (types.includes('shared_screen_with_speaker_view')) return 'speaker+screen';
+            if (types.includes('active_speaker')) return 'active_speaker';
+            return null;
+          })(),
           // uploadable MP4 files, so the row can offer an exact-file picker
           files: zoom.listVideoFiles(m).map((f) => ({
             id: f.id,

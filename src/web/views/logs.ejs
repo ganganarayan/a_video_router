@@ -1,0 +1,136 @@
+<%- include('partials/head') %>
+<h1>Transfer logs</h1>
+<p class="muted">Every completed download → upload, with full transfer detail. Edit a video's
+YouTube title/description, or delete its Zoom source (enabled once it has a YouTube link and
+hasn't been deleted yet).</p>
+
+<div class="card">
+  <div class="row">
+    <div class="field"><input id="search" placeholder="Search title or tag…"></div>
+    <button id="refresh">Refresh</button>
+  </div>
+  <div class="table-wrap">
+    <table id="logs-table">
+      <thead><tr>
+        <th>Date &amp; time</th><th>Source</th><th>Source file name</th><th>Channel</th>
+        <th>Size</th><th>↓ Download</th><th>↑ Upload</th><th>Transfer time</th>
+        <th>YouTube link</th><th>Zoom source</th><th></th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+function fmtBps(bps) { return bps ? fmtBytes(bps) + '/s' : '—'; }
+function fmtDur(ms) {
+  if (ms == null) return '—';
+  const s = Math.round(ms / 1000), m = Math.floor(s / 60);
+  return m ? `${m}m ${s % 60}s` : `${s}s`;
+}
+function transferTime(r) {
+  const total = (r.download_ms || 0) + (r.upload_ms || 0);
+  return total ? fmtDur(total) : '—';
+}
+function zoomSourceCell(r) {
+  if (r.source !== 'zoom') return '<span class="muted">n/a (Fathom)</span>';
+  if (r.source_deleted) return '<span class="badge ok">deleted</span>';
+  return '<span class="badge warn">on Zoom</span>';
+}
+function deleteBtn(r) {
+  const on = r.source === 'zoom' && r.youtube_video_id && !r.source_deleted;
+  return `<button class="danger" data-del="${r.source_id}" ${on ? '' : 'disabled'}
+    title="${on ? 'Delete this recording from Zoom (the YouTube copy stays).'
+      : (r.source !== 'zoom' ? 'Fathom cannot be deleted via API.'
+        : (r.source_deleted ? 'Already deleted from Zoom.' : 'Needs a YouTube link first.'))}">
+    Delete from Zoom</button>`;
+}
+
+async function load() {
+  const q = encodeURIComponent(document.getElementById('search').value);
+  const rows = await api('/logs?q=' + q);
+  document.querySelector('#logs-table tbody').innerHTML = rows.map(r => `
+    <tr>
+      <td class="nowrap">${fmtDate(r.uploaded_at || r.discovered_at)}</td>
+      <td>${esc(r.source)}</td>
+      <td>${esc(r.title)}</td>
+      <td>${esc(r.channel_label || '—')}</td>
+      <td class="nowrap">${r.file_size_bytes ? fmtBytes(Number(r.file_size_bytes)) : '—'}</td>
+      <td class="nowrap">${fmtBps(Number(r.download_bps) || 0)}</td>
+      <td class="nowrap">${fmtBps(Number(r.upload_bps) || 0)}</td>
+      <td class="nowrap">${transferTime(r)}</td>
+      <td>${r.youtube_url ? `<a href="${esc(r.youtube_url)}" target="_blank">YouTube</a>` : '—'}</td>
+      <td>${zoomSourceCell(r)}</td>
+      <td class="row">
+        <button data-edit="${r.id}">Edit title/desc</button>
+        ${deleteBtn(r)}
+      </td>
+    </tr>
+    <tr id="editrow-${r.id}" style="display:none"><td colspan="11">
+      <div class="card" style="margin:0">
+        <label>YouTube title</label><input id="et-${r.id}">
+        <label>YouTube description</label><textarea id="ed-${r.id}" rows="4" style="width:100%"></textarea>
+        <p class="row">
+          <button class="primary" data-save="${r.id}">Update on YouTube</button>
+          <button data-cancel="${r.id}">Cancel</button>
+          <span class="muted" id="es-${r.id}"></span>
+        </p>
+      </div>
+    </td></tr>
+  `).join('') || '<tr><td colspan="11" class="muted">No completed transfers yet.</td></tr>';
+  bindActions();
+}
+
+function bindActions() {
+  document.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openEditor(b.dataset.edit));
+  document.querySelectorAll('[data-cancel]').forEach(b => b.onclick = () => {
+    document.getElementById('editrow-' + b.dataset.cancel).style.display = 'none';
+  });
+  document.querySelectorAll('[data-save]').forEach(b => b.onclick = () => saveEditor(b.dataset.save));
+  document.querySelectorAll('[data-del]').forEach(b => {
+    if (!b.disabled) b.onclick = () => delZoom(b.dataset.del, b);
+  });
+}
+
+async function openEditor(id) {
+  const row = document.getElementById('editrow-' + id);
+  const state = document.getElementById('es-' + id);
+  row.style.display = '';
+  state.textContent = 'loading current values from YouTube…';
+  try {
+    const d = await api('/recordings/' + id + '/youtube');
+    document.getElementById('et-' + id).value = d.title || '';
+    document.getElementById('ed-' + id).value = d.description || '';
+    state.textContent = '';
+  } catch (e) { state.textContent = e.message; }
+}
+
+async function saveEditor(id) {
+  const state = document.getElementById('es-' + id);
+  state.textContent = 'updating…';
+  try {
+    await api('/recordings/' + id + '/youtube', { method: 'POST', body: {
+      title: document.getElementById('et-' + id).value,
+      description: document.getElementById('ed-' + id).value,
+    }});
+    toast('YouTube video updated');
+    document.getElementById('editrow-' + id).style.display = 'none';
+    load();
+  } catch (e) { state.textContent = e.message; }
+}
+
+async function delZoom(sourceId, btn) {
+  if (!confirm('Delete this recording from Zoom?\n\nThe YouTube copy stays.')) return;
+  btn.disabled = true;
+  try {
+    const r = await api('/sources/zoom/delete', { method: 'POST', body: { source_id: sourceId } });
+    toast(`Deleted from Zoom (${r.mode}).`);
+    load();
+  } catch (e) { toast(e.message, 'err'); btn.disabled = false; }
+}
+
+document.getElementById('refresh').onclick = load;
+document.getElementById('search').addEventListener('keydown', e => { if (e.key === 'Enter') load(); });
+load().catch(e => toast(e.message, 'err'));
+</script>
+<%- include('partials/foot') %>

@@ -2,7 +2,11 @@
 <h1>Runs & video log</h1>
 
 <div class="grid">
-  <div class="card stat"><div class="num" id="stat-uploaded">–</div><div class="lbl">videos uploaded</div></div>
+  <div class="card stat"><div class="num" id="stat-uploaded">–</div><div class="lbl">recordings transferred</div></div>
+  <div class="card stat"><div class="num" id="stat-avgdl">–</div><div class="lbl">avg download speed</div></div>
+  <div class="card stat"><div class="num" id="stat-avgul">–</div><div class="lbl">avg upload speed</div></div>
+  <div class="card stat"><div class="num" id="stat-channels">–</div><div class="lbl">connected channels</div></div>
+  <div class="card stat"><div class="num" id="stat-scheds">–</div><div class="lbl">active schedules</div></div>
   <div class="card stat"><div class="num" id="stat-skipped">–</div><div class="lbl">currently skipped</div></div>
   <div class="card stat"><div class="num" id="stat-errors">–</div><div class="lbl">in error (auto-retried)</div></div>
   <div class="card stat">
@@ -52,9 +56,15 @@
 </div>
 
 <script>
+function fmtBps(bps) { return bps ? fmtBytes(bps) + '/s' : '—'; }
+
 async function loadOverview() {
   const o = await api('/overview');
   document.getElementById('stat-uploaded').textContent = o.totals.uploaded;
+  document.getElementById('stat-avgdl').textContent = fmtBps(o.avgDownloadBps);
+  document.getElementById('stat-avgul').textContent = fmtBps(o.avgUploadBps);
+  document.getElementById('stat-channels').textContent = `${o.connectedChannels}/${o.totalChannels}`;
+  document.getElementById('stat-scheds').textContent = `${o.activeSchedules}/${o.totalSchedules}`;
   document.getElementById('stat-skipped').textContent = o.totals.skipped;
   document.getElementById('stat-errors').textContent = o.totals.errors;
   document.getElementById('last-run').textContent = o.lastRun ? fmtDate(o.lastRun.started_at) : 'never';
