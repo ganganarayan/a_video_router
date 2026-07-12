@@ -14,7 +14,7 @@ hasn't been deleted yet).</p>
       <thead><tr>
         <th>Date &amp; time</th><th>Source</th><th>Source file name</th><th>Channel</th>
         <th>Size</th><th>↓ Download</th><th>↑ Upload</th><th>Transfer time</th>
-        <th>YouTube link</th><th>Zoom source</th><th></th>
+        <th>Destination</th><th>Source file</th><th></th>
       </tr></thead>
       <tbody></tbody>
     </table>
@@ -32,10 +32,17 @@ function transferTime(r) {
   const total = (r.download_ms || 0) + (r.upload_ms || 0);
   return total ? fmtDur(total) : '—';
 }
-function zoomSourceCell(r) {
+function sourceFileCell(r) {
   if (r.source !== 'zoom') return '<span class="muted">n/a (Fathom)</span>';
   if (r.source_deleted) return '<span class="badge ok">deleted</span>';
   return '<span class="badge warn">on Zoom</span>';
+}
+// Destination = the actual YouTube link (and LMS lesson link if pushed), each with a copy sign.
+function destinationCell(r) {
+  const parts = [];
+  if (r.youtube_url) parts.push(linkWithCopy(r.youtube_url));
+  if (r.lms_lesson_url) parts.push(linkWithCopy(r.lms_lesson_url, 'LMS lesson'));
+  return parts.join('<br>') || '—';
 }
 function deleteBtn(r) {
   const on = r.source === 'zoom' && r.youtube_video_id && !r.source_deleted;
@@ -59,8 +66,8 @@ async function load() {
       <td class="nowrap">${fmtBps(Number(r.download_bps) || 0)}</td>
       <td class="nowrap">${fmtBps(Number(r.upload_bps) || 0)}</td>
       <td class="nowrap">${transferTime(r)}</td>
-      <td>${r.youtube_url ? `<a href="${esc(r.youtube_url)}" target="_blank">YouTube</a>` : '—'}</td>
-      <td>${zoomSourceCell(r)}</td>
+      <td>${destinationCell(r)}</td>
+      <td>${sourceFileCell(r)}</td>
       <td class="row">
         <button data-edit="${r.id}">Edit title/desc</button>
         ${deleteBtn(r)}

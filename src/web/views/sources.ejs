@@ -63,7 +63,7 @@ function pipelineBadge(item) {
 }
 function ytCell(item) {
   return item.youtube_url
-    ? `<a href="${esc(item.youtube_url)}" target="_blank">${esc(item.youtube_url)}</a>`
+    ? linkWithCopy(item.youtube_url)
     : '<span class="muted">— not uploaded yet</span>';
 }
 

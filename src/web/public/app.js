@@ -54,3 +54,45 @@ function fmtBytes(n) {
   while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
   return n.toFixed(i ? 1 : 0) + ' ' + units[i];
 }
+
+// A small copy-to-clipboard icon button. Renders "copied" for 2s when clicked.
+function copyBtn(text) {
+  if (!text) return '';
+  return `<button class="copy" data-copy="${esc(text)}" title="Copy to clipboard">⧉</button>`;
+}
+
+// A link shown with a copy icon beside it.
+function linkWithCopy(url, label) {
+  if (!url) return '—';
+  return `<a href="${esc(url)}" target="_blank">${esc(label || url)}</a> ${copyBtn(url)}`;
+}
+
+// Delegated handler so re-rendered tables keep working. Copies data-copy and
+// flashes "copied" on the clicked button for 2 seconds.
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-copy]');
+  if (!btn) return;
+  const text = btn.getAttribute('data-copy');
+  const done = () => {
+    const original = btn.innerHTML;
+    btn.innerHTML = 'copied';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.innerHTML = original; btn.classList.remove('copied'); }, 2000);
+  };
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
+  } else {
+    fallbackCopy(text, done);
+  }
+});
+
+function fallbackCopy(text, done) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); done(); } catch { toast('Copy failed', 'err'); }
+  document.body.removeChild(ta);
+}

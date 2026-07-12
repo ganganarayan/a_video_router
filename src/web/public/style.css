@@ -77,6 +77,12 @@ tr:hover td { background: rgba(255,255,255,.02); }
 @keyframes indet { 0% { margin-left: -35%; } 100% { margin-left: 100%; } }
 .nowrap { white-space: nowrap; }
 
+button.copy {
+  padding: 1px 7px; font-size: 12px; line-height: 1.5; vertical-align: middle;
+  min-width: 46px;
+}
+button.copy.copied { color: var(--ok); border-color: var(--ok); }
+
 #toast {
   position: fixed; bottom: 20px; right: 20px; padding: 12px 18px; border-radius: 8px;
   background: var(--panel2); border: 1px solid var(--line); display: none; max-width: 420px; z-index: 10;

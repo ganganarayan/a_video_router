@@ -93,7 +93,7 @@ async function loadRecordings() {
       <td>${fmtDate(r.uploaded_at || r.discovered_at)}</td>
       <td>${esc(r.title)}${r.error_message ? `<br><span class="badge err" title="${esc(r.error_message)}">error detail</span>` : ''}</td>
       <td>${esc(r.source)}</td>
-      <td>${r.youtube_url ? `<a href="${esc(r.youtube_url)}" target="_blank">${esc(r.youtube_url)}</a>` : '—'}</td>
+      <td>${linkWithCopy(r.youtube_url)}</td>
       <td>${r.lms_lesson_url ? `<a href="${esc(r.lms_lesson_url)}" target="_blank">lesson</a>` : (r.lms_status === 'failed' ? '<span class="badge err">failed</span>' : '—')}</td>
       <td>${statusBadge(r.status)}</td>
       <td>${r.source_deleted ? '✓' : '—'}</td>
