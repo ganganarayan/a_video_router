@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VideoRouter — Reset password</title>
+  <link rel="stylesheet" href="/public/style.css">
+</head>
+<body>
+<main>
+  <div class="card login-box">
+    <h1>Reset password</h1>
+    <% if (!enabled) { %>
+      <p class="badge err">Password reset is not configured on this deployment.</p>
+      <p class="muted">Set a <span class="mono">PASSWORD_RESET_KEY</span> env var in Railway, then reload.</p>
+    <% } else if (ok) { %>
+      <p class="badge ok"><%= ok %></p>
+      <p><a href="/login">Back to login</a></p>
+    <% } else { %>
+      <% if (error) { %><p class="badge err"><%= error %></p><% } %>
+      <p class="muted">Enter the reset key from your Railway project's
+      <span class="mono">PASSWORD_RESET_KEY</span> variable.</p>
+      <form method="post" action="/reset">
+        <label>Admin email</label>
+        <input type="email" name="email" required autofocus>
+        <label>Reset key</label>
+        <input type="password" name="key" required>
+        <label>New password (min 8 chars)</label>
+        <input type="password" name="new_password" required minlength="8">
+        <p><button class="primary" type="submit">Reset password</button></p>
+      </form>
+      <p class="muted"><a href="/login">Back to login</a></p>
+    <% } %>
+  </div>
+</main>
+</body>
+</html>

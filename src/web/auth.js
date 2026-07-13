@@ -1,7 +1,17 @@
+import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { config } from '../config.js';
 import { query } from '../db.js';
+
+const RESET_KEY = process.env.PASSWORD_RESET_KEY || '';
+export const resetEnabled = () => Boolean(RESET_KEY);
+
+function keyMatches(provided) {
+  const a = Buffer.from(String(provided || ''));
+  const b = Buffer.from(RESET_KEY);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
 
 const COOKIE = 'vr_session';
 const SESSION_HOURS = 24 * 7;
@@ -50,6 +60,26 @@ export async function login(email, password) {
   ]);
   if (!rows[0]) return false;
   return bcrypt.compare(String(password || ''), rows[0].password_hash);
+}
+
+// Recover a forgotten admin password. Proves control of the deployment via the
+// PASSWORD_RESET_KEY env var (only visible in Railway) — no email required.
+export async function resetPassword(email, key, newPassword) {
+  if (!resetEnabled()) {
+    return { ok: false, error: 'Password reset is not configured (no PASSWORD_RESET_KEY set).' };
+  }
+  if (!keyMatches(key)) {
+    return { ok: false, error: 'Reset key is incorrect.' };
+  }
+  if (!newPassword || newPassword.length < 8) {
+    return { ok: false, error: 'New password must be at least 8 characters.' };
+  }
+  const emailLc = String(email || '').toLowerCase();
+  const { rows } = await query('SELECT id FROM admin_users WHERE email = $1', [emailLc]);
+  if (!rows[0]) return { ok: false, error: 'No admin with that email.' };
+  const hash = await bcrypt.hash(newPassword, 10);
+  await query('UPDATE admin_users SET password_hash = $1 WHERE id = $2', [hash, rows[0].id]);
+  return { ok: true, email: emailLc };
 }
 
 // Change the admin email and/or password (current password required for either).

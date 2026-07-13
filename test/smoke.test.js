@@ -24,8 +24,11 @@ test('express app constructs with all routes mounted', async () => {
 
 test('every EJS view renders', async () => {
   const views = path.join(root, 'src', 'web', 'views');
-  await ejs.renderFile(path.join(views, 'login.ejs'), { error: null });
-  await ejs.renderFile(path.join(views, 'login.ejs'), { error: 'Bad password' });
+  await ejs.renderFile(path.join(views, 'login.ejs'), { error: null, resetEnabled: false });
+  await ejs.renderFile(path.join(views, 'login.ejs'), { error: 'Bad password', resetEnabled: true });
+  await ejs.renderFile(path.join(views, 'reset.ejs'), { error: null, ok: null, enabled: true });
+  await ejs.renderFile(path.join(views, 'reset.ejs'), { error: null, ok: 'done', enabled: true });
+  await ejs.renderFile(path.join(views, 'reset.ejs'), { error: null, ok: null, enabled: false });
   for (const page of ['runs', 'connections', 'routing', 'sources', 'logs', 'schedules', 'settings']) {
     const html = await ejs.renderFile(path.join(views, `${page}.ejs`), { page, title: page });
     assert.ok(html.includes('</html>'), `${page} view did not render fully`);

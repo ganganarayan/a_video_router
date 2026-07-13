@@ -2,7 +2,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import cookieParser from 'cookie-parser';
-import { requirePageAuth, login, setSessionCookie, clearSessionCookie } from './auth.js';
+import { requirePageAuth, login, setSessionCookie, clearSessionCookie, resetPassword, resetEnabled } from './auth.js';
 import { apiRouter } from './routes/api.js';
 import { oauthRouter } from './routes/oauth.js';
 
@@ -19,14 +19,24 @@ export function createServer() {
 
   app.get('/health', (_req, res) => res.json({ ok: true }));
 
-  app.get('/login', (_req, res) => res.render('login', { error: null }));
+  app.get('/login', (_req, res) => res.render('login', { error: null, resetEnabled: resetEnabled() }));
   app.post('/login', async (req, res) => {
     const { email, password } = req.body;
     if (await login(email, password)) {
       setSessionCookie(res, String(email).toLowerCase());
       return res.redirect('/runs');
     }
-    res.status(401).render('login', { error: 'Invalid email or password.' });
+    res.status(401).render('login', { error: 'Invalid email or password.', resetEnabled: resetEnabled() });
+  });
+
+  app.get('/reset', (_req, res) => res.render('reset', { error: null, ok: null, enabled: resetEnabled() }));
+  app.post('/reset', async (req, res) => {
+    const { email, key, new_password } = req.body;
+    const result = await resetPassword(email, key, new_password);
+    if (!result.ok) {
+      return res.status(400).render('reset', { error: result.error, ok: null, enabled: resetEnabled() });
+    }
+    res.render('reset', { error: null, ok: `Password reset for ${result.email}. You can now log in.`, enabled: resetEnabled() });
   });
   app.post('/logout', (_req, res) => {
     clearSessionCookie(res);
