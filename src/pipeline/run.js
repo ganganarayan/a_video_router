@@ -162,8 +162,17 @@ async function downloadUploadFinish(ctx, rec, rule, downloadFn, counts, details,
     await postUploadSteps(ctx, await getRec(rec.id), rule, details);
   } catch (err) {
     counts.errors++;
-    details.errors.push({ title: rec.title, source: rec.source, message: err.message });
-    await updateRec(rec.id, { status: STATES.ERROR, error_message: err.message });
+    let message = err.message;
+    // A dead refresh token: flag the channel so the dashboard shows it needs
+    // reconnecting, and surface a plain-English message instead of invalid_grant.
+    if (err.tokenInvalid && rule.channel_id) {
+      await query("UPDATE youtube_channels SET status = 'reauth_required' WHERE id = $1", [rule.channel_id])
+        .catch((e) => logError('could not flag channel reauth:', e.message));
+      message = 'YouTube channel needs reconnecting — its authorization expired or was revoked. '
+        + 'Go to Connections → YouTube → Reconnect (and publish the OAuth consent screen so tokens stop expiring).';
+    }
+    details.errors.push({ title: rec.title, source: rec.source, message });
+    await updateRec(rec.id, { status: STATES.ERROR, error_message: message });
     logError(`processing failed for rec ${rec.id} (${rec.title}):`, err.message);
   } finally {
     cleanupTemp(temp);

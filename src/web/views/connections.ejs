@@ -79,9 +79,11 @@ async function load() {
       <td>${esc(ch.label)}</td>
       <td>${ch.channel_handle ? esc(ch.channel_handle) : (ch.channel_id ? esc(ch.channel_id) : '—')}</td>
       <td class="mono">${esc((ch.oauth_client_id || '').slice(0, 24))}…</td>
-      <td>${ch.connected ? statusBadge('connected') : statusBadge('disconnected')}</td>
+      <td>${ch.status === 'reauth_required'
+        ? '<span class="badge err">needs reconnect</span>'
+        : (ch.connected ? statusBadge('connected') : statusBadge('disconnected'))}</td>
       <td class="row">
-        <a href="/oauth/youtube/start/${ch.id}"><button>${ch.connected ? 'Reconnect' : 'Connect'}</button></a>
+        <a href="/oauth/youtube/start/${ch.id}"><button class="${ch.status === 'reauth_required' ? 'primary' : ''}">${ch.connected ? 'Reconnect' : 'Connect'}</button></a>
         <button class="danger" onclick="delChannel(${ch.id})">Delete</button>
       </td>
     </tr>

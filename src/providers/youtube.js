@@ -75,6 +75,29 @@ export class QuotaExceededError extends Error {
   }
 }
 
+// Raised when Google rejects the channel's refresh token (expired/revoked) —
+// the channel must be reconnected.
+export class TokenInvalidError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'TokenInvalidError';
+    this.tokenInvalid = true;
+  }
+}
+
+// invalid_grant can arrive as a thrown googleapis error (token refresh) or in an
+// HTTP body. Detect either shape.
+export function isInvalidGrant(errOrText) {
+  if (!errOrText) return false;
+  if (typeof errOrText === 'string') return /invalid_grant/i.test(errOrText);
+  const bits = [
+    errOrText.message,
+    errOrText.response?.data && JSON.stringify(errOrText.response.data),
+    errOrText.response?.data?.error,
+  ].filter(Boolean).join(' ');
+  return /invalid_grant/i.test(bits);
+}
+
 function throwIfQuota(status, bodyText) {
   if (/quotaExceeded|uploadLimitExceeded|rateLimitExceeded/.test(bodyText)) {
     throw new QuotaExceededError(`YouTube quota/upload limit hit (${status}): ${bodyText.slice(0, 300)}`);
@@ -129,7 +152,15 @@ async function queryResumeOffset(sessionUrl, token, size) {
 // failure query the session for the confirmed offset and resume from there.
 export async function uploadVideo(channelRow, filePath, { title, description = '', privacy = 'unlisted', onProgress }) {
   const auth = buildOAuthClient(channelRow);
-  const { token } = await auth.getAccessToken();
+  let token;
+  try {
+    ({ token } = await auth.getAccessToken()); // refreshes the access token from the stored refresh token
+  } catch (err) {
+    if (isInvalidGrant(err)) {
+      throw new TokenInvalidError('YouTube authorization expired or was revoked — reconnect this channel.');
+    }
+    throw err;
+  }
   const size = fs.statSync(filePath).size;
 
   const initRes = await fetch(
@@ -151,6 +182,9 @@ export async function uploadVideo(channelRow, filePath, { title, description = '
   if (!initRes.ok) {
     const text = await initRes.text();
     throwIfQuota(initRes.status, text);
+    if (initRes.status === 401 || isInvalidGrant(text)) {
+      throw new TokenInvalidError('YouTube authorization expired or was revoked — reconnect this channel.');
+    }
     throw new Error(`YouTube upload init failed (${initRes.status}): ${text.slice(0, 300)}`);
   }
   const sessionUrl = initRes.headers.get('location');
