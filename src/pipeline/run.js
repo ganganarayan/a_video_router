@@ -3,7 +3,7 @@ import { log, logError } from '../lib/logger.js';
 import * as zoom from '../providers/zoom.js';
 import * as fathom from '../providers/fathom.js';
 import * as lms from '../providers/lms.js';
-import { getChannelById, uploadVideo, ensurePlaylist, addToPlaylist } from '../providers/youtube.js';
+import { getChannelById, uploadVideo, ensurePlaylist, addToPlaylist, verifyChannelAuth } from '../providers/youtube.js';
 import { matchRule, buildVideoTitle } from './router.js';
 import { STATES, RETRYABLE_STATES } from './states.js';
 import fs from 'node:fs';
@@ -109,6 +109,10 @@ async function downloadUploadFinish(ctx, rec, rule, downloadFn, counts, details,
     const channel = await getChannelById(rule.channel_id);
     if (!channel) throw new Error('routing rule points to a missing YouTube channel');
     if (!channel.refresh_token) throw new Error(`YouTube channel "${channel.label}" is not connected (no refresh token)`);
+
+    // Pre-flight the destination BEFORE pulling any bytes: if YouTube rejects the
+    // channel's authorization, fail instantly instead of after a long download.
+    await verifyChannelAuth(channel);
 
     const reuseCache = isCachedComplete(rec.id, rec.file_size_bytes);
     await updateRec(rec.id, {

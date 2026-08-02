@@ -104,6 +104,24 @@ function throwIfQuota(status, bodyText) {
   }
 }
 
+// Pre-flight: confirm the channel's refresh token still mints an access token,
+// BEFORE any source download. Throws TokenInvalidError on a dead/expired token so
+// the caller can fail fast without pulling a byte.
+export async function verifyChannelAuth(channelRow) {
+  const auth = buildOAuthClient(channelRow);
+  try {
+    const { token } = await auth.getAccessToken();
+    if (!token) throw new TokenInvalidError('YouTube did not return an access token — reconnect this channel.');
+    return true;
+  } catch (err) {
+    if (err.tokenInvalid) throw err;
+    if (isInvalidGrant(err)) {
+      throw new TokenInvalidError('YouTube authorization expired or was revoked — reconnect this channel.');
+    }
+    throw new Error(`Could not reach YouTube for this channel: ${err.message}`);
+  }
+}
+
 async function putChunk(sessionUrl, token, filePath, offset, size, onProgress) {
   const fileStream = fs.createReadStream(filePath, { start: offset });
   let body = fileStream;
