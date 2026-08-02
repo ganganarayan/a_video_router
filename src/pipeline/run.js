@@ -6,7 +6,10 @@ import * as lms from '../providers/lms.js';
 import { getChannelById, uploadVideo, ensurePlaylist, addToPlaylist } from '../providers/youtube.js';
 import { matchRule, buildVideoTitle } from './router.js';
 import { STATES, RETRYABLE_STATES } from './states.js';
-import { tempFilePath, cleanupTemp, downloadFathomVideo } from './download.js';
+import fs from 'node:fs';
+import {
+  cacheFilePath, partialFilePath, isCachedComplete, cleanupTemp, downloadFathomVideo,
+} from './download.js';
 import { lock, unlock, isLocked, recordingKey } from './locks.js';
 import { ProgressTracker } from './progress.js';
 import { sendRunSummary } from '../notifier.js';
@@ -97,32 +100,52 @@ async function postUploadSteps(ctx, rec, rule, details) {
 // --- the download → upload core, shared by both sources ---
 
 async function downloadUploadFinish(ctx, rec, rule, downloadFn, counts, details, progress = null) {
-  let temp = null;
+  // The verified download is kept at cachePath and only deleted after a
+  // successful YouTube upload — so a failed upload never forces a re-download.
+  const cachePath = cacheFilePath(rec.id);
+  const partial = partialFilePath(rec.id);
+  let uploaded = false;
   try {
     const channel = await getChannelById(rule.channel_id);
     if (!channel) throw new Error('routing rule points to a missing YouTube channel');
     if (!channel.refresh_token) throw new Error(`YouTube channel "${channel.label}" is not connected (no refresh token)`);
 
+    const reuseCache = isCachedComplete(rec.id, rec.file_size_bytes);
     await updateRec(rec.id, {
-      status: STATES.DOWNLOADING,
+      status: reuseCache ? STATES.UPLOADING : STATES.DOWNLOADING,
       matched_tag: rule.pattern,
       channel_id: channel.id,
       playlist_name: rule.playlist_name || null,
       error_message: null,
     });
-    temp = tempFilePath(rec.id);
-    progress?.startPhase('download');
-    const dlStart = Date.now();
-    const size = await downloadFn(temp, (done, total) => progress?.update(done, total));
-    const dlMs = Date.now() - dlStart;
-    progress?.finishPhase();
+
+    let size;
+    let dlMs = rec.download_ms || 0;
+    if (reuseCache) {
+      size = fs.statSync(cachePath).size;
+      log(`reusing cached download for rec ${rec.id} (${size} bytes) — skipping download`);
+    } else {
+      progress?.startPhase('download');
+      const dlStart = Date.now();
+      // Download to a partial file, then atomically promote it to the cache path
+      // so cachePath only ever holds a complete file.
+      size = await downloadFn(partial, (done, total) => progress?.update(done, total));
+      fs.renameSync(partial, cachePath);
+      dlMs = Date.now() - dlStart;
+      progress?.finishPhase();
+      await updateRec(rec.id, {
+        file_size_bytes: size,
+        download_ms: dlMs,
+        download_bps: dlMs > 0 ? Math.round(size / (dlMs / 1000)) : 0,
+      });
+    }
 
     await updateRec(rec.id, { status: STATES.UPLOADING, file_size_bytes: size });
     // Manual pushes may supply an exact title/description; otherwise derive from the tag.
     const ytTitle = rule.custom_title || buildVideoTitle(rec.title, rule.pattern, rule.keep_prefix);
     progress?.startPhase('upload', size);
     const ulStart = Date.now();
-    const { videoId, url, uploadStatus } = await uploadVideo(channel, temp, {
+    const { videoId, url, uploadStatus } = await uploadVideo(channel, cachePath, {
       title: ytTitle,
       description: rule.custom_description || '',
       privacy: rule.privacy || 'unlisted',
@@ -130,6 +153,7 @@ async function downloadUploadFinish(ctx, rec, rule, downloadFn, counts, details,
     });
     const ulMs = Date.now() - ulStart;
     progress?.finishPhase();
+    uploaded = true;
 
     // Verified upload: from here on this row can never re-enter the upload path.
     // Persist transfer metrics (for the Logs page) — captured for scheduled and manual alike.
@@ -138,9 +162,7 @@ async function downloadUploadFinish(ctx, rec, rule, downloadFn, counts, details,
       youtube_video_id: videoId,
       youtube_url: url,
       uploaded_at: new Date(),
-      download_ms: dlMs,
       upload_ms: ulMs,
-      download_bps: dlMs > 0 ? Math.round(size / (dlMs / 1000)) : 0,
       upload_bps: ulMs > 0 ? Math.round(size / (ulMs / 1000)) : 0,
     });
     counts.uploaded++;
@@ -175,7 +197,11 @@ async function downloadUploadFinish(ctx, rec, rule, downloadFn, counts, details,
     await updateRec(rec.id, { status: STATES.ERROR, error_message: message });
     logError(`processing failed for rec ${rec.id} (${rec.title}):`, err.message);
   } finally {
-    cleanupTemp(temp);
+    // The partial is always disposable (renamed away on success, garbage on failure).
+    // The verified cached download is kept unless the upload actually succeeded — so
+    // a failed upload re-uses it next time instead of re-downloading.
+    cleanupTemp(partial);
+    if (uploaded) cleanupTemp(cachePath);
   }
 }
 

@@ -4,10 +4,36 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { log } from '../lib/logger.js';
 
-export function tempFilePath(recId) {
-  const dir = path.join(os.tmpdir(), 'videorouter');
+// Cache dir for downloaded source files. Defaults to a temp path; set CACHE_DIR
+// to a mounted Railway volume to make the cache survive container restarts.
+function cacheDir() {
+  const dir = process.env.CACHE_DIR || path.join(os.tmpdir(), 'videorouter');
   fs.mkdirSync(dir, { recursive: true });
-  return path.join(dir, `rec_${recId}.mp4`);
+  return dir;
+}
+
+// The finished, verified download for a recording (only ever holds a complete file).
+export function cacheFilePath(recId) {
+  return path.join(cacheDir(), `rec_${recId}.mp4`);
+}
+
+// The in-progress download target; renamed onto cacheFilePath only on success.
+export function partialFilePath(recId) {
+  return path.join(cacheDir(), `rec_${recId}.partial.mp4`);
+}
+
+// A cached download is reusable only if the file exists and its size matches the
+// size recorded on the row from the prior successful download.
+export function isCachedComplete(recId, expectedBytes) {
+  try {
+    const p = cacheFilePath(recId);
+    if (!fs.existsSync(p)) return false;
+    const size = fs.statSync(p).size;
+    if (!size) return false;
+    return expectedBytes ? size === Number(expectedBytes) : true;
+  } catch {
+    return false;
+  }
 }
 
 export function cleanupTemp(filePath) {
