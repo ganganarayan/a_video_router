@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import {
   requirePageAuth, requireSessionOnly, authenticate, setOwnPassword,
   setSessionCookie, clearSessionCookie, resetPassword, resetEnabled,
+  resolveTenant, requireTenant, requireSuperAdmin,
 } from './auth.js';
 import { apiRouter } from './routes/api.js';
 import { oauthRouter } from './routes/oauth.js';
@@ -28,7 +29,7 @@ export function createServer() {
     const result = await authenticate(email, password);
     if (result.ok) {
       setSessionCookie(res, result.email);
-      return res.redirect(result.mustSetPassword ? '/set-password' : '/runs');
+      return res.redirect(result.mustSetPassword ? '/set-password' : '/');
     }
     res.status(401).render('login', { error: 'Invalid email or password.', resetEnabled: resetEnabled() });
   });
@@ -59,10 +60,19 @@ export function createServer() {
     res.redirect('/login');
   });
 
-  app.get('/', (_req, res) => res.redirect('/runs'));
+  app.get('/', requirePageAuth, resolveTenant, (req, res) => {
+    if (req.user.isSuperAdmin && !req.tenantId) return res.redirect('/admin');
+    res.redirect('/runs');
+  });
+
+  // Super-admin console: all tenants + impersonation.
+  app.get('/admin', requirePageAuth, resolveTenant, requireSuperAdmin,
+    (req, res) => res.render('admin', { page: 'admin', title: 'Admin', user: req.user }));
+
   const pages = { connections: 'Connections', routing: 'Routing', runs: 'Runs', sources: 'Sources', logs: 'Logs', schedules: 'Schedules', settings: 'Settings' };
   for (const [route, title] of Object.entries(pages)) {
-    app.get(`/${route}`, requirePageAuth, (_req, res) => res.render(route, { page: route, title }));
+    app.get(`/${route}`, requirePageAuth, resolveTenant, requireTenant,
+      (req, res) => res.render(route, { page: route, title, user: req.user }));
   }
 
   app.use('/api', apiRouter);

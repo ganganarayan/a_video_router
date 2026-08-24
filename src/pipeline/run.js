@@ -1,4 +1,4 @@
-import { query, getConfigMap } from '../db.js';
+import { query, getTenantSettings } from '../db.js';
 import { log, logError } from '../lib/logger.js';
 import * as zoom from '../providers/zoom.js';
 import * as fathom from '../providers/fathom.js';
@@ -38,26 +38,26 @@ async function getRec(id) {
   return rows[0];
 }
 
-// Dedupe core: unique (source, source_id). Insert-if-absent, then return the row.
-async function ensureRow(source, sourceId, fields) {
+// Dedupe core: unique (tenant_id, source, source_id). Insert-if-absent, then return the row.
+async function ensureRow(tenantId, source, sourceId, fields) {
   const { rows } = await query(
-    `INSERT INTO processed_recordings (source, source_id, title, recorded_at, duration_minutes, source_meta)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     ON CONFLICT (source, source_id) DO NOTHING
+    `INSERT INTO processed_recordings (tenant_id, source, source_id, title, recorded_at, duration_minutes, source_meta)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     ON CONFLICT (tenant_id, source, source_id) DO NOTHING
      RETURNING *`,
-    [source, sourceId, fields.title, fields.recorded_at || null,
+    [tenantId, source, sourceId, fields.title, fields.recorded_at || null,
       fields.duration_minutes ?? null, JSON.stringify(fields.source_meta || {})],
   );
   if (rows[0]) return { rec: rows[0], isNew: true };
   const { rows: existing } = await query(
-    'SELECT * FROM processed_recordings WHERE source = $1 AND source_id = $2',
-    [source, sourceId],
+    'SELECT * FROM processed_recordings WHERE tenant_id = $1 AND source = $2 AND source_id = $3',
+    [tenantId, source, sourceId],
   );
   return { rec: existing[0], isNew: false };
 }
 
-async function getRules() {
-  const { rows } = await query('SELECT * FROM routing_rules');
+async function getRules(tenantId) {
+  const { rows } = await query('SELECT * FROM routing_rules WHERE tenant_id = $1', [tenantId]);
   return rows;
 }
 
@@ -212,7 +212,7 @@ async function downloadUploadFinish(ctx, rec, rule, downloadFn, counts, details,
 // --- per-source processing ---
 
 async function processZoomRecording(ctx, rec, meeting, counts, details) {
-  if (isLocked(recordingKey('zoom', rec.source_id))) return; // manual push in flight
+  if (isLocked(recordingKey(ctx.tenantId, 'zoom', rec.source_id))) return; // manual push in flight
   if (rec.youtube_video_id) {
     // already uploaded — only the safe post-steps remain
     const rule = matchRule(ctx.rules, 'zoom', rec.title);
@@ -240,7 +240,7 @@ async function processZoomRecording(ctx, rec, meeting, counts, details) {
 }
 
 async function processFathomRecording(ctx, rec, shareUrl, counts, details) {
-  if (isLocked(recordingKey('fathom', rec.source_id))) return; // manual push in flight
+  if (isLocked(recordingKey(ctx.tenantId, 'fathom', rec.source_id))) return; // manual push in flight
   if (rec.youtube_video_id) {
     const rule = matchRule(ctx.rules, 'fathom', rec.title);
     return postUploadSteps(ctx, rec, rule, details); // no delete for fathom (read-only API)
@@ -270,7 +270,7 @@ async function processZoomPhase(ctx, seen, counts, details) {
   log(`zoom: ${meetings.length} meeting(s) in the last ${ctx.windowDays} day(s)`);
   for (const meeting of meetings) {
     try {
-      const { rec, isNew } = await ensureRow('zoom', meeting.uuid, {
+      const { rec, isNew } = await ensureRow(ctx.tenantId, 'zoom', meeting.uuid, {
         title: meeting.topic,
         recorded_at: meeting.start_time || null,
         duration_minutes: meeting.duration ?? null,
@@ -287,13 +287,13 @@ async function processZoomPhase(ctx, seen, counts, details) {
 }
 
 async function processFathomPhase(ctx, seen, counts, details) {
-  const account = await fathom.getFathomAccount();
+  const account = ctx.fathomAccount;
   if (!account) return log('fathom: no account connected, skipping');
   const meetings = await fathom.listMeetings(account, ctx.windowDays);
   log(`fathom: ${meetings.length} meeting(s) in the last ${ctx.windowDays} day(s)`);
   for (const m of meetings) {
     try {
-      const { rec, isNew } = await ensureRow('fathom', m.recordingId, {
+      const { rec, isNew } = await ensureRow(ctx.tenantId, 'fathom', m.recordingId, {
         title: m.title,
         recorded_at: m.recordedAt,
         duration_minutes: m.durationMinutes,
@@ -315,9 +315,9 @@ async function processFathomPhase(ctx, seen, counts, details) {
 async function retrySweep(ctx, seen, counts, details) {
   const { rows } = await query(
     `SELECT * FROM processed_recordings
-     WHERE status = ANY($1) AND youtube_video_id IS NULL
+     WHERE tenant_id = $2 AND status = ANY($1) AND youtube_video_id IS NULL
      ORDER BY id`,
-    [[...RETRYABLE_STATES]],
+    [[...RETRYABLE_STATES], ctx.tenantId],
   );
   for (const rec of rows) {
     if (seen.has(`${rec.source}:${rec.source_id}`)) continue;
@@ -347,9 +347,9 @@ async function lmsSweep(ctx, details) {
   if (!lms.isConfigured(ctx.lmsAccount)) return;
   const { rows } = await query(
     `SELECT * FROM processed_recordings
-     WHERE youtube_video_id IS NOT NULL AND lms_status = ANY($1)
+     WHERE tenant_id = $2 AND youtube_video_id IS NOT NULL AND lms_status = ANY($1)
      ORDER BY id`,
-    [['pending', 'failed']],
+    [['pending', 'failed'], ctx.tenantId],
   );
   for (const rec of rows) {
     const rule = matchRule(ctx.rules, rec.source, rec.title);
@@ -363,19 +363,21 @@ async function lmsSweep(ctx, details) {
 // so the queue can surface the message.
 
 export async function manualPush(job) {
-  const key = recordingKey(job.source, job.source_id);
+  const tid = job.tenantId;
+  const key = recordingKey(tid, job.source, job.source_id);
   if (!lock(key)) throw new Error('This recording is already being processed.');
   // Live progress snapshot is written straight onto the job so the queue poll sees it.
   const tracker = new ProgressTracker((snap) => { job.progress = snap; });
   try {
-    const cfg = await getConfigMap();
+    const settings = await getTenantSettings(tid);
     const ctx = {
-      cfg,
+      tenantId: tid,
       windowDays: 30,
-      zoomDeleteMode: cfg.zoom_delete_mode || 'off',
-      zoomAccount: await zoom.getZoomAccount(),
-      lmsAccount: await lms.getLmsAccount(),
-      rules: await getRules(),
+      zoomDeleteMode: settings.zoom_delete_mode || 'off',
+      zoomAccount: await zoom.getZoomAccount(tid),
+      fathomAccount: await fathom.getFathomAccount(tid),
+      lmsAccount: await lms.getLmsAccount(tid),
+      rules: await getRules(tid),
     };
 
     let rec;
@@ -387,17 +389,17 @@ export async function manualPush(job) {
       // instead of the granular per-meeting endpoint.
       meeting = await zoom.findMeetingInWindow(ctx.zoomAccount, job.source_id, 30);
       if (!meeting) throw new Error('Recording not found on Zoom (deleted or outside the 30-day window).');
-      ({ rec } = await ensureRow('zoom', job.source_id, {
+      ({ rec } = await ensureRow(tid, 'zoom', job.source_id, {
         title: meeting.topic,
         recorded_at: meeting.start_time || null,
         duration_minutes: meeting.duration ?? null,
       }));
     } else {
-      const account = await fathom.getFathomAccount();
+      const account = ctx.fathomAccount;
       if (!account) throw new Error('Fathom is not connected.');
       const meetings = await fathom.listMeetings(account, 30);
       const m = meetings.find((x) => x.recordingId === String(job.source_id));
-      ({ rec } = await ensureRow('fathom', job.source_id, {
+      ({ rec } = await ensureRow(tid, 'fathom', job.source_id, {
         title: m?.title || `Fathom recording ${job.source_id}`,
         recorded_at: m?.recordedAt || null,
         duration_minutes: m?.durationMinutes ?? null,
@@ -481,24 +483,26 @@ export async function manualPush(job) {
 
 // --- the run ---
 
-export async function runPipeline(runType = 'manual') {
+export async function runPipeline(tenantId, runType = 'manual') {
+  if (tenantId == null) { logError('runPipeline called without tenantId'); return { error: 'no tenant' }; }
   if (running) return { alreadyRunning: true };
   running = true;
   const counts = { found: 0, uploaded: 0, skipped: 0, errors: 0 };
   const details = { posted: [], skipped: [], errors: [], warnings: [] };
   const { rows: [runRow] } = await query(
-    'INSERT INTO run_logs (run_type) VALUES ($1) RETURNING id', [runType],
+    'INSERT INTO run_logs (tenant_id, run_type) VALUES ($1, $2) RETURNING id', [tenantId, runType],
   );
-  log(`run #${runRow.id} started (${runType})`);
+  log(`run #${runRow.id} started (${runType}) for tenant ${tenantId}`);
   try {
-    const cfg = await getConfigMap();
+    const settings = await getTenantSettings(tenantId);
     const ctx = {
-      cfg,
-      windowDays: Math.max(1, Number(cfg.rolling_window_days) || 3),
-      zoomDeleteMode: cfg.zoom_delete_mode || 'off',
-      zoomAccount: await zoom.getZoomAccount(),
-      lmsAccount: await lms.getLmsAccount(),
-      rules: await getRules(),
+      tenantId,
+      windowDays: Math.max(1, Number(settings.rolling_window_days) || 3),
+      zoomDeleteMode: settings.zoom_delete_mode || 'off',
+      zoomAccount: await zoom.getZoomAccount(tenantId),
+      fathomAccount: await fathom.getFathomAccount(tenantId),
+      lmsAccount: await lms.getLmsAccount(tenantId),
+      rules: await getRules(tenantId),
     };
     const seen = new Set();
     await processZoomPhase(ctx, seen, counts, details);
@@ -521,7 +525,7 @@ export async function runPipeline(runType = 'manual') {
   }
   log(`run #${runRow.id} finished:`, JSON.stringify(counts));
   try {
-    await sendRunSummary(runType, counts, details);
+    await sendRunSummary(tenantId, runType, counts, details);
   } catch (err) {
     logError('summary email failed:', err.message);
   }

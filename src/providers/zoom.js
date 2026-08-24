@@ -16,8 +16,10 @@ export function encodeMeetingUUID(uuid) {
   return encodeURIComponent(uuid);
 }
 
-export async function getZoomAccount() {
-  const { rows } = await query('SELECT * FROM zoom_account ORDER BY id DESC LIMIT 1');
+export async function getZoomAccount(tenantId) {
+  const { rows } = await query(
+    'SELECT * FROM zoom_account WHERE tenant_id = $1 ORDER BY id DESC LIMIT 1', [tenantId],
+  );
   return rows[0] || null;
 }
 

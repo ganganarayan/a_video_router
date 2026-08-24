@@ -1,19 +1,19 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import { config } from '../../config.js';
-import { requirePageAuth } from '../auth.js';
+import { requirePageAuth, resolveTenant, requireTenant } from '../auth.js';
 import { getChannelById, getAuthUrl, handleOAuthCallback } from '../../providers/youtube.js';
 import { logError } from '../../lib/logger.js';
 
 export const oauthRouter = express.Router();
 
-// Start the Google consent flow for one channel row.
-oauthRouter.get('/youtube/start/:channelRowId', requirePageAuth, async (req, res, next) => {
+// Start the Google consent flow for one channel row (must belong to this tenant).
+oauthRouter.get('/youtube/start/:channelRowId', requirePageAuth, resolveTenant, requireTenant, async (req, res, next) => {
   try {
-    const channel = await getChannelById(Number(req.params.channelRowId));
+    const channel = await getChannelById(Number(req.params.channelRowId), req.tenantId);
     if (!channel) return res.status(404).send('Unknown channel');
-    // state ties the callback back to the channel row and expires quickly
-    const state = jwt.sign({ ch: channel.id }, config.jwtSecret, { expiresIn: '15m' });
+    // state carries the channel row + tenant; expires quickly
+    const state = jwt.sign({ ch: channel.id, t: req.tenantId }, config.jwtSecret, { expiresIn: '15m' });
     res.redirect(getAuthUrl(channel, state));
   } catch (err) {
     next(err);
@@ -27,8 +27,8 @@ oauthRouter.get('/youtube/callback', async (req, res) => {
   try {
     if (error) throw new Error(`Google returned: ${error}`);
     if (!code || !state) throw new Error('Missing code/state');
-    const { ch } = jwt.verify(String(state), config.jwtSecret);
-    const channel = await getChannelById(ch);
+    const { ch, t } = jwt.verify(String(state), config.jwtSecret);
+    const channel = await getChannelById(ch, t);
     if (!channel) throw new Error('Unknown channel row in state');
     const result = await handleOAuthCallback(channel, String(code));
     res.redirect(`/connections?yt=connected&title=${encodeURIComponent(result.title || '')}`);

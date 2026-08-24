@@ -1,0 +1,48 @@
+<%- include('partials/head') %>
+<h1>Super admin — tenants</h1>
+<p class="muted">All tenant workspaces. Impersonate one to work inside it exactly as its admin sees it.</p>
+
+<div class="card table-wrap">
+  <table id="tenants-table">
+    <thead><tr>
+      <th>#</th><th>Slug</th><th>Name</th><th>Status</th><th>Users</th>
+      <th>Channels</th><th>Uploaded</th><th>Wallet (₹)</th><th>Free upload</th><th></th>
+    </tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<script>
+function rupees(paise) {
+  if (paise == null) return '—';
+  return '₹' + (Number(paise) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+async function load() {
+  const rows = await api('/tenants');
+  document.querySelector('#tenants-table tbody').innerHTML = rows.map(t => `
+    <tr>
+      <td>${t.id}</td>
+      <td class="mono">${esc(t.slug)}</td>
+      <td>${esc(t.name)}</td>
+      <td>${t.status === 'active' ? statusBadge('connected').replace('connected','active') : '<span class="badge err">suspended</span>'}</td>
+      <td>${t.users}</td>
+      <td>${t.channels}</td>
+      <td>${t.uploaded}</td>
+      <td class="nowrap">${rupees(t.balance_paise)}</td>
+      <td>${t.free_upload_used ? 'used' : 'available'}</td>
+      <td><button class="primary" onclick="impersonate(${t.id})">Impersonate</button></td>
+    </tr>
+  `).join('') || '<tr><td colspan="10" class="muted">No tenants yet.</td></tr>';
+}
+
+async function impersonate(id) {
+  try {
+    await api('/impersonate/' + id, { method: 'POST' });
+    location.href = '/runs';
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+load().catch(e => toast(e.message, 'err'));
+</script>
+<%- include('partials/foot') %>

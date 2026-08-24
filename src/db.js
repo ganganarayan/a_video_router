@@ -88,3 +88,30 @@ export async function setConfigValue(key, value) {
     [key, value],
   );
 }
+
+// --- tenants ---
+
+export async function getTenants() {
+  const { rows } = await query('SELECT * FROM tenants ORDER BY id');
+  return rows;
+}
+
+export async function getTenantById(id) {
+  const { rows } = await query('SELECT * FROM tenants WHERE id = $1', [id]);
+  return rows[0] || null;
+}
+
+// --- per-tenant settings (tenant_settings) ---
+
+export async function getTenantSettings(tenantId) {
+  const { rows } = await query('SELECT key, value FROM tenant_settings WHERE tenant_id = $1', [tenantId]);
+  return Object.fromEntries(rows.map((r) => [r.key, r.value]));
+}
+
+export async function setTenantSetting(tenantId, key, value) {
+  await query(
+    `INSERT INTO tenant_settings (tenant_id, key, value) VALUES ($1, $2, $3)
+     ON CONFLICT (tenant_id, key) DO UPDATE SET value = EXCLUDED.value`,
+    [tenantId, key, value],
+  );
+}

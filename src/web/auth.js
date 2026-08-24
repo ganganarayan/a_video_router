@@ -28,6 +28,48 @@ export function setSessionCookie(res, email) {
 
 export function clearSessionCookie(res) {
   res.clearCookie(COOKIE);
+  res.clearCookie(IMP_COOKIE);
+}
+
+// --- super-admin impersonation (which tenant the super admin is acting within) ---
+const IMP_COOKIE = 'vr_imp';
+
+export function setImpersonation(res, tenantId) {
+  const token = jwt.sign({ imp: Number(tenantId) }, config.jwtSecret, { expiresIn: '24h' });
+  res.cookie(IMP_COOKIE, token, {
+    httpOnly: true, sameSite: 'lax',
+    secure: config.publicUrl.startsWith('https://'), maxAge: 24 * 3600 * 1000,
+  });
+}
+export function clearImpersonation(res) { res.clearCookie(IMP_COOKIE); }
+
+function readImpersonation(req) {
+  const t = req.cookies?.[IMP_COOKIE];
+  if (!t) return null;
+  try { return Number(jwt.verify(t, config.jwtSecret).imp) || null; } catch { return null; }
+}
+
+// Resolves the active tenant for the request. Tenant users are always their own
+// tenant; a super admin's tenant is whichever one they're impersonating (or null).
+// Run AFTER requirePageAuth / requireApiAuth (needs req.user).
+export function resolveTenant(req, _res, next) {
+  if (req.user.role === 'admin') {
+    req.tenantId = req.user.tenantId;
+  } else {
+    req.tenantId = readImpersonation(req); // super admin: impersonated tenant or null
+  }
+  next();
+}
+
+// Enforces that a tenant context exists (super admin must impersonate first).
+export function requireTenant(req, res, next) {
+  if (!req.tenantId) {
+    if (req.path.startsWith('/api') || req.baseUrl?.startsWith('/api')) {
+      return res.status(409).json({ error: 'Pick a tenant first.', redirect: '/admin' });
+    }
+    return res.redirect('/admin');
+  }
+  next();
 }
 
 function verifySession(req) {

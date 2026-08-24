@@ -6,7 +6,11 @@ import { log, logError } from './lib/logger.js';
 // id -> node-cron task, for the currently-enabled schedules.
 const tasks = new Map();
 
-export async function getSchedules() {
+export async function getSchedules(tenantId) {
+  if (tenantId != null) {
+    const { rows } = await query('SELECT * FROM schedules WHERE tenant_id = $1 ORDER BY id', [tenantId]);
+    return rows;
+  }
   const { rows } = await query('SELECT * FROM schedules ORDER BY id');
   return rows;
 }
@@ -25,8 +29,8 @@ export async function reloadSchedules() {
     const task = cron.schedule(
       s.cron_expression,
       () => {
-        log(`schedule "${s.name}" (#${s.id}) firing`);
-        runPipeline('scheduled').catch((err) => logError('scheduled run crashed:', err));
+        log(`schedule "${s.name}" (#${s.id}) firing for tenant ${s.tenant_id}`);
+        runPipeline(s.tenant_id, 'scheduled').catch((err) => logError('scheduled run crashed:', err));
       },
       { timezone: s.timezone || 'Asia/Kolkata' },
     );

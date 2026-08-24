@@ -67,6 +67,34 @@ function linkWithCopy(url, label) {
   return `<a href="${esc(url)}" target="_blank">${esc(label || url)}</a> ${copyBtn(url)}`;
 }
 
+// Context bar: shows the super-admin Admin link, an impersonation banner, or a
+// staff-access note. Runs on every authenticated page.
+async function initCtx() {
+  try {
+    const w = await api('/whoami');
+    if (w.isSuperAdmin) {
+      const link = document.getElementById('nav-admin');
+      if (link) link.style.display = '';
+    }
+    const bar = document.getElementById('ctxbar');
+    if (!bar) return;
+    if (w.impersonating) {
+      bar.className = 'ctxbar on';
+      bar.innerHTML = `Viewing tenant <b>${esc(w.impersonating.name)}</b> (${esc(w.impersonating.slug)}) as super admin · `
+        + `<a href="#" id="ctx-exit">Exit to Admin</a>`;
+      document.getElementById('ctx-exit').onclick = async (e) => {
+        e.preventDefault();
+        try { await api('/impersonate/stop', { method: 'POST' }); } catch {}
+        location.href = '/admin';
+      };
+    } else if (w.isStaff) {
+      bar.className = 'ctxbar staff';
+      bar.textContent = `Staff access — ${w.staffPermission === 'view' ? 'read-only' : 'edit'}`;
+    }
+  } catch { /* not authenticated or whoami unavailable */ }
+}
+document.addEventListener('DOMContentLoaded', initCtx);
+
 // Delegated handler so re-rendered tables keep working. Copies data-copy and
 // flashes "copied" on the clicked button for 2 seconds.
 document.addEventListener('click', (e) => {

@@ -77,6 +77,11 @@ tr:hover td { background: rgba(255,255,255,.02); }
 @keyframes indet { 0% { margin-left: -35%; } 100% { margin-left: 100%; } }
 .nowrap { white-space: nowrap; }
 
+.ctxbar { padding: 8px 20px; font-size: 13px; }
+.ctxbar.on { background: rgba(79,140,255,.15); border-bottom: 1px solid var(--accent); color: var(--text); }
+.ctxbar.staff { background: rgba(241,196,15,.12); border-bottom: 1px solid var(--warn); color: var(--warn); }
+.ctxbar a { font-weight: 600; }
+
 button.copy {
   padding: 1px 7px; font-size: 12px; line-height: 1.5; vertical-align: middle;
   min-width: 46px;

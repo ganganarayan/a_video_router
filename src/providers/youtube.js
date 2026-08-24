@@ -13,13 +13,18 @@ export const OAUTH_SCOPES = [
 
 export const redirectUri = () => `${config.publicUrl}/oauth/youtube/callback`;
 
-export async function getChannels() {
-  const { rows } = await query('SELECT * FROM youtube_channels ORDER BY id');
+export async function getChannels(tenantId) {
+  const { rows } = await query('SELECT * FROM youtube_channels WHERE tenant_id = $1 ORDER BY id', [tenantId]);
   return rows;
 }
 
-export async function getChannelById(id) {
-  const { rows } = await query('SELECT * FROM youtube_channels WHERE id = $1', [id]);
+// Load a channel by id. Pass tenantId to enforce tenant ownership (used by the
+// dashboard); the pipeline passes the channel it already resolved by rule.
+export async function getChannelById(id, tenantId) {
+  const params = [id];
+  let sql = 'SELECT * FROM youtube_channels WHERE id = $1';
+  if (tenantId != null) { params.push(tenantId); sql += ' AND tenant_id = $2'; }
+  const { rows } = await query(sql, params);
   return rows[0] || null;
 }
 
