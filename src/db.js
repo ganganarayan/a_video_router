@@ -17,10 +17,33 @@ export function query(text, params) {
   return pool.query(text, params);
 }
 
+// Wait for Postgres to accept connections before migrating. Serverless/managed
+// databases can be a few seconds behind the app on a cold start — retry instead
+// of crash-looping the boot.
+export async function waitForDb(maxMs = 45000) {
+  const start = Date.now();
+  let attempt = 0;
+  let lastErr;
+  while (Date.now() - start < maxMs) {
+    try {
+      await pool.query('SELECT 1');
+      if (attempt > 0) log(`database ready after ${attempt} retr${attempt === 1 ? 'y' : 'ies'}`);
+      return;
+    } catch (err) {
+      lastErr = err;
+      attempt += 1;
+      log(`database not ready yet (attempt ${attempt}): ${err.code || err.message} — retrying in 2s`);
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
+  throw new Error(`database not reachable after ${maxMs}ms: ${lastErr?.message}`);
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = path.join(__dirname, '..', 'migrations');
 
 export async function runMigrations() {
+  await waitForDb();
   await query(`CREATE TABLE IF NOT EXISTS schema_migrations (
     name TEXT PRIMARY KEY,
     applied_at TIMESTAMPTZ DEFAULT now()

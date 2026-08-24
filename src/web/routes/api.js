@@ -567,7 +567,7 @@ apiRouter.post('/settings', wrap(async (req, res) => {
 }));
 
 apiRouter.post('/settings/account', wrap(async (req, res) => {
-  const result = await updateAccount(req.user, req.body.current_password, {
+  const result = await updateAccount(req.user.email, req.body.current_password, {
     newEmail: req.body.new_email?.trim() || null,
     newPassword: req.body.new_password || null,
   });
