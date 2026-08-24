@@ -8,6 +8,7 @@ import { encrypt } from '../../lib/secrets.js';
 import {
   requireApiAuth, resolveTenant, requireTenant, requireSuperAdmin, requireOwner,
   updateAccount, setSessionCookie, setImpersonation, clearImpersonation,
+  listTenantUsers, createStaff, updateStaff, resetStaffPassword, deleteStaff,
 } from '../auth.js';
 import { runPipeline, isRunning } from '../../pipeline/run.js';
 import { enqueuePush, getJobs } from '../../pipeline/manual.js';
@@ -633,5 +634,39 @@ apiRouter.post('/settings', requireOwner, wrap(async (req, res) => {
   if (body.gmail_app_password) {
     await setTenantSetting(tid, 'gmail_app_password', encrypt(String(body.gmail_app_password).trim()));
   }
+  res.json({ ok: true });
+}));
+
+// ---------- staff (tenant owner provisions staff) ----------
+
+apiRouter.get('/staff', requireOwner, wrap(async (req, res) => {
+  res.json(await listTenantUsers(T(req)));
+}));
+
+apiRouter.post('/staff', requireOwner, wrap(async (req, res) => {
+  const result = await createStaff(T(req), {
+    email: req.body.email, name: req.body.name, permission: req.body.permission,
+  });
+  if (!result.ok) return res.status(400).json({ error: result.error });
+  res.json({ ok: true, id: result.id });
+}));
+
+apiRouter.put('/staff/:id', requireOwner, wrap(async (req, res) => {
+  const result = await updateStaff(T(req), Number(req.params.id), {
+    name: req.body.name, permission: req.body.permission,
+  });
+  if (!result.ok) return res.status(400).json({ error: result.error });
+  res.json({ ok: true });
+}));
+
+apiRouter.post('/staff/:id/reset', requireOwner, wrap(async (req, res) => {
+  const result = await resetStaffPassword(T(req), Number(req.params.id));
+  if (!result.ok) return res.status(400).json({ error: result.error });
+  res.json({ ok: true });
+}));
+
+apiRouter.delete('/staff/:id', requireOwner, wrap(async (req, res) => {
+  const result = await deleteStaff(T(req), Number(req.params.id));
+  if (!result.ok) return res.status(400).json({ error: result.error });
   res.json({ ok: true });
 }));

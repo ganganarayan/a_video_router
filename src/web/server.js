@@ -69,7 +69,7 @@ export function createServer() {
   app.get('/admin', requirePageAuth, resolveTenant, requireSuperAdmin,
     (req, res) => res.render('admin', { page: 'admin', title: 'Admin', user: req.user }));
 
-  const pages = { connections: 'Connections', routing: 'Routing', runs: 'Runs', sources: 'Sources', logs: 'Logs', schedules: 'Schedules', settings: 'Settings' };
+  const pages = { connections: 'Connections', routing: 'Routing', runs: 'Runs', sources: 'Sources', logs: 'Logs', schedules: 'Schedules', team: 'Team', settings: 'Settings' };
   for (const [route, title] of Object.entries(pages)) {
     app.get(`/${route}`, requirePageAuth, resolveTenant, requireTenant,
       (req, res) => res.render(route, { page: route, title, user: req.user }));

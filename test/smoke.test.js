@@ -31,7 +31,7 @@ test('every EJS view renders', async () => {
   await ejs.renderFile(path.join(views, 'reset.ejs'), { error: null, ok: null, enabled: false });
   await ejs.renderFile(path.join(views, 'set-password.ejs'), { error: null, email: 'a@b.com' });
   await ejs.renderFile(path.join(views, 'set-password.ejs'), { error: 'too short', email: 'a@b.com' });
-  for (const page of ['runs', 'connections', 'routing', 'sources', 'logs', 'schedules', 'settings', 'admin']) {
+  for (const page of ['runs', 'connections', 'routing', 'sources', 'logs', 'schedules', 'team', 'settings', 'admin']) {
     const html = await ejs.renderFile(path.join(views, `${page}.ejs`), { page, title: page });
     assert.ok(html.includes('</html>'), `${page} view did not render fully`);
   }

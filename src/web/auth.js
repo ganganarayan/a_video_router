@@ -220,6 +220,73 @@ export async function resetPassword(email, key, newPassword) {
   return { ok: true, email: emailLc };
 }
 
+// --- staff management (tenant owner provisions staff within their tenant) ---
+
+export async function listTenantUsers(tenantId) {
+  const { rows } = await query(
+    `SELECT id, email, name, staff_permission, must_change_password, deleted_at,
+            last_login_at, created_at
+     FROM users
+     WHERE tenant_id = $1
+     ORDER BY (staff_permission IS NULL) DESC, id`,  // owner first, then staff
+    [tenantId],
+  );
+  return rows;
+}
+
+async function staffRow(tenantId, id) {
+  const { rows } = await query(
+    'SELECT id, staff_permission FROM users WHERE id = $1 AND tenant_id = $2', [id, tenantId],
+  );
+  return rows[0] || null;
+}
+
+// Create a staff user (passwordless first login + forced set-password, like the seeds).
+export async function createStaff(tenantId, { email, name, permission }) {
+  const emailLc = String(email || '').toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailLc)) return { ok: false, error: 'A valid email is required.' };
+  if (!['view', 'edit'].includes(permission)) return { ok: false, error: 'Permission must be view or edit.' };
+  if (await getUserByEmail(emailLc)) return { ok: false, error: 'A user with that email already exists.' };
+  const { rows } = await query(
+    `INSERT INTO users (tenant_id, email, name, role, staff_permission, password_hash, must_change_password)
+     VALUES ($1, $2, $3, 'admin', $4, NULL, true) RETURNING id`,
+    [tenantId, emailLc, String(name || '').trim() || emailLc, permission],
+  );
+  return { ok: true, id: rows[0].id };
+}
+
+export async function updateStaff(tenantId, id, { name, permission }) {
+  if (permission && !['view', 'edit'].includes(permission)) return { ok: false, error: 'bad permission' };
+  const row = await staffRow(tenantId, id);
+  if (!row) return { ok: false, error: 'user not found' };
+  if (row.staff_permission === null) return { ok: false, error: 'The owner cannot be modified here.' };
+  const sets = [];
+  const params = [];
+  if (name) { params.push(name.trim()); sets.push(`name = $${params.length}`); }
+  if (permission) { params.push(permission); sets.push(`staff_permission = $${params.length}`); }
+  if (!sets.length) return { ok: false, error: 'nothing to update' };
+  params.push(id, tenantId);
+  await query(`UPDATE users SET ${sets.join(', ')}, updated_at = now() WHERE id = $${params.length - 1} AND tenant_id = $${params.length}`, params);
+  return { ok: true };
+}
+
+// Reset a staff member's password → back to passwordless first login.
+export async function resetStaffPassword(tenantId, id) {
+  const row = await staffRow(tenantId, id);
+  if (!row) return { ok: false, error: 'user not found' };
+  if (row.staff_permission === null) return { ok: false, error: 'Use Account settings to change the owner password.' };
+  await query('UPDATE users SET password_hash = NULL, must_change_password = true, updated_at = now() WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
+  return { ok: true };
+}
+
+export async function deleteStaff(tenantId, id) {
+  const row = await staffRow(tenantId, id);
+  if (!row) return { ok: false, error: 'user not found' };
+  if (row.staff_permission === null) return { ok: false, error: 'The owner cannot be removed.' };
+  await query('UPDATE users SET deleted_at = now(), updated_at = now() WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
+  return { ok: true };
+}
+
 // Change the caller's email and/or password (current password required).
 export async function updateAccount(email, currentPassword, { newEmail, newPassword }) {
   if (!newEmail && !newPassword) {
