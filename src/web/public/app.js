@@ -72,11 +72,24 @@ function linkWithCopy(url, label) {
 async function initCtx() {
   try {
     const w = await api('/whoami');
-    if (w.isSuperAdmin) {
-      const link = document.getElementById('nav-admin');
-      if (link) link.style.display = '';
-    }
     const bar = document.getElementById('ctxbar');
+    const adminLink = document.getElementById('nav-admin');
+    if (w.isSuperAdmin && adminLink) adminLink.style.display = '';
+
+    // Super admin NOT impersonating: tenant pages are inaccessible — hide their tabs
+    // and point to the Admin console.
+    if (w.isSuperAdmin && !w.impersonating) {
+      document.querySelectorAll('nav a.tab').forEach((a) => {
+        if (a.id !== 'nav-admin') a.style.display = 'none';
+      });
+      if (bar) {
+        bar.className = 'ctxbar staff';
+        bar.innerHTML = 'You are the <b>super admin</b>. Pick a tenant on the '
+          + '<a href="/admin">Admin</a> page to open its workspace.';
+      }
+      return;
+    }
+
     if (!bar) return;
     if (w.impersonating) {
       bar.className = 'ctxbar on';
