@@ -20,6 +20,7 @@ import { getChannels, getChannelById, getVideoSnippet, updateVideoSnippet } from
 import { canDeleteZoomSource } from '../../pipeline/states.js';
 import { config } from '../../config.js';
 import { log, logError } from '../../lib/logger.js';
+import * as billing from '../../billing.js';
 
 export const apiRouter = express.Router();
 apiRouter.use(requireApiAuth, resolveTenant);
@@ -51,7 +52,7 @@ apiRouter.get('/whoami', wrap(async (req, res) => {
 apiRouter.get('/tenants', requireSuperAdmin, wrap(async (_req, res) => {
   const { rows } = await query(
     `SELECT t.id, t.slug, t.name, t.status, t.created_at,
-            w.balance_paise, w.free_upload_used,
+            w.balance_paise, w.free_upload_used, w.unlimited,
             (SELECT count(*) FROM users u WHERE u.tenant_id = t.id AND u.deleted_at IS NULL)::int AS users,
             (SELECT count(*) FROM processed_recordings p WHERE p.tenant_id = t.id AND p.youtube_video_id IS NOT NULL)::int AS uploaded,
             (SELECT count(*) FROM youtube_channels c WHERE c.tenant_id = t.id AND c.refresh_token IS NOT NULL)::int AS channels
@@ -71,6 +72,45 @@ apiRouter.post('/impersonate/:id', requireSuperAdmin, wrap(async (req, res) => {
 
 apiRouter.post('/impersonate/stop', requireSuperAdmin, wrap(async (_req, res) => {
   clearImpersonation(res);
+  res.json({ ok: true });
+}));
+
+// ---------- super-admin billing controls ----------
+
+// Platform billing config + whether Razorpay is wired (never returns secrets).
+apiRouter.get('/admin/billing/config', requireSuperAdmin, wrap(async (_req, res) => {
+  const c = await billing.getBillingConfig();
+  res.json({
+    configured: Boolean(c.razorpayKeyId && c.razorpayKeySecret),
+    hasWebhookSecret: Boolean(c.razorpayWebhookSecret),
+    keyId: c.razorpayKeyId || '',
+    pricePerUnitPaise: c.pricePerUnitPaise,
+    unitBytes: c.unitBytes,
+    gstPercent: c.gstPercent,
+    gatewayPercent: c.gatewayPercent,
+    minTopupPaise: c.minTopupPaise,
+  });
+}));
+
+// Set/rotate Razorpay keys (stored encrypted in app_config; no redeploy needed).
+apiRouter.post('/admin/billing/keys', requireSuperAdmin, wrap(async (req, res) => {
+  await billing.saveRazorpayKeys({
+    keyId: req.body.key_id, keySecret: req.body.key_secret, webhookSecret: req.body.webhook_secret,
+  });
+  res.json({ ok: true });
+}));
+
+// Manually credit/debit a tenant wallet (paise, signed).
+apiRouter.post('/admin/tenants/:id/adjust', requireSuperAdmin, wrap(async (req, res) => {
+  const amount = Math.round(Number(req.body.amount_paise));
+  if (!Number.isFinite(amount) || amount === 0) return res.status(400).json({ error: 'amount_paise must be a non-zero number' });
+  const r = await billing.adjustBalance(Number(req.params.id), amount, req.body.note || null);
+  res.json({ ok: true, balance: r.newBalance });
+}));
+
+// Toggle a tenant's unmetered (unlimited) flag.
+apiRouter.post('/admin/tenants/:id/unlimited', requireSuperAdmin, wrap(async (req, res) => {
+  await billing.setUnlimited(Number(req.params.id), Boolean(req.body.unlimited));
   res.json({ ok: true });
 }));
 
@@ -362,6 +402,14 @@ apiRouter.post('/push', wrap(async (req, res) => {
   if (!source_id) return res.status(400).json({ error: 'source_id is required' });
   if (!channel_id && !lms_course_id) {
     return res.status(400).json({ error: 'Pick a YouTube channel and/or an LMS course to push to.' });
+  }
+  // Billing gate: block a NEW push when the wallet is empty (strict balance > 0),
+  // unless the tenant is unlimited or still has its free first upload. The size
+  // isn't known yet, so this only gates entry — an in-flight upload always finishes
+  // (and may take the balance negative), deducted at runtime by actual size.
+  const gate = await billing.canPush(T(req));
+  if (!gate.allowed) {
+    return res.status(402).json({ error: gate.reason, needTopup: true, balance: gate.balance });
   }
   const { job, duplicate } = enqueuePush({
     tenantId: T(req),
@@ -669,4 +717,55 @@ apiRouter.delete('/staff/:id', requireOwner, wrap(async (req, res) => {
   const result = await deleteStaff(T(req), Number(req.params.id));
   if (!result.ok) return res.status(400).json({ error: result.error });
   res.json({ ok: true });
+}));
+
+// ---------- billing / wallet (tenant) ----------
+
+// Wallet snapshot + pricing, for the Billing page.
+apiRouter.get('/billing', wrap(async (req, res) => {
+  const w = await billing.getWallet(T(req));
+  const c = await billing.getBillingConfig();
+  res.json({
+    balance_paise: Number(w?.balance_paise || 0),
+    unlimited: Boolean(w?.unlimited),
+    free_upload_used: Boolean(w?.free_upload_used),
+    pricePerUnitPaise: c.pricePerUnitPaise,
+    unitBytes: c.unitBytes,
+    gstPercent: c.gstPercent,
+    gatewayPercent: c.gatewayPercent,
+    minTopupPaise: c.minTopupPaise,
+    razorpayConfigured: Boolean(c.razorpayKeyId && c.razorpayKeySecret),
+  });
+}));
+
+apiRouter.get('/billing/history', wrap(async (req, res) => {
+  res.json(await billing.history(T(req)));
+}));
+
+// Preview the top-up breakdown (base + GST + gateway) without creating an order.
+apiRouter.get('/billing/quote', wrap(async (req, res) => {
+  const c = await billing.getBillingConfig();
+  const base = Math.round(Number(req.query.base_paise));
+  if (!Number.isFinite(base) || base <= 0) return res.status(400).json({ error: 'base_paise required' });
+  res.json({ ...billing.topupBreakdown(base, c), minTopupPaise: c.minTopupPaise });
+}));
+
+// Create a Razorpay order for a wallet top-up (owner only).
+apiRouter.post('/billing/topup', requireOwner, wrap(async (req, res) => {
+  try {
+    const out = await billing.createTopup(T(req), Number(req.body.base_paise));
+    res.json({ ok: true, ...out });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+}));
+
+// Confirm an in-page Checkout success (verifies signature, credits wallet).
+apiRouter.post('/billing/confirm', requireOwner, wrap(async (req, res) => {
+  try {
+    const r = await billing.confirmCheckout(req.body.order_id, req.body.payment_id, req.body.signature);
+    res.json({ ok: true, ...r });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 }));

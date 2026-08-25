@@ -13,6 +13,7 @@ import {
 import { lock, unlock, isLocked, recordingKey } from './locks.js';
 import { ProgressTracker } from './progress.js';
 import { sendRunSummary } from '../notifier.js';
+import { deductForUpload } from '../billing.js';
 
 let running = false;
 export const isRunning = () => running;
@@ -173,6 +174,15 @@ async function downloadUploadFinish(ctx, rec, rule, downloadFn, counts, details,
     details.posted.push({ title: ytTitle, source: rec.source, url, uploadStatus });
     log(`uploaded: ${ytTitle} -> ${url}`);
     progress?.finish();
+
+    // Charge the wallet by ACTUAL uploaded size (>1 unit = ₹50 × units; first
+    // upload free ≤1 unit). The upload already succeeded — a billing hiccup must
+    // never fail the row, and the balance is allowed to go negative here.
+    try {
+      await deductForUpload(ctx.tenantId, rec.id, size);
+    } catch (err) {
+      logError(`billing deduction failed for rec ${rec.id} (upload already succeeded):`, err.message);
+    }
 
     if (rule.playlist_name) {
       try {

@@ -10,6 +10,7 @@ import {
 import { apiRouter } from './routes/api.js';
 import { oauthRouter } from './routes/oauth.js';
 import { dbadminRouter } from './routes/dbadmin.js';
+import * as billing from '../billing.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -18,7 +19,8 @@ export function createServer() {
   app.set('view engine', 'ejs');
   app.set('views', path.join(__dirname, 'views'));
   app.use('/public', express.static(path.join(__dirname, 'public')));
-  app.use(express.json({ limit: '1mb' }));
+  // Capture the raw body so the Razorpay webhook can verify its HMAC signature.
+  app.use(express.json({ limit: '1mb', verify: (req, _res, buf) => { req.rawBody = buf; } }));
   app.use(express.urlencoded({ extended: false }));
   app.use(cookieParser());
 
@@ -73,11 +75,23 @@ export function createServer() {
   app.get('/admin', requirePageAuth, resolveTenant, requireSuperAdmin,
     (req, res) => res.render('admin', { page: 'admin', title: 'Admin', user: req.user }));
 
-  const pages = { connections: 'Connections', routing: 'Routing', runs: 'Runs', sources: 'Sources', logs: 'Logs', schedules: 'Schedules', team: 'Team', settings: 'Settings' };
+  const pages = { connections: 'Connections', routing: 'Routing', runs: 'Runs', sources: 'Sources', logs: 'Logs', schedules: 'Schedules', team: 'Team', billing: 'Billing', settings: 'Settings' };
   for (const [route, title] of Object.entries(pages)) {
     app.get(`/${route}`, requirePageAuth, resolveTenant, requireTenant,
       (req, res) => res.render(route, { page: route, title, user: req.user }));
   }
+
+  // Razorpay webhook — unauthenticated (Razorpay posts here), verified by HMAC
+  // signature over the raw body. Mounted before the auth-gated /api router.
+  app.post('/api/billing/webhook', async (req, res) => {
+    try {
+      const raw = req.rawBody ? req.rawBody.toString('utf8') : JSON.stringify(req.body || {});
+      const out = await billing.handleWebhook(raw, req.headers['x-razorpay-signature']);
+      res.json(out);
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
 
   app.use('/api', apiRouter);
   app.use('/oauth', oauthRouter);

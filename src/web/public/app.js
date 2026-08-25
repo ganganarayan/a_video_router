@@ -103,9 +103,11 @@ async function initCtx() {
     } else if (w.isStaff) {
       bar.className = 'ctxbar staff';
       bar.textContent = `Staff access — ${w.staffPermission === 'view' ? 'read-only' : 'edit'}`;
-      // staff cannot manage the team
+      // staff cannot manage the team or billing
       const team = document.getElementById('nav-team');
       if (team) team.style.display = 'none';
+      const bill = document.getElementById('nav-billing');
+      if (bill) bill.style.display = 'none';
     }
   } catch { /* not authenticated or whoami unavailable */ }
 }

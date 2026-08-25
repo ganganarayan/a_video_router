@@ -2,11 +2,26 @@
 <h1>Super admin — tenants</h1>
 <p class="muted">All tenant workspaces. Impersonate one to work inside it exactly as its admin sees it.</p>
 
+<div class="card" id="rzp-card">
+  <h2>Platform payments (Razorpay)</h2>
+  <p class="muted">Your single platform Razorpay account collects all tenant top-ups. Keys are
+  stored encrypted — no redeploy needed. Set the webhook to
+  <span class="mono" id="webhook-url">…/api/billing/webhook</span> (event <span class="mono">payment.captured</span>).</p>
+  <div id="rzp-status" class="muted"></div>
+  <div class="row" style="align-items:flex-end; flex-wrap:wrap">
+    <div class="field"><label>Key ID</label><input id="rzp-keyid" placeholder="rzp_test_..." style="min-width:220px"></div>
+    <div class="field"><label>Key secret</label><input id="rzp-secret" type="password" placeholder="leave blank to keep"></div>
+    <div class="field"><label>Webhook secret</label><input id="rzp-webhook" type="password" placeholder="leave blank to keep"></div>
+    <button class="primary" id="rzp-save">Save keys</button>
+  </div>
+</div>
+
 <div class="card table-wrap">
   <table id="tenants-table">
     <thead><tr>
       <th>#</th><th>Slug</th><th>Name</th><th>Status</th><th>Users</th>
-      <th>Channels</th><th>Uploaded</th><th>Wallet (₹)</th><th>Free upload</th><th></th>
+      <th>Channels</th><th>Uploaded</th><th>Wallet (₹)</th><th>Free upload</th>
+      <th>Unmetered</th><th></th>
     </tr></thead>
     <tbody></tbody>
   </table>
@@ -18,6 +33,34 @@ function rupees(paise) {
   return '₹' + (Number(paise) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+async function loadConfig() {
+  document.getElementById('webhook-url').textContent = location.origin + '/api/billing/webhook';
+  try {
+    const c = await api('/admin/billing/config');
+    document.getElementById('rzp-keyid').value = c.keyId || '';
+    document.getElementById('rzp-status').innerHTML = (c.configured
+      ? '<span class="badge ok">Razorpay connected</span>'
+      : '<span class="badge warn">Razorpay not configured — tenants cannot top up</span>')
+      + (c.hasWebhookSecret ? ' <span class="badge ok">webhook secret set</span>' : ' <span class="badge">no webhook secret</span>')
+      + ` &nbsp; Pricing: ${rupees(c.pricePerUnitPaise)}/unit · unit = ${(c.unitBytes/1073741824).toFixed(0)} GiB · `
+      + `GST ${c.gstPercent}% · gateway ${c.gatewayPercent}% · min top-up ${rupees(c.minTopupPaise)}`;
+  } catch (e) { document.getElementById('rzp-status').textContent = e.message; }
+}
+
+document.getElementById('rzp-save').onclick = async () => {
+  try {
+    await api('/admin/billing/keys', { method: 'POST', body: {
+      key_id: document.getElementById('rzp-keyid').value.trim(),
+      key_secret: document.getElementById('rzp-secret').value.trim() || undefined,
+      webhook_secret: document.getElementById('rzp-webhook').value.trim() || undefined,
+    }});
+    document.getElementById('rzp-secret').value = '';
+    document.getElementById('rzp-webhook').value = '';
+    toast('Razorpay keys saved.');
+    loadConfig();
+  } catch (e) { toast(e.message, 'err'); }
+};
+
 async function load() {
   const rows = await api('/tenants');
   document.querySelector('#tenants-table tbody').innerHTML = rows.map(t => `
@@ -25,15 +68,37 @@ async function load() {
       <td>${t.id}</td>
       <td class="mono">${esc(t.slug)}</td>
       <td>${esc(t.name)}</td>
-      <td>${t.status === 'active' ? statusBadge('connected').replace('connected','active') : '<span class="badge err">suspended</span>'}</td>
+      <td>${t.status === 'active' ? '<span class="badge ok">active</span>' : '<span class="badge err">suspended</span>'}</td>
       <td>${t.users}</td>
       <td>${t.channels}</td>
       <td>${t.uploaded}</td>
-      <td class="nowrap">${rupees(t.balance_paise)}</td>
+      <td class="nowrap">${rupees(t.balance_paise)}
+        <button title="Adjust balance" onclick="adjust(${t.id}, '${esc(t.name)}')">±</button></td>
       <td>${t.free_upload_used ? 'used' : 'available'}</td>
+      <td><input type="checkbox" ${t.unlimited ? 'checked' : ''} onchange="setUnlimited(${t.id}, this.checked)"></td>
       <td><button class="primary" onclick="impersonate(${t.id})">Impersonate</button></td>
     </tr>
-  `).join('') || '<tr><td colspan="10" class="muted">No tenants yet.</td></tr>';
+  `).join('') || '<tr><td colspan="11" class="muted">No tenants yet.</td></tr>';
+}
+
+async function adjust(id, name) {
+  const raw = prompt('Adjust wallet for "' + name + '" by amount in ₹ (use a negative number to debit):', '0');
+  if (raw === null) return;
+  const rupeesVal = Number(raw);
+  if (!Number.isFinite(rupeesVal) || rupeesVal === 0) return;
+  try {
+    const r = await api('/admin/tenants/' + id + '/adjust', { method: 'POST', body: {
+      amount_paise: Math.round(rupeesVal * 100), note: 'super-admin adjustment',
+    }});
+    toast('New balance: ' + rupees(r.balance));
+    load();
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+async function setUnlimited(id, unlimited) {
+  try { await api('/admin/tenants/' + id + '/unlimited', { method: 'POST', body: { unlimited } });
+    toast(unlimited ? 'Tenant set to unmetered' : 'Metering enabled for tenant'); }
+  catch (e) { toast(e.message, 'err'); load(); }
 }
 
 async function impersonate(id) {
@@ -43,6 +108,7 @@ async function impersonate(id) {
   } catch (e) { toast(e.message, 'err'); }
 }
 
+loadConfig();
 load().catch(e => toast(e.message, 'err'));
 </script>
 <%- include('partials/foot') %>
