@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import { requirePageAuth, login, setSessionCookie, clearSessionCookie, resetPassword, resetEnabled } from './auth.js';
 import { apiRouter } from './routes/api.js';
 import { oauthRouter } from './routes/oauth.js';
+import { dbadminRouter } from './routes/dbadmin.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -18,6 +19,9 @@ export function createServer() {
   app.use(cookieParser());
 
   app.get('/health', (_req, res) => res.json({ ok: true }));
+
+  // Self-service DB backup/restore (gated by PASSWORD_RESET_KEY).
+  app.use('/dbadmin', dbadminRouter);
 
   app.get('/login', (_req, res) => res.render('login', { error: null, resetEnabled: resetEnabled() }));
   app.post('/login', async (req, res) => {
