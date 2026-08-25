@@ -2,7 +2,7 @@
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <h1>Billing</h1>
 <p class="muted">Pay as you go — <b>₹50 per video</b> (up to 1&nbsp;GB each; a file over 1&nbsp;GB
-counts as 2). Your first upload is free. Buy credits in packs of 10 videos; an upload already
+counts as 2). Your first upload is free. Buy credits in multiples of 10 videos; an upload already
 in progress always finishes even if credits run out, and the shortfall is settled on your next
 top-up. GST invoices are issued separately.</p>
 
@@ -36,9 +36,19 @@ top-up. GST invoices are issued separately.</p>
       <h2>Pay as you go</h2>
       <button class="modal-close" id="close-topup" aria-label="Close">×</button>
     </div>
-    <p class="muted" style="margin:0 0 8px">₹50 per video · buy in packs of 10. Choose a pack:</p>
+    <p class="muted" style="margin:0 0 8px">₹50 per video · buy in multiples of 10. Choose a pack:</p>
     <div id="pack-list"></div>
-    <p class="muted" style="margin-top:12px; font-size:12px">
+
+    <div style="margin-top:16px; border-top:1px solid var(--line); padding-top:14px">
+      <label for="cust-videos">Or enter number of videos <span class="muted">(multiples of 10)</span></label>
+      <div class="row" style="align-items:stretch; margin-top:4px">
+        <input id="cust-videos" type="number" min="10" step="10" placeholder="e.g. 40" style="flex:1 1 auto">
+        <button class="primary" id="cust-pay">Pay</button>
+      </div>
+      <div id="cust-calc" style="margin-top:8px"></div>
+    </div>
+
+    <p class="muted" style="margin-top:14px; font-size:12px">
       Each amount includes 18% GST and a 2.5% payment-gateway fee on (credit + GST).
       Your wallet is credited the video-credit amount only.</p>
   </div>
@@ -47,6 +57,7 @@ top-up. GST invoices are issued separately.</p>
 <script>
 const fmtRs = (paise) => '₹' + (Number(paise) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 let CFG = null;
+const packSize = () => Math.max(1, Math.round(CFG.minTopupPaise / CFG.pricePerUnitPaise)); // = 10
 
 // Mirror of the server's topupBreakdown (rounded to whole paise).
 function packMath(videos) {
@@ -54,6 +65,22 @@ function packMath(videos) {
   const gst = Math.round(base * CFG.gstPercent / 100);
   const fee = Math.round((base + gst) * CFG.gatewayPercent / 100);
   return { base, gst, fee, total: base + gst + fee };
+}
+
+// In-situ validation: only whole multiples of the pack (10), at least one pack.
+function validateVideos(raw) {
+  const step = packSize();
+  const n = Number(raw);
+  if (raw === '' || raw == null || !Number.isFinite(n) || n <= 0) {
+    return { ok: false, message: `Enter a number of videos (multiples of ${step}).` };
+  }
+  if (!Number.isInteger(n)) return { ok: false, message: `Whole numbers only, in multiples of ${step}.` };
+  if (n < step) return { ok: false, message: `Minimum ${step} videos.` };
+  if (n % step !== 0) {
+    const lo = Math.max(step, Math.floor(n / step) * step), hi = Math.ceil(n / step) * step;
+    return { ok: false, message: `Only multiples of ${step} allowed — try ${lo} or ${hi}.` };
+  }
+  return { ok: true, videos: n };
 }
 
 async function loadWallet() {
@@ -84,8 +111,8 @@ async function loadWallet() {
 }
 
 function buildPacks() {
-  const perPack = Math.max(1, Math.round(CFG.minTopupPaise / CFG.pricePerUnitPaise)); // = 10 videos
-  const counts = [1, 2, 3, 4, 5, 10].map((n) => n * perPack); // 10,20,30,40,50,100
+  const step = packSize();
+  const counts = [1, 2, 3].map((n) => n * step); // 10, 20, 30
   document.getElementById('pack-list').innerHTML = counts.map((videos) => {
     const m = packMath(videos);
     return `<button class="pack" onclick="buy(${videos})">
@@ -98,10 +125,42 @@ function buildPacks() {
   }).join('');
 }
 
+// Live calc under the custom field.
+function refreshCustom() {
+  const calc = document.getElementById('cust-calc');
+  const r = validateVideos(document.getElementById('cust-videos').value);
+  if (r.ok) {
+    const m = packMath(r.videos);
+    calc.className = 'muted';
+    calc.innerHTML = `<b>${r.videos} videos = ${fmtRs(m.total)}</b><br>`
+      + `${fmtRs(m.base)} credit + ${fmtRs(m.gst)} GST + ${fmtRs(m.fee)} fee`;
+  } else {
+    calc.innerHTML = `<span class="badge warn">${esc(r.message)}</span>`;
+  }
+}
+
 const modal = document.getElementById('topup-modal');
-document.getElementById('open-topup').onclick = () => { buildPacks(); modal.classList.add('open'); };
+function openModal() {
+  buildPacks();
+  document.getElementById('cust-videos').value = '';
+  document.getElementById('cust-calc').innerHTML = '';
+  modal.classList.add('open');
+}
+document.getElementById('open-topup').onclick = openModal;
 document.getElementById('close-topup').onclick = () => modal.classList.remove('open');
 modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('open'); });
+document.getElementById('cust-videos').addEventListener('input', refreshCustom);
+
+// Pay button validates in situ; an invalid amount NEVER reaches Razorpay.
+document.getElementById('cust-pay').onclick = () => {
+  const r = validateVideos(document.getElementById('cust-videos').value);
+  if (!r.ok) {
+    refreshCustom();
+    toast('In multiples of 10 videos allowed', 'warn');
+    return;
+  }
+  buy(r.videos);
+};
 
 async function buy(videos) {
   const base = videos * CFG.pricePerUnitPaise;
