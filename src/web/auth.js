@@ -141,6 +141,13 @@ export async function requireApiAuth(req, res, next) {
   next();
 }
 
+// Returns the logged-in user (req-shape) or null, without redirecting. Used by
+// the public landing page to send authenticated users into the app.
+export async function getOptionalUser(req) {
+  const u = await loadSessionUser(req).catch(() => null);
+  return u ? toReqUser(u) : null;
+}
+
 // Valid session but tolerant of must-change (used by the set-password endpoints).
 export async function requireSessionOnly(req, res, next) {
   const u = await loadSessionUser(req).catch(() => null);

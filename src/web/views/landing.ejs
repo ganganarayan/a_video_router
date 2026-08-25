@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VideoRouter — Zoom & Fathom recordings, auto-published to YouTube and your LMS</title>
+  <meta name="description" content="VideoRouter automatically routes your Zoom and Fathom recordings to YouTube and your course platform — on a schedule, hands-free. Pay as you go, first upload free.">
+  <style>
+    :root{
+      --bg:#0f1420; --panel:#1a2233; --panel2:#223048; --line:#2e3d5c;
+      --text:#e8edf7; --muted:#93a1bd; --accent:#4f8cff; --accent2:#7b5cff;
+      --ok:#2ecc71;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);
+      font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+    a{color:var(--accent);text-decoration:none}
+    .wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+    .btn{display:inline-block;padding:12px 22px;border-radius:8px;font-weight:600;border:1px solid var(--line);
+      background:var(--panel2);color:var(--text);cursor:pointer}
+    .btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;color:#fff}
+    .btn.big{padding:15px 30px;font-size:17px}
+
+    header{position:sticky;top:0;z-index:20;background:rgba(15,20,32,.85);backdrop-filter:blur(8px);
+      border-bottom:1px solid var(--line)}
+    header .wrap{display:flex;align-items:center;justify-content:space-between;height:62px}
+    .brand{font-weight:800;font-size:19px;letter-spacing:.2px}
+    .brand span{background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+
+    .hero{text-align:center;padding:70px 0 40px}
+    .hero h1{font-size:clamp(30px,5vw,50px);line-height:1.1;margin:0 0 18px;font-weight:800}
+    .hero h1 .hl{background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+    .hero p.sub{font-size:clamp(17px,2.2vw,21px);color:var(--muted);max-width:720px;margin:0 auto 28px}
+    .cta-row{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+    .tiny{color:var(--muted);font-size:13px;margin-top:14px}
+
+    .video{padding:10px 0 20px}
+    .video-frame{position:relative;max-width:900px;margin:0 auto;aspect-ratio:16/9;border-radius:14px;overflow:hidden;
+      border:1px solid var(--line);background:var(--panel);box-shadow:0 20px 60px rgba(0,0,0,.45)}
+    .video-frame iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+
+    .speed{margin:24px auto;max-width:900px;background:linear-gradient(135deg,rgba(79,140,255,.14),rgba(123,92,255,.14));
+      border:1px solid var(--line);border-radius:14px;padding:22px 26px;display:flex;gap:26px;align-items:center;
+      justify-content:center;flex-wrap:wrap;text-align:center}
+    .speed b{font-size:22px}
+    .speed .num{font-size:34px;font-weight:800;color:var(--accent)}
+
+    section{padding:56px 0;border-top:1px solid var(--line)}
+    section h2{font-size:clamp(24px,3.4vw,34px);margin:0 0 10px;text-align:center;font-weight:800}
+    section .lead{color:var(--muted);text-align:center;max-width:680px;margin:0 auto 34px}
+
+    .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+    .step{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:22px}
+    .step .n{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-weight:800;
+      background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;margin-bottom:12px}
+    .step h3{margin:0 0 6px;font-size:18px}
+    .step p{margin:0;color:var(--muted)}
+
+    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+    .feat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:22px}
+    .feat .ic{font-size:24px;margin-bottom:10px}
+    .feat h3{margin:0 0 6px;font-size:17px}
+    .feat p{margin:0;color:var(--muted);font-size:15px}
+
+    .price{max-width:520px;margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:32px;text-align:center}
+    .price .amt{font-size:44px;font-weight:800}
+    .price .amt small{font-size:17px;color:var(--muted);font-weight:500}
+    .price ul{list-style:none;padding:0;margin:20px 0;text-align:left;display:inline-block}
+    .price li{padding:7px 0;color:var(--text)}
+    .price li::before{content:"✓";color:var(--ok);font-weight:800;margin-right:10px}
+
+    .faq{max-width:760px;margin:0 auto}
+    .faq details{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 20px;margin-bottom:12px}
+    .faq summary{cursor:pointer;font-weight:600}
+    .faq p{color:var(--muted);margin:10px 0 0}
+
+    .final{text-align:center}
+    footer{border-top:1px solid var(--line);padding:30px 0;color:var(--muted);text-align:center;font-size:14px}
+    @media(max-width:760px){.steps,.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <header><div class="wrap">
+    <div class="brand">Video<span>Router</span></div>
+    <a class="btn" href="/login">Log in</a>
+  </div></header>
+
+  <div class="wrap">
+    <!-- HERO -->
+    <div class="hero">
+      <h1>Your Zoom &amp; Fathom recordings,<br><span class="hl">auto-published</span> to YouTube and your LMS</h1>
+      <p class="sub">Stop downloading, re-uploading, renaming and filing recordings by hand.
+        Connect once, set your rules, and every session lands on the right channel and course — hands-free.</p>
+      <div class="cta-row">
+        <a class="btn primary big" href="/login">Start free — first upload's on us</a>
+        <a class="btn big" href="#how">See how it works</a>
+      </div>
+      <div class="tiny">No subscription · Pay as you go · GST invoice provided</div>
+    </div>
+
+    <!-- HERO VIDEO (URL pulled live from settings) -->
+    <% if (videoUrl) { %>
+    <div class="video"><div class="video-frame">
+      <iframe src="<%= videoUrl %>" title="VideoRouter demo" loading="lazy"
+        allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen></iframe>
+    </div></div>
+    <% } %>
+
+    <!-- SPEED / JAW-DROP -->
+    <div class="speed">
+      <div><div class="num">~90 sec</div><div class="muted">for a full 1&nbsp;GB video</div></div>
+      <div style="text-align:left">
+        <b>Blazing transfers.</b><br>
+        <span class="muted">≈ 60 seconds to download from the source, ≈ 30 seconds to upload to YouTube.
+        A day's recordings are done before your coffee is.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROBLEM -->
+  <section>
+    <div class="wrap">
+      <h2>The after-class grind, gone</h2>
+      <p class="lead">If you teach live, you know the drill after every session: download the recording,
+        wait; upload to YouTube and set the title and privacy; add it to the right course and module;
+        then clear it off Zoom before storage fills. Fifteen to thirty minutes of babysitting — every single recording.
+        VideoRouter does all of it for you.</p>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section id="how">
+    <div class="wrap">
+      <h2>How it works</h2>
+      <p class="lead">Set it up once. Then it just runs.</p>
+      <div class="steps">
+        <div class="step"><div class="n">1</div><h3>Connect</h3>
+          <p>Link your Zoom and Fathom recordings, your YouTube channel(s), and your LMS. One-time, secure.</p></div>
+        <div class="step"><div class="n">2</div><h3>Set rules</h3>
+          <p>Map which recordings go to which channel, course and module — with your title and privacy defaults.</p></div>
+        <div class="step"><div class="n">3</div><h3>Relax</h3>
+          <p>On a schedule or one click, every new recording is routed end-to-end — and logged in your dashboard.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section>
+    <div class="wrap">
+      <h2>Everything you need to publish at scale</h2>
+      <div class="grid">
+        <div class="feat"><div class="ic">🎥</div><h3>Zoom &amp; Fathom sources</h3>
+          <p>Pull recordings from Zoom and Fathom automatically — no manual downloads.</p></div>
+        <div class="feat"><div class="ic">📺</div><h3>YouTube &amp; LMS destinations</h3>
+          <p>Publish straight to your YouTube channels and push into your course platform via its API.</p></div>
+        <div class="feat"><div class="ic">⏱️</div><h3>Schedule &amp; forget</h3>
+          <p>Regular sessions? Run on a daily schedule and watch every step in the dashboard logs.</p></div>
+        <div class="feat"><div class="ic">👥</div><h3>Staff &amp; permissions</h3>
+          <p>Add team members with view or edit access. So simple, anyone on your team can run it — even your kid.</p></div>
+        <div class="feat"><div class="ic">🧹</div><h3>Delete from Zoom, right here</h3>
+          <p>Clear published recordings off Zoom from the dashboard — without ever signing in to Zoom.</p></div>
+        <div class="feat"><div class="ic">⚡</div><h3>Seriously fast</h3>
+          <p>A full 1&nbsp;GB video moves in about 90 seconds. Your whole day's recordings, minutes.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PRICING -->
+  <section id="pricing">
+    <div class="wrap">
+      <h2>Simple, pay-as-you-go pricing</h2>
+      <p class="lead">No subscription, no lock-in. Buy video credits when you need them.</p>
+      <div class="price">
+        <div class="amt">₹50 <small>/ video</small></div>
+        <ul>
+          <li>First upload free — try it at zero cost</li>
+          <li>Up to 1&nbsp;GB per video</li>
+          <li>Buy credits in simple packs of 10</li>
+          <li>GST invoice provided</li>
+          <li>Add staff at no extra cost</li>
+        </ul>
+        <div><a class="btn primary big" href="/login">Start free</a></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section>
+    <div class="wrap">
+      <h2>Questions</h2>
+      <div class="faq">
+        <details><summary>What do I need to get started?</summary>
+          <p>A Zoom (or Fathom) account, a YouTube channel, and — if you publish to a course platform —
+          an LMS that exposes an API. You connect them once in the dashboard.</p></details>
+        <details><summary>Do I have to keep the tab open?</summary>
+          <p>No. Set a schedule and VideoRouter routes new recordings on its own. You can also push any recording manually with one click.</p></details>
+        <details><summary>Can my team help run it?</summary>
+          <p>Yes. Add staff with view or edit permissions. It's designed to be simple enough for anyone to operate.</p></details>
+        <details><summary>How is it priced?</summary>
+          <p>Pay as you go at ₹50 per video (up to 1&nbsp;GB; larger files count as two). Your first upload is free, and you top up in packs of 10 with a GST invoice.</p></details>
+      </div>
+    </div>
+  </section>
+
+  <!-- FINAL CTA -->
+  <section class="final">
+    <div class="wrap">
+      <h2>Publish your next recording in minutes</h2>
+      <p class="lead">Connect your accounts and let VideoRouter handle the rest.</p>
+      <a class="btn primary big" href="/login">Start free — first upload's on us</a>
+    </div>
+  </section>
+
+  <footer><div class="wrap">© <%= new Date().getFullYear() %> VideoRouter · Zoom &amp; Fathom → YouTube &amp; LMS, automated</div></footer>
+</body>
+</html>

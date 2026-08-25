@@ -3,6 +3,7 @@ import cron from 'node-cron';
 import cronParser from 'cron-parser';
 import {
   query, getTenants, getTenantById, getTenantSettings, setTenantSetting,
+  getConfigValue, setConfigValue,
 } from '../../db.js';
 import { encrypt } from '../../lib/secrets.js';
 import {
@@ -101,6 +102,17 @@ apiRouter.post('/admin/billing/provider', requireSuperAdmin, wrap(async (req, re
     await billing.setPaymentProvider(req.body.provider);
     res.json({ ok: true });
   } catch (err) { res.status(400).json({ error: err.message }); }
+}));
+
+// Landing-page hero video (embed URL, e.g. a VidaPulse embed). Read live by the
+// public landing page — change it here anytime, no code edit / redeploy.
+apiRouter.get('/admin/landing', requireSuperAdmin, wrap(async (_req, res) => {
+  res.json({ videoUrl: (await getConfigValue('landing_video_url')) || '' });
+}));
+
+apiRouter.post('/admin/landing', requireSuperAdmin, wrap(async (req, res) => {
+  await setConfigValue('landing_video_url', String(req.body.video_url || '').trim());
+  res.json({ ok: true });
 }));
 
 // Set/rotate Razorpay keys (stored encrypted in app_config; no redeploy needed).

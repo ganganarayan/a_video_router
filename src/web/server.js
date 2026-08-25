@@ -5,12 +5,13 @@ import cookieParser from 'cookie-parser';
 import {
   requirePageAuth, requireSessionOnly, authenticate, setOwnPassword,
   setSessionCookie, clearSessionCookie, resetPassword, resetEnabled,
-  resolveTenant, requireTenant, requireSuperAdmin,
+  resolveTenant, requireTenant, requireSuperAdmin, getOptionalUser,
 } from './auth.js';
 import { apiRouter } from './routes/api.js';
 import { oauthRouter } from './routes/oauth.js';
 import { dbadminRouter } from './routes/dbadmin.js';
 import * as billing from '../billing.js';
+import { getConfigValue } from '../db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -66,9 +67,16 @@ export function createServer() {
     res.redirect('/login');
   });
 
-  app.get('/', requirePageAuth, resolveTenant, (req, res) => {
-    if (req.user.isSuperAdmin && !req.tenantId) return res.redirect('/admin');
-    res.redirect('/runs');
+  // Public marketing landing page at the root. Logged-in users are sent into the
+  // app; visitors see the sales page. The hero video URL is pulled live from
+  // app_config (landing_video_url) so it can be swapped without touching the page.
+  app.get('/', async (req, res, next) => {
+    try {
+      const user = await getOptionalUser(req);
+      if (user) return res.redirect(user.isSuperAdmin ? '/admin' : '/runs');
+      const videoUrl = (await getConfigValue('landing_video_url')) || '';
+      res.render('landing', { videoUrl });
+    } catch (err) { next(err); }
   });
 
   // Super-admin console: all tenants + impersonation.
