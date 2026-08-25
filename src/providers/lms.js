@@ -5,8 +5,10 @@ import { decrypt } from '../lib/secrets.js';
 const INGEST_PATH = '/api/lms/video-ingest';
 const SUCCESS_STATUSES = new Set(['created', 'updated', 'duplicate']);
 
-export async function getLmsAccount() {
-  const { rows } = await query('SELECT * FROM lms_account ORDER BY id DESC LIMIT 1');
+export async function getLmsAccount(tenantId) {
+  const { rows } = await query(
+    'SELECT * FROM lms_account WHERE tenant_id = $1 ORDER BY id DESC LIMIT 1', [tenantId],
+  );
   return rows[0] || null;
 }
 

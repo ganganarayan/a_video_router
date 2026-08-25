@@ -6,8 +6,10 @@ const RATE_DELAY_MS = 1100; // stay under 60 req/min
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export async function getFathomAccount() {
-  const { rows } = await query('SELECT * FROM fathom_account ORDER BY id DESC LIMIT 1');
+export async function getFathomAccount(tenantId) {
+  const { rows } = await query(
+    'SELECT * FROM fathom_account WHERE tenant_id = $1 ORDER BY id DESC LIMIT 1', [tenantId],
+  );
   return rows[0] || null;
 }
 

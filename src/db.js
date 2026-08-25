@@ -17,10 +17,33 @@ export function query(text, params) {
   return pool.query(text, params);
 }
 
+// Wait for Postgres to accept connections before migrating. Serverless/managed
+// databases can be a few seconds behind the app on a cold start — retry instead
+// of crash-looping the boot.
+export async function waitForDb(maxMs = 45000) {
+  const start = Date.now();
+  let attempt = 0;
+  let lastErr;
+  while (Date.now() - start < maxMs) {
+    try {
+      await pool.query('SELECT 1');
+      if (attempt > 0) log(`database ready after ${attempt} retr${attempt === 1 ? 'y' : 'ies'}`);
+      return;
+    } catch (err) {
+      lastErr = err;
+      attempt += 1;
+      log(`database not ready yet (attempt ${attempt}): ${err.code || err.message} — retrying in 2s`);
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
+  throw new Error(`database not reachable after ${maxMs}ms: ${lastErr?.message}`);
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = path.join(__dirname, '..', 'migrations');
 
 export async function runMigrations() {
+  await waitForDb();
   await query(`CREATE TABLE IF NOT EXISTS schema_migrations (
     name TEXT PRIMARY KEY,
     applied_at TIMESTAMPTZ DEFAULT now()
@@ -63,5 +86,32 @@ export async function setConfigValue(key, value) {
     `INSERT INTO app_config (key, value) VALUES ($1, $2)
      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
     [key, value],
+  );
+}
+
+// --- tenants ---
+
+export async function getTenants() {
+  const { rows } = await query('SELECT * FROM tenants ORDER BY id');
+  return rows;
+}
+
+export async function getTenantById(id) {
+  const { rows } = await query('SELECT * FROM tenants WHERE id = $1', [id]);
+  return rows[0] || null;
+}
+
+// --- per-tenant settings (tenant_settings) ---
+
+export async function getTenantSettings(tenantId) {
+  const { rows } = await query('SELECT key, value FROM tenant_settings WHERE tenant_id = $1', [tenantId]);
+  return Object.fromEntries(rows.map((r) => [r.key, r.value]));
+}
+
+export async function setTenantSetting(tenantId, key, value) {
+  await query(
+    `INSERT INTO tenant_settings (tenant_id, key, value) VALUES ($1, $2, $3)
+     ON CONFLICT (tenant_id, key) DO UPDATE SET value = EXCLUDED.value`,
+    [tenantId, key, value],
   );
 }

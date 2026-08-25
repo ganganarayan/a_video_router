@@ -67,6 +67,50 @@ function linkWithCopy(url, label) {
   return `<a href="${esc(url)}" target="_blank">${esc(label || url)}</a> ${copyBtn(url)}`;
 }
 
+// Context bar: shows the super-admin Admin link, an impersonation banner, or a
+// staff-access note. Runs on every authenticated page.
+async function initCtx() {
+  try {
+    const w = await api('/whoami');
+    const bar = document.getElementById('ctxbar');
+    const adminLink = document.getElementById('nav-admin');
+    if (w.isSuperAdmin && adminLink) adminLink.style.display = '';
+
+    // Super admin NOT impersonating: tenant pages are inaccessible — hide their tabs
+    // and point to the Admin console.
+    if (w.isSuperAdmin && !w.impersonating) {
+      document.querySelectorAll('nav a.tab').forEach((a) => {
+        if (a.id !== 'nav-admin') a.style.display = 'none';
+      });
+      if (bar) {
+        bar.className = 'ctxbar staff';
+        bar.innerHTML = 'You are the <b>super admin</b>. Pick a tenant on the '
+          + '<a href="/admin">Admin</a> page to open its workspace.';
+      }
+      return;
+    }
+
+    if (!bar) return;
+    if (w.impersonating) {
+      bar.className = 'ctxbar on';
+      bar.innerHTML = `Viewing tenant <b>${esc(w.impersonating.name)}</b> (${esc(w.impersonating.slug)}) as super admin · `
+        + `<a href="#" id="ctx-exit">Exit to Admin</a>`;
+      document.getElementById('ctx-exit').onclick = async (e) => {
+        e.preventDefault();
+        try { await api('/impersonate/stop', { method: 'POST' }); } catch {}
+        location.href = '/admin';
+      };
+    } else if (w.isStaff) {
+      bar.className = 'ctxbar staff';
+      bar.textContent = `Staff access — ${w.staffPermission === 'view' ? 'read-only' : 'edit'}`;
+      // staff cannot manage the team
+      const team = document.getElementById('nav-team');
+      if (team) team.style.display = 'none';
+    }
+  } catch { /* not authenticated or whoami unavailable */ }
+}
+document.addEventListener('DOMContentLoaded', initCtx);
+
 // Delegated handler so re-rendered tables keep working. Copies data-copy and
 // flashes "copied" on the clicked button for 2 seconds.
 document.addEventListener('click', (e) => {

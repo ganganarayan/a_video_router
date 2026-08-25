@@ -2,7 +2,7 @@
 // same recording at the same time (single-process service, so a Set suffices).
 const active = new Set();
 
-export const recordingKey = (source, sourceId) => `${source}:${sourceId}`;
+export const recordingKey = (tenantId, source, sourceId) => `${tenantId}:${source}:${sourceId}`;
 
 export function lock(key) {
   if (active.has(key)) return false;

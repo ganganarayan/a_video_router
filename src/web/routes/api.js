@@ -1,9 +1,15 @@
 import express from 'express';
 import cron from 'node-cron';
 import cronParser from 'cron-parser';
-import { query, getConfigMap, setConfigValue } from '../../db.js';
+import {
+  query, getTenants, getTenantById, getTenantSettings, setTenantSetting,
+} from '../../db.js';
 import { encrypt } from '../../lib/secrets.js';
-import { requireApiAuth, updateAccount, setSessionCookie } from '../auth.js';
+import {
+  requireApiAuth, resolveTenant, requireTenant, requireSuperAdmin, requireOwner,
+  updateAccount, setSessionCookie, setImpersonation, clearImpersonation,
+  listTenantUsers, createStaff, updateStaff, resetStaffPassword, deleteStaff,
+} from '../auth.js';
 import { runPipeline, isRunning } from '../../pipeline/run.js';
 import { enqueuePush, getJobs } from '../../pipeline/manual.js';
 import { reloadSchedules, getSchedules } from '../../scheduler.js';
@@ -16,14 +22,82 @@ import { config } from '../../config.js';
 import { log, logError } from '../../lib/logger.js';
 
 export const apiRouter = express.Router();
-apiRouter.use(requireApiAuth);
+apiRouter.use(requireApiAuth, resolveTenant);
 
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 
-// ---------- overview / runs / recordings ----------
+// ============================================================
+// Super-admin endpoints (no tenant context required)
+// ============================================================
 
-apiRouter.get('/overview', wrap(async (_req, res) => {
-  const { rows: [lastRun] } = await query('SELECT * FROM run_logs ORDER BY id DESC LIMIT 1');
+apiRouter.get('/whoami', wrap(async (req, res) => {
+  let impersonating = null;
+  if (req.user.isSuperAdmin && req.tenantId) {
+    const t = await getTenantById(req.tenantId);
+    impersonating = t ? { id: t.id, slug: t.slug, name: t.name } : null;
+  }
+  res.json({
+    email: req.user.email,
+    role: req.user.role,
+    isSuperAdmin: req.user.isSuperAdmin,
+    isStaff: req.user.isStaff,
+    staffPermission: req.user.staffPermission,
+    tenantId: req.tenantId,
+    impersonating,
+  });
+}));
+
+// Super-admin dashboard — read-only across all tenants.
+apiRouter.get('/tenants', requireSuperAdmin, wrap(async (_req, res) => {
+  const { rows } = await query(
+    `SELECT t.id, t.slug, t.name, t.status, t.created_at,
+            w.balance_paise, w.free_upload_used,
+            (SELECT count(*) FROM users u WHERE u.tenant_id = t.id AND u.deleted_at IS NULL)::int AS users,
+            (SELECT count(*) FROM processed_recordings p WHERE p.tenant_id = t.id AND p.youtube_video_id IS NOT NULL)::int AS uploaded,
+            (SELECT count(*) FROM youtube_channels c WHERE c.tenant_id = t.id AND c.refresh_token IS NOT NULL)::int AS channels
+     FROM tenants t
+     LEFT JOIN wallets w ON w.tenant_id = t.id
+     ORDER BY t.id`,
+  );
+  res.json(rows);
+}));
+
+apiRouter.post('/impersonate/:id', requireSuperAdmin, wrap(async (req, res) => {
+  const t = await getTenantById(Number(req.params.id));
+  if (!t) return res.status(404).json({ error: 'tenant not found' });
+  setImpersonation(res, t.id);
+  res.json({ ok: true, tenant: { id: t.id, slug: t.slug, name: t.name } });
+}));
+
+apiRouter.post('/impersonate/stop', requireSuperAdmin, wrap(async (_req, res) => {
+  clearImpersonation(res);
+  res.json({ ok: true });
+}));
+
+// Account settings (own login) — always available, no tenant needed.
+apiRouter.post('/settings/account', wrap(async (req, res) => {
+  const result = await updateAccount(req.user.email, req.body.current_password, {
+    newEmail: req.body.new_email?.trim() || null,
+    newPassword: req.body.new_password || null,
+  });
+  if (!result.ok) return res.status(400).json({ error: result.error });
+  setSessionCookie(res, result.email);
+  res.json({ ok: true, email: result.email });
+}));
+
+// ============================================================
+// Everything below requires a tenant context (tenant users always have one;
+// a super admin must be impersonating a tenant).
+// ============================================================
+apiRouter.use(requireTenant);
+
+const T = (req) => req.tenantId;
+
+// ---------- overview / dashboard ----------
+
+apiRouter.get('/overview', wrap(async (req, res) => {
+  const tid = T(req);
+  const { rows: [lastRun] } = await query('SELECT * FROM run_logs WHERE tenant_id = $1 ORDER BY id DESC LIMIT 1', [tid]);
   const { rows: [totals] } = await query(
     `SELECT count(*)::int AS total,
             count(*) FILTER (WHERE youtube_video_id IS NOT NULL)::int AS uploaded,
@@ -31,13 +105,15 @@ apiRouter.get('/overview', wrap(async (_req, res) => {
             count(*) FILTER (WHERE status LIKE 'skipped%')::int AS skipped,
             round(avg(download_bps) FILTER (WHERE download_bps > 0))::bigint AS avg_download_bps,
             round(avg(upload_bps) FILTER (WHERE upload_bps > 0))::bigint AS avg_upload_bps
-     FROM processed_recordings`,
+     FROM processed_recordings WHERE tenant_id = $1`,
+    [tid],
   );
   const { rows: [chan] } = await query(
     `SELECT count(*) FILTER (WHERE refresh_token IS NOT NULL)::int AS connected,
-            count(*)::int AS total FROM youtube_channels`,
+            count(*)::int AS total FROM youtube_channels WHERE tenant_id = $1`,
+    [tid],
   );
-  const schedules = await getSchedules();
+  const schedules = await getSchedules(tid);
   const enabled = schedules.filter((s) => s.enabled);
   let nextRun = null;
   for (const s of enabled) {
@@ -60,13 +136,13 @@ apiRouter.get('/overview', wrap(async (_req, res) => {
   });
 }));
 
-// ---------- logs: completed transfers with full detail ----------
+// ---------- logs ----------
 
 apiRouter.get('/logs', wrap(async (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 500, 2000);
   const q = String(req.query.q || '').trim();
-  const params = [];
-  let where = 'p.youtube_video_id IS NOT NULL';
+  const params = [T(req)];
+  let where = 'p.tenant_id = $1 AND p.youtube_video_id IS NOT NULL';
   if (q) {
     params.push(`%${q}%`);
     where += ` AND (p.title ILIKE $${params.length} OR p.matched_tag ILIKE $${params.length})`;
@@ -84,90 +160,88 @@ apiRouter.get('/logs', wrap(async (req, res) => {
   res.json(rows);
 }));
 
-// ---------- schedules (recurring runs) ----------
+// ---------- schedules ----------
 
 function nextRunOf(s) {
   if (!s.enabled) return null;
   try {
     return cronParser.parseExpression(s.cron_expression, { tz: s.timezone }).next().toISOString();
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
-apiRouter.get('/schedules', wrap(async (_req, res) => {
-  const rows = await getSchedules();
+apiRouter.get('/schedules', wrap(async (req, res) => {
+  const rows = await getSchedules(T(req));
   res.json(rows.map((s) => ({ ...s, nextRun: nextRunOf(s) })));
 }));
 
-apiRouter.post('/schedules', wrap(async (req, res) => {
+apiRouter.post('/schedules', requireOwner, wrap(async (req, res) => {
   const { name, cron_expression, timezone, enabled } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
   if (!cron.validate(cron_expression || '')) return res.status(400).json({ error: 'invalid cron expression' });
   await query(
-    'INSERT INTO schedules (name, cron_expression, timezone, enabled) VALUES ($1, $2, $3, $4)',
-    [name.trim(), cron_expression.trim(), (timezone || 'Asia/Kolkata').trim(), enabled !== false],
+    'INSERT INTO schedules (tenant_id, name, cron_expression, timezone, enabled) VALUES ($1, $2, $3, $4, $5)',
+    [T(req), name.trim(), cron_expression.trim(), (timezone || 'Asia/Kolkata').trim(), enabled !== false],
   );
   await reloadSchedules();
   res.json({ ok: true });
 }));
 
-apiRouter.put('/schedules/:id', wrap(async (req, res) => {
+apiRouter.put('/schedules/:id', requireOwner, wrap(async (req, res) => {
   const { name, cron_expression, timezone, enabled } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
   if (!cron.validate(cron_expression || '')) return res.status(400).json({ error: 'invalid cron expression' });
   await query(
-    'UPDATE schedules SET name = $1, cron_expression = $2, timezone = $3, enabled = $4 WHERE id = $5',
-    [name.trim(), cron_expression.trim(), (timezone || 'Asia/Kolkata').trim(), enabled !== false, Number(req.params.id)],
+    'UPDATE schedules SET name = $1, cron_expression = $2, timezone = $3, enabled = $4 WHERE id = $5 AND tenant_id = $6',
+    [name.trim(), cron_expression.trim(), (timezone || 'Asia/Kolkata').trim(), enabled !== false, Number(req.params.id), T(req)],
   );
   await reloadSchedules();
   res.json({ ok: true });
 }));
 
-// Stop / resume a schedule.
-apiRouter.post('/schedules/:id/toggle', wrap(async (req, res) => {
-  await query('UPDATE schedules SET enabled = $1 WHERE id = $2',
-    [req.body.enabled !== false, Number(req.params.id)]);
+apiRouter.post('/schedules/:id/toggle', requireOwner, wrap(async (req, res) => {
+  await query('UPDATE schedules SET enabled = $1 WHERE id = $2 AND tenant_id = $3',
+    [req.body.enabled !== false, Number(req.params.id), T(req)]);
   await reloadSchedules();
   res.json({ ok: true });
 }));
 
-apiRouter.delete('/schedules/:id', wrap(async (req, res) => {
-  await query('DELETE FROM schedules WHERE id = $1', [Number(req.params.id)]);
+apiRouter.delete('/schedules/:id', requireOwner, wrap(async (req, res) => {
+  await query('DELETE FROM schedules WHERE id = $1 AND tenant_id = $2', [Number(req.params.id), T(req)]);
   await reloadSchedules();
   res.json({ ok: true });
 }));
 
 // ---------- edit an uploaded video's YouTube title/description ----------
 
-async function channelForRecording(id) {
-  const { rows: [rec] } = await query('SELECT * FROM processed_recordings WHERE id = $1', [id]);
+async function channelForRecording(id, tid) {
+  const { rows: [rec] } = await query(
+    'SELECT * FROM processed_recordings WHERE id = $1 AND tenant_id = $2', [id, tid],
+  );
   if (!rec) throw Object.assign(new Error('recording not found'), { status: 404 });
   if (!rec.youtube_video_id) throw Object.assign(new Error('this recording has no YouTube video yet'), { status: 400 });
-  const channel = await getChannelById(rec.channel_id);
+  const channel = await getChannelById(rec.channel_id, tid);
   if (!channel?.refresh_token) throw Object.assign(new Error('the recording\'s YouTube channel is not connected'), { status: 400 });
   return { rec, channel };
 }
 
 apiRouter.get('/recordings/:id/youtube', wrap(async (req, res) => {
-  const { rec, channel } = await channelForRecording(Number(req.params.id));
+  const { rec, channel } = await channelForRecording(Number(req.params.id), T(req));
   const snippet = await getVideoSnippet(channel, rec.youtube_video_id);
   res.json({ title: snippet.title, description: snippet.description, url: rec.youtube_url });
 }));
 
-apiRouter.post('/recordings/:id/youtube', wrap(async (req, res) => {
-  const { rec, channel } = await channelForRecording(Number(req.params.id));
+apiRouter.post('/recordings/:id/youtube', requireOwner, wrap(async (req, res) => {
+  const { rec, channel } = await channelForRecording(Number(req.params.id), T(req));
   const title = String(req.body.title || '').trim();
   if (!title) return res.status(400).json({ error: 'title cannot be empty' });
   await updateVideoSnippet(channel, rec.youtube_video_id, { title, description: req.body.description || '' });
-  // keep the link-log title in step with the YouTube title
-  await query('UPDATE processed_recordings SET title = $1 WHERE id = $2', [title, rec.id]);
+  await query('UPDATE processed_recordings SET title = $1 WHERE id = $2 AND tenant_id = $3', [title, rec.id, T(req)]);
   res.json({ ok: true });
 }));
 
 apiRouter.get('/runs', wrap(async (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 20, 100);
-  const { rows } = await query('SELECT * FROM run_logs ORDER BY id DESC LIMIT $1', [limit]);
+  const { rows } = await query('SELECT * FROM run_logs WHERE tenant_id = $1 ORDER BY id DESC LIMIT $2', [T(req), limit]);
   res.json(rows);
 }));
 
@@ -175,22 +249,22 @@ apiRouter.get('/recordings', wrap(async (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 200, 1000);
   const q = String(req.query.q || '').trim();
   const status = String(req.query.status || '').trim();
-  const where = [];
-  const params = [];
+  const where = ['p.tenant_id = $1'];
+  const params = [T(req)];
   if (q) {
     params.push(`%${q}%`);
-    where.push(`(title ILIKE $${params.length} OR matched_tag ILIKE $${params.length})`);
+    where.push(`(p.title ILIKE $${params.length} OR p.matched_tag ILIKE $${params.length})`);
   }
   if (status) {
     params.push(status);
-    where.push(`status = $${params.length}`);
+    where.push(`p.status = $${params.length}`);
   }
   params.push(limit);
   const { rows } = await query(
     `SELECT p.*, c.label AS channel_label
      FROM processed_recordings p
      LEFT JOIN youtube_channels c ON c.id = p.channel_id
-     ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+     WHERE ${where.join(' AND ')}
      ORDER BY coalesce(p.uploaded_at, p.discovered_at) DESC
      LIMIT $${params.length}`,
     params,
@@ -198,24 +272,25 @@ apiRouter.get('/recordings', wrap(async (req, res) => {
   res.json(rows);
 }));
 
-apiRouter.post('/run-now', wrap(async (_req, res) => {
+apiRouter.post('/run-now', requireOwner, wrap(async (req, res) => {
   if (isRunning()) return res.status(409).json({ error: 'A run is already in progress.' });
-  runPipeline('manual').catch((err) => logError('manual run crashed:', err));
+  runPipeline(T(req), 'manual').catch((err) => logError('manual run crashed:', err));
   res.json({ started: true });
 }));
 
-// ---------- source videos (live listing from Zoom/Fathom) ----------
+// ---------- source videos (live listing) ----------
 
 apiRouter.get('/sources', wrap(async (req, res) => {
-  // Zoom's list endpoint caps the range at 30 days per request.
+  const tid = T(req);
   const windowDays = Math.min(Math.max(Number(req.query.days) || 30, 1), 30);
   const [zoomAccount, fathomAccount] = await Promise.all([
-    zoom.getZoomAccount(), fathom.getFathomAccount(),
+    zoom.getZoomAccount(tid), fathom.getFathomAccount(tid),
   ]);
   const { rows: dbRows } = await query(
     `SELECT source, source_id, status, youtube_url, youtube_video_id, source_deleted,
             lms_lesson_url, file_size_bytes
-     FROM processed_recordings`,
+     FROM processed_recordings WHERE tenant_id = $1`,
+    [tid],
   );
   const byKey = new Map(dbRows.map((r) => [`${r.source}:${r.source_id}`, r]));
   const result = { windowDays, zoom: null, fathom: null, errors: {} };
@@ -232,15 +307,12 @@ apiRouter.get('/sources', wrap(async (req, res) => {
           duration_minutes: m.duration ?? null,
           total_bytes: (m.recording_files || []).reduce((s, f) => s + (f.file_size || 0), 0),
           has_target_view: Boolean(zoom.pickRecordingFile(m)),
-          // A speaker view exists if either the screen+speaker composite OR the
-          // active_speaker file is present (active_speaker IS the speaker view).
           speaker_view: (() => {
             const types = (m.recording_files || []).filter((f) => f.file_type === 'MP4').map((f) => f.recording_type);
             if (types.includes('shared_screen_with_speaker_view')) return 'speaker+screen';
             if (types.includes('active_speaker')) return 'active_speaker';
             return null;
           })(),
-          // uploadable MP4 files, so the row can offer an exact-file picker
           files: zoom.listVideoFiles(m).map((f) => ({
             id: f.id,
             recording_type: f.recording_type,
@@ -248,13 +320,10 @@ apiRouter.get('/sources', wrap(async (req, res) => {
             is_default: f.recording_type === 'shared_screen_with_speaker_view',
           })),
           status: rec?.status || 'not_processed',
-          // Zoom download status = has the pipeline pulled this recording's bytes?
-          // True once file_size_bytes is recorded (download completed) or it's on YouTube.
           downloaded: Boolean(rec?.file_size_bytes) || Boolean(rec?.youtube_video_id),
           youtube_url: rec?.youtube_url || null,
           lms_lesson_url: rec?.lms_lesson_url || null,
           source_deleted: rec?.source_deleted || false,
-          // delete stays inactive until the YouTube link exists on this exact row
           can_delete: Boolean(rec?.youtube_video_id) && !rec?.source_deleted,
         };
       });
@@ -286,8 +355,6 @@ apiRouter.get('/sources', wrap(async (req, res) => {
   res.json(result);
 }));
 
-// Queue a manual per-video push (upload to a chosen channel and/or push to a
-// chosen LMS course). Jobs run sequentially in the background.
 apiRouter.post('/push', wrap(async (req, res) => {
   const { source, source_id, file_id, title, video_title, description,
     channel_id, lms_course_id, lms_module_id } = req.body;
@@ -297,6 +364,7 @@ apiRouter.post('/push', wrap(async (req, res) => {
     return res.status(400).json({ error: 'Pick a YouTube channel and/or an LMS course to push to.' });
   }
   const { job, duplicate } = enqueuePush({
+    tenantId: T(req),
     source,
     source_id: String(source_id),
     file_id: file_id ? String(file_id) : null,
@@ -310,44 +378,44 @@ apiRouter.post('/push', wrap(async (req, res) => {
   res.json({ ok: true, jobId: job.id, duplicate });
 }));
 
-apiRouter.get('/push-queue', wrap(async (_req, res) => {
-  res.json(getJobs());
+apiRouter.get('/push-queue', wrap(async (req, res) => {
+  res.json(getJobs(T(req)));
 }));
 
-// Manual Zoom delete — same safety gate as the pipeline: only rows that hold a
-// verified YouTube video id can ever be deleted at the source.
-apiRouter.post('/sources/zoom/delete', wrap(async (req, res) => {
+apiRouter.post('/sources/zoom/delete', requireOwner, wrap(async (req, res) => {
+  const tid = T(req);
   const sourceId = String(req.body.source_id || '');
   if (!sourceId) return res.status(400).json({ error: 'source_id is required' });
-  const account = await zoom.getZoomAccount();
+  const account = await zoom.getZoomAccount(tid);
   if (!account) return res.status(400).json({ error: 'Zoom is not connected.' });
 
   const { rows: [rec] } = await query(
-    `SELECT * FROM processed_recordings WHERE source = 'zoom' AND source_id = $1`, [sourceId],
+    `SELECT * FROM processed_recordings WHERE tenant_id = $1 AND source = 'zoom' AND source_id = $2`,
+    [tid, sourceId],
   );
-  const cfg = await getConfigMap();
-  const mode = cfg.zoom_delete_mode === 'trash' ? 'trash' : 'delete';
+  const settings = await getTenantSettings(tid);
+  const mode = settings.zoom_delete_mode === 'trash' ? 'trash' : 'delete';
   if (!rec || !canDeleteZoomSource(rec, mode)) {
     return res.status(400).json({
-      error: 'Blocked: this recording has no verified YouTube upload yet (or is already deleted). Run the pipeline first.',
+      error: 'Blocked: this recording has no verified YouTube upload yet (or is already deleted).',
     });
   }
   await zoom.deleteMeetingRecordings(account, sourceId, mode);
   await query(
-    `UPDATE processed_recordings SET status = 'deleted', source_deleted = true WHERE id = $1`,
-    [rec.id],
+    `UPDATE processed_recordings SET status = 'deleted', source_deleted = true WHERE id = $1`, [rec.id],
   );
-  log(`manual zoom delete (${mode}): ${rec.title}`);
+  log(`manual zoom delete (${mode}) for tenant ${tid}: ${rec.title}`);
   res.json({ ok: true, mode });
 }));
 
 // ---------- connections ----------
 
-apiRouter.get('/connections', wrap(async (_req, res) => {
-  const { rows: [z] } = await query('SELECT id, account_id, client_id, status, updated_at FROM zoom_account ORDER BY id DESC LIMIT 1');
-  const { rows: [f] } = await query('SELECT id, status, updated_at FROM fathom_account ORDER BY id DESC LIMIT 1');
-  const { rows: [l] } = await query('SELECT id, base_url, status, updated_at FROM lms_account ORDER BY id DESC LIMIT 1');
-  const channels = (await getChannels()).map((c) => ({
+apiRouter.get('/connections', wrap(async (req, res) => {
+  const tid = T(req);
+  const { rows: [z] } = await query('SELECT id, account_id, client_id, status, updated_at FROM zoom_account WHERE tenant_id = $1 ORDER BY id DESC LIMIT 1', [tid]);
+  const { rows: [f] } = await query('SELECT id, status, updated_at FROM fathom_account WHERE tenant_id = $1 ORDER BY id DESC LIMIT 1', [tid]);
+  const { rows: [l] } = await query('SELECT id, base_url, status, updated_at FROM lms_account WHERE tenant_id = $1 ORDER BY id DESC LIMIT 1', [tid]);
+  const channels = (await getChannels(tid)).map((c) => ({
     id: c.id, label: c.label, channel_id: c.channel_id, channel_handle: c.channel_handle,
     oauth_client_id: c.oauth_client_id, status: c.status, connected: Boolean(c.refresh_token),
   }));
@@ -360,21 +428,21 @@ apiRouter.get('/connections', wrap(async (_req, res) => {
   });
 }));
 
-apiRouter.post('/connections/zoom', wrap(async (req, res) => {
+apiRouter.post('/connections/zoom', requireOwner, wrap(async (req, res) => {
   const { account_id, client_id, client_secret } = req.body;
   if (!account_id || !client_id || !client_secret) {
     return res.status(400).json({ error: 'account_id, client_id and client_secret are required' });
   }
-  await query('DELETE FROM zoom_account');
+  await query('DELETE FROM zoom_account WHERE tenant_id = $1', [T(req)]);
   await query(
-    `INSERT INTO zoom_account (account_id, client_id, client_secret, status) VALUES ($1, $2, $3, 'unverified')`,
-    [account_id.trim(), client_id.trim(), encrypt(client_secret.trim())],
+    `INSERT INTO zoom_account (tenant_id, account_id, client_id, client_secret, status) VALUES ($1, $2, $3, $4, 'unverified')`,
+    [T(req), account_id.trim(), client_id.trim(), encrypt(client_secret.trim())],
   );
   res.json({ ok: true });
 }));
 
-apiRouter.post('/connections/zoom/test', wrap(async (_req, res) => {
-  const account = await zoom.getZoomAccount();
+apiRouter.post('/connections/zoom/test', requireOwner, wrap(async (req, res) => {
+  const account = await zoom.getZoomAccount(T(req));
   if (!account) return res.status(400).json({ error: 'Save Zoom credentials first.' });
   try {
     const result = await zoom.testConnection(account);
@@ -386,16 +454,16 @@ apiRouter.post('/connections/zoom/test', wrap(async (_req, res) => {
   }
 }));
 
-apiRouter.post('/connections/fathom', wrap(async (req, res) => {
+apiRouter.post('/connections/fathom', requireOwner, wrap(async (req, res) => {
   const { api_key } = req.body;
   if (!api_key) return res.status(400).json({ error: 'api_key is required' });
-  await query('DELETE FROM fathom_account');
-  await query(`INSERT INTO fathom_account (api_key, status) VALUES ($1, 'unverified')`, [encrypt(api_key.trim())]);
+  await query('DELETE FROM fathom_account WHERE tenant_id = $1', [T(req)]);
+  await query(`INSERT INTO fathom_account (tenant_id, api_key, status) VALUES ($1, $2, 'unverified')`, [T(req), encrypt(api_key.trim())]);
   res.json({ ok: true });
 }));
 
-apiRouter.post('/connections/fathom/test', wrap(async (_req, res) => {
-  const account = await fathom.getFathomAccount();
+apiRouter.post('/connections/fathom/test', requireOwner, wrap(async (req, res) => {
+  const account = await fathom.getFathomAccount(T(req));
   if (!account) return res.status(400).json({ error: 'Save a Fathom API key first.' });
   try {
     const result = await fathom.testConnection(account);
@@ -407,19 +475,19 @@ apiRouter.post('/connections/fathom/test', wrap(async (_req, res) => {
   }
 }));
 
-apiRouter.post('/connections/lms', wrap(async (req, res) => {
+apiRouter.post('/connections/lms', requireOwner, wrap(async (req, res) => {
   const { base_url, api_key } = req.body;
   if (!base_url || !api_key) return res.status(400).json({ error: 'base_url and api_key are required' });
-  await query('DELETE FROM lms_account');
+  await query('DELETE FROM lms_account WHERE tenant_id = $1', [T(req)]);
   await query(
-    `INSERT INTO lms_account (base_url, api_key, status) VALUES ($1, $2, 'unverified')`,
-    [base_url.trim().replace(/\/+$/, ''), encrypt(api_key.trim())],
+    `INSERT INTO lms_account (tenant_id, base_url, api_key, status) VALUES ($1, $2, $3, 'unverified')`,
+    [T(req), base_url.trim().replace(/\/+$/, ''), encrypt(api_key.trim())],
   );
   res.json({ ok: true });
 }));
 
-apiRouter.post('/connections/lms/test', wrap(async (_req, res) => {
-  const account = await lms.getLmsAccount();
+apiRouter.post('/connections/lms/test', requireOwner, wrap(async (req, res) => {
+  const account = await lms.getLmsAccount(T(req));
   if (!account) return res.status(400).json({ error: 'Save LMS settings first.' });
   try {
     const result = await lms.testConnection(account);
@@ -433,20 +501,20 @@ apiRouter.post('/connections/lms/test', wrap(async (_req, res) => {
 
 // ---------- YouTube channels ----------
 
-apiRouter.post('/channels', wrap(async (req, res) => {
+apiRouter.post('/channels', requireOwner, wrap(async (req, res) => {
   const { label, oauth_client_id, oauth_client_secret } = req.body;
   if (!label || !oauth_client_id || !oauth_client_secret) {
     return res.status(400).json({ error: 'label, oauth_client_id and oauth_client_secret are required' });
   }
   const { rows: [row] } = await query(
-    `INSERT INTO youtube_channels (label, oauth_client_id, oauth_client_secret)
-     VALUES ($1, $2, $3) RETURNING id`,
-    [label.trim(), oauth_client_id.trim(), encrypt(oauth_client_secret.trim())],
+    `INSERT INTO youtube_channels (tenant_id, label, oauth_client_id, oauth_client_secret)
+     VALUES ($1, $2, $3, $4) RETURNING id`,
+    [T(req), label.trim(), oauth_client_id.trim(), encrypt(oauth_client_secret.trim())],
   );
   res.json({ ok: true, id: row.id, connectUrl: `/oauth/youtube/start/${row.id}` });
 }));
 
-apiRouter.put('/channels/:id', wrap(async (req, res) => {
+apiRouter.put('/channels/:id', requireOwner, wrap(async (req, res) => {
   const id = Number(req.params.id);
   const { label, oauth_client_id, oauth_client_secret } = req.body;
   const sets = [];
@@ -455,27 +523,30 @@ apiRouter.put('/channels/:id', wrap(async (req, res) => {
   if (oauth_client_id) { params.push(oauth_client_id.trim()); sets.push(`oauth_client_id = $${params.length}`); }
   if (oauth_client_secret) { params.push(encrypt(oauth_client_secret.trim())); sets.push(`oauth_client_secret = $${params.length}`); }
   if (!sets.length) return res.status(400).json({ error: 'nothing to update' });
-  params.push(id);
-  await query(`UPDATE youtube_channels SET ${sets.join(', ')} WHERE id = $${params.length}`, params);
+  params.push(id, T(req));
+  await query(`UPDATE youtube_channels SET ${sets.join(', ')} WHERE id = $${params.length - 1} AND tenant_id = $${params.length}`, params);
   res.json({ ok: true });
 }));
 
-apiRouter.delete('/channels/:id', wrap(async (req, res) => {
+apiRouter.delete('/channels/:id', requireOwner, wrap(async (req, res) => {
   const id = Number(req.params.id);
-  const { rowCount } = await query('SELECT 1 FROM routing_rules WHERE channel_id = $1 LIMIT 1', [id]);
+  const tid = T(req);
+  const { rowCount } = await query('SELECT 1 FROM routing_rules WHERE channel_id = $1 AND tenant_id = $2 LIMIT 1', [id, tid]);
   if (rowCount) return res.status(409).json({ error: 'Channel is used by routing rules — delete or repoint those first.' });
-  await query('UPDATE processed_recordings SET channel_id = NULL WHERE channel_id = $1', [id]);
-  await query('DELETE FROM youtube_channels WHERE id = $1', [id]);
+  await query('UPDATE processed_recordings SET channel_id = NULL WHERE channel_id = $1 AND tenant_id = $2', [id, tid]);
+  await query('DELETE FROM youtube_channels WHERE id = $1 AND tenant_id = $2', [id, tid]);
   res.json({ ok: true });
 }));
 
 // ---------- routing rules ----------
 
-apiRouter.get('/rules', wrap(async (_req, res) => {
+apiRouter.get('/rules', wrap(async (req, res) => {
   const { rows } = await query(
     `SELECT r.*, c.label AS channel_label, c.channel_handle
      FROM routing_rules r LEFT JOIN youtube_channels c ON c.id = r.channel_id
+     WHERE r.tenant_id = $1
      ORDER BY r.priority, r.id`,
+    [T(req)],
   );
   res.json(rows);
 }));
@@ -508,49 +579,49 @@ function ruleValues(body) {
   };
 }
 
-apiRouter.post('/rules', wrap(async (req, res) => {
+apiRouter.post('/rules', requireOwner, wrap(async (req, res) => {
   const { errors, values } = ruleValues(req.body);
   if (errors.length) return res.status(400).json({ error: errors.join('; ') });
-  const cols = RULE_FIELDS.join(', ');
-  const placeholders = RULE_FIELDS.map((_, i) => `$${i + 1}`).join(', ');
+  const cols = ['tenant_id', ...RULE_FIELDS].join(', ');
+  const placeholders = ['tenant_id', ...RULE_FIELDS].map((_, i) => `$${i + 1}`).join(', ');
   const { rows: [row] } = await query(
     `INSERT INTO routing_rules (${cols}) VALUES (${placeholders}) RETURNING id`,
-    RULE_FIELDS.map((f) => values[f]),
+    [T(req), ...RULE_FIELDS.map((f) => values[f])],
   );
   res.json({ ok: true, id: row.id });
 }));
 
-apiRouter.put('/rules/:id', wrap(async (req, res) => {
+apiRouter.put('/rules/:id', requireOwner, wrap(async (req, res) => {
   const { errors, values } = ruleValues(req.body);
   if (errors.length) return res.status(400).json({ error: errors.join('; ') });
   const sets = RULE_FIELDS.map((f, i) => `${f} = $${i + 1}`).join(', ');
   await query(
-    `UPDATE routing_rules SET ${sets} WHERE id = $${RULE_FIELDS.length + 1}`,
-    [...RULE_FIELDS.map((f) => values[f]), Number(req.params.id)],
+    `UPDATE routing_rules SET ${sets} WHERE id = $${RULE_FIELDS.length + 1} AND tenant_id = $${RULE_FIELDS.length + 2}`,
+    [...RULE_FIELDS.map((f) => values[f]), Number(req.params.id), T(req)],
   );
   res.json({ ok: true });
 }));
 
-apiRouter.delete('/rules/:id', wrap(async (req, res) => {
-  await query('DELETE FROM routing_rules WHERE id = $1', [Number(req.params.id)]);
+apiRouter.delete('/rules/:id', requireOwner, wrap(async (req, res) => {
+  await query('DELETE FROM routing_rules WHERE id = $1 AND tenant_id = $2', [Number(req.params.id), T(req)]);
   res.json({ ok: true });
 }));
 
-// ---------- settings ----------
+// ---------- settings (per-tenant) ----------
 
-// Cron/timezone moved to the Schedules page; these are the remaining settings.
 const SETTING_KEYS = ['rolling_window_days', 'zoom_delete_mode', 'email_to', 'email_from'];
 
-apiRouter.get('/settings', wrap(async (_req, res) => {
-  const cfg = await getConfigMap();
+apiRouter.get('/settings', wrap(async (req, res) => {
+  const s = await getTenantSettings(T(req));
   res.json({
-    ...Object.fromEntries(SETTING_KEYS.map((k) => [k, cfg[k] ?? ''])),
-    gmail_app_password_set: Boolean(cfg.gmail_app_password),
+    ...Object.fromEntries(SETTING_KEYS.map((k) => [k, s[k] ?? ''])),
+    gmail_app_password_set: Boolean(s.gmail_app_password),
   });
 }));
 
-apiRouter.post('/settings', wrap(async (req, res) => {
+apiRouter.post('/settings', requireOwner, wrap(async (req, res) => {
   const body = req.body;
+  const tid = T(req);
   if (body.zoom_delete_mode && !['off', 'trash', 'delete'].includes(body.zoom_delete_mode)) {
     return res.status(400).json({ error: 'zoom_delete_mode must be off, trash or delete.' });
   }
@@ -558,20 +629,44 @@ apiRouter.post('/settings', wrap(async (req, res) => {
     return res.status(400).json({ error: 'rolling_window_days must be >= 1.' });
   }
   for (const key of SETTING_KEYS) {
-    if (body[key] !== undefined) await setConfigValue(key, String(body[key]).trim());
+    if (body[key] !== undefined) await setTenantSetting(tid, key, String(body[key]).trim());
   }
   if (body.gmail_app_password) {
-    await setConfigValue('gmail_app_password', encrypt(String(body.gmail_app_password).trim()));
+    await setTenantSetting(tid, 'gmail_app_password', encrypt(String(body.gmail_app_password).trim()));
   }
   res.json({ ok: true });
 }));
 
-apiRouter.post('/settings/account', wrap(async (req, res) => {
-  const result = await updateAccount(req.user, req.body.current_password, {
-    newEmail: req.body.new_email?.trim() || null,
-    newPassword: req.body.new_password || null,
+// ---------- staff (tenant owner provisions staff) ----------
+
+apiRouter.get('/staff', requireOwner, wrap(async (req, res) => {
+  res.json(await listTenantUsers(T(req)));
+}));
+
+apiRouter.post('/staff', requireOwner, wrap(async (req, res) => {
+  const result = await createStaff(T(req), {
+    email: req.body.email, name: req.body.name, permission: req.body.permission,
   });
   if (!result.ok) return res.status(400).json({ error: result.error });
-  setSessionCookie(res, result.email); // keep the session valid under the new email
-  res.json({ ok: true, email: result.email });
+  res.json({ ok: true, id: result.id });
+}));
+
+apiRouter.put('/staff/:id', requireOwner, wrap(async (req, res) => {
+  const result = await updateStaff(T(req), Number(req.params.id), {
+    name: req.body.name, permission: req.body.permission,
+  });
+  if (!result.ok) return res.status(400).json({ error: result.error });
+  res.json({ ok: true });
+}));
+
+apiRouter.post('/staff/:id/reset', requireOwner, wrap(async (req, res) => {
+  const result = await resetStaffPassword(T(req), Number(req.params.id));
+  if (!result.ok) return res.status(400).json({ error: result.error });
+  res.json({ ok: true });
+}));
+
+apiRouter.delete('/staff/:id', requireOwner, wrap(async (req, res) => {
+  const result = await deleteStaff(T(req), Number(req.params.id));
+  if (!result.ok) return res.status(400).json({ error: result.error });
+  res.json({ ok: true });
 }));

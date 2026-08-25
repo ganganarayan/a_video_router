@@ -2,7 +2,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import cookieParser from 'cookie-parser';
-import { requirePageAuth, login, setSessionCookie, clearSessionCookie, resetPassword, resetEnabled } from './auth.js';
+import {
+  requirePageAuth, requireSessionOnly, authenticate, setOwnPassword,
+  setSessionCookie, clearSessionCookie, resetPassword, resetEnabled,
+  resolveTenant, requireTenant, requireSuperAdmin,
+} from './auth.js';
 import { apiRouter } from './routes/api.js';
 import { oauthRouter } from './routes/oauth.js';
 import { dbadminRouter } from './routes/dbadmin.js';
@@ -26,11 +30,24 @@ export function createServer() {
   app.get('/login', (_req, res) => res.render('login', { error: null, resetEnabled: resetEnabled() }));
   app.post('/login', async (req, res) => {
     const { email, password } = req.body;
-    if (await login(email, password)) {
-      setSessionCookie(res, String(email).toLowerCase());
-      return res.redirect('/runs');
+    const result = await authenticate(email, password);
+    if (result.ok) {
+      setSessionCookie(res, result.email);
+      return res.redirect(result.mustSetPassword ? '/set-password' : '/');
     }
     res.status(401).render('login', { error: 'Invalid email or password.', resetEnabled: resetEnabled() });
+  });
+
+  // First-login / forced password set. Requires a valid session; tolerant of the
+  // must-change flag (that's exactly who lands here).
+  app.get('/set-password', requireSessionOnly, (req, res) =>
+    res.render('set-password', { error: null, email: req.user.email }));
+  app.post('/set-password', requireSessionOnly, async (req, res) => {
+    const result = await setOwnPassword(req.user.email, req.body.new_password);
+    if (!result.ok) {
+      return res.status(400).render('set-password', { error: result.error, email: req.user.email });
+    }
+    res.redirect('/runs');
   });
 
   app.get('/reset', (_req, res) => res.render('reset', { error: null, ok: null, enabled: resetEnabled() }));
@@ -47,10 +64,19 @@ export function createServer() {
     res.redirect('/login');
   });
 
-  app.get('/', (_req, res) => res.redirect('/runs'));
-  const pages = { connections: 'Connections', routing: 'Routing', runs: 'Runs', sources: 'Sources', logs: 'Logs', schedules: 'Schedules', settings: 'Settings' };
+  app.get('/', requirePageAuth, resolveTenant, (req, res) => {
+    if (req.user.isSuperAdmin && !req.tenantId) return res.redirect('/admin');
+    res.redirect('/runs');
+  });
+
+  // Super-admin console: all tenants + impersonation.
+  app.get('/admin', requirePageAuth, resolveTenant, requireSuperAdmin,
+    (req, res) => res.render('admin', { page: 'admin', title: 'Admin', user: req.user }));
+
+  const pages = { connections: 'Connections', routing: 'Routing', runs: 'Runs', sources: 'Sources', logs: 'Logs', schedules: 'Schedules', team: 'Team', settings: 'Settings' };
   for (const [route, title] of Object.entries(pages)) {
-    app.get(`/${route}`, requirePageAuth, (_req, res) => res.render(route, { page: route, title }));
+    app.get(`/${route}`, requirePageAuth, resolveTenant, requireTenant,
+      (req, res) => res.render(route, { page: route, title, user: req.user }));
   }
 
   app.use('/api', apiRouter);

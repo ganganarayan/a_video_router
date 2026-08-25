@@ -14,12 +14,14 @@ const jobs = [];
 export function enqueuePush(payload) {
   const duplicate = jobs.find(
     (j) => (j.status === 'queued' || j.status === 'processing') &&
+      j.tenantId === payload.tenantId &&
       j.source === payload.source && j.source_id === payload.source_id,
   );
   if (duplicate) return { job: duplicate, duplicate: true };
 
   const job = {
     id: ++seq,
+    tenantId: payload.tenantId,
     source: payload.source,
     source_id: payload.source_id,
     file_id: payload.file_id || null,
@@ -42,8 +44,9 @@ export function enqueuePush(payload) {
   return { job, duplicate: false };
 }
 
-export function getJobs() {
-  return [...jobs].reverse();
+export function getJobs(tenantId) {
+  const list = tenantId != null ? jobs.filter((j) => j.tenantId === tenantId) : jobs;
+  return [...list].reverse();
 }
 
 export function hasActiveJobs() {

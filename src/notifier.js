@@ -1,5 +1,5 @@
 import nodemailer from 'nodemailer';
-import { getConfigMap } from './db.js';
+import { getTenantSettings } from './db.js';
 import { decryptWithKey } from './lib/crypto.js';
 import { config } from './config.js';
 import { log } from './lib/logger.js';
@@ -26,9 +26,9 @@ export function buildSummaryText(counts, details) {
   return parts.join('\n\n');
 }
 
-// Always sends when email is configured — including the "No new recordings" case.
-export async function sendRunSummary(runType, counts, details) {
-  const cfg = await getConfigMap();
+// Always sends when the tenant's email is configured — including "No new recordings".
+export async function sendRunSummary(tenantId, runType, counts, details) {
+  const cfg = await getTenantSettings(tenantId);
   const to = cfg.email_to;
   const from = cfg.email_from;
   const appPassword = decryptWithKey(config.encryptionKey, cfg.gmail_app_password || '');

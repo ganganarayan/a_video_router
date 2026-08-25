@@ -1,0 +1,81 @@
+<%- include('partials/head') %>
+<h1>Team</h1>
+<p class="muted">Add staff to your workspace. Staff sign in with their email (no password the
+first time — they set one on first login). <b>View</b> = read-only; <b>Edit</b> = can push and
+edit, but cannot manage staff, connections, billing or delete.</p>
+
+<div class="card">
+  <h2>Add staff</h2>
+  <div class="row">
+    <div class="field"><label>Name</label><input id="s-name" placeholder="Staff name"></div>
+    <div class="field"><label>Email</label><input id="s-email" type="email" placeholder="staff@example.com"></div>
+    <div class="field"><label>Permission</label>
+      <select id="s-perm"><option value="view">View (read-only)</option><option value="edit">Edit</option></select></div>
+    <button class="primary" id="s-add">Add staff</button>
+  </div>
+</div>
+
+<div class="card table-wrap">
+  <table id="team-table">
+    <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Password</th><th>Last login</th><th></th></tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<script>
+async function load() {
+  const rows = await api('/staff');
+  document.querySelector('#team-table tbody').innerHTML = rows.map(u => {
+    const isOwner = u.staff_permission === null;
+    const pwState = u.must_change_password ? '<span class="badge warn">not set</span>' : '<span class="badge ok">set</span>';
+    return `
+    <tr>
+      <td>${esc(u.name)}</td>
+      <td class="mono">${esc(u.email)}</td>
+      <td>${isOwner ? '<span class="badge">owner</span>'
+        : `<select onchange="setPerm(${u.id}, this.value)">
+             <option value="view"${u.staff_permission === 'view' ? ' selected' : ''}>View</option>
+             <option value="edit"${u.staff_permission === 'edit' ? ' selected' : ''}>Edit</option>
+           </select>`}</td>
+      <td>${pwState}</td>
+      <td class="nowrap">${u.last_login_at ? fmtDate(u.last_login_at) : '—'}</td>
+      <td class="row">
+        ${isOwner ? '<span class="muted">—</span>' : `
+          <button onclick="resetPw(${u.id})">Reset password</button>
+          <button class="danger" onclick="removeStaff(${u.id})">Remove</button>`}
+      </td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="6" class="muted">No users yet.</td></tr>';
+}
+
+document.getElementById('s-add').onclick = async () => {
+  try {
+    await api('/staff', { method: 'POST', body: {
+      name: document.getElementById('s-name').value,
+      email: document.getElementById('s-email').value,
+      permission: document.getElementById('s-perm').value,
+    }});
+    toast('Staff added — they can log in with their email (no password the first time).');
+    ['s-name', 's-email'].forEach(id => document.getElementById(id).value = '');
+    load();
+  } catch (e) { toast(e.message, 'err'); }
+};
+
+async function setPerm(id, permission) {
+  try { await api('/staff/' + id, { method: 'PUT', body: { permission } }); toast('Permission updated'); }
+  catch (e) { toast(e.message, 'err'); load(); }
+}
+async function resetPw(id) {
+  if (!confirm('Reset this staff member\'s password? They will log in with their email (no password) and set a new one.')) return;
+  try { await api('/staff/' + id + '/reset', { method: 'POST' }); toast('Password reset — passwordless first login enabled'); load(); }
+  catch (e) { toast(e.message, 'err'); }
+}
+async function removeStaff(id) {
+  if (!confirm('Remove this staff member? They lose access immediately.')) return;
+  try { await api('/staff/' + id, { method: 'DELETE' }); toast('Staff removed'); load(); }
+  catch (e) { toast(e.message, 'err'); }
+}
+
+load().catch(e => toast(e.message, 'err'));
+</script>
+<%- include('partials/foot') %>
