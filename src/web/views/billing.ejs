@@ -1,92 +1,122 @@
 <%- include('partials/head') %>
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <h1>Billing</h1>
-<p class="muted">Each video push costs <b>₹50</b> (files over 1&nbsp;GB count as 2 units).
-Your first upload (up to 1&nbsp;GB) is free. Top up your wallet below — an upload in
-progress always finishes even if the balance runs out; the shortfall is settled on your
-next top-up. GST invoices are issued separately.</p>
+<p class="muted">Pay as you go — <b>₹50 per video</b> (up to 1&nbsp;GB each; a file over 1&nbsp;GB
+counts as 2). Your first upload is free. Buy credits in packs of 10 videos; an upload already
+in progress always finishes even if credits run out, and the shortfall is settled on your next
+top-up. GST invoices are issued separately.</p>
 
 <div class="card" id="wallet-card">
-  <div class="row" style="align-items:baseline; gap:2rem">
+  <div class="row" style="align-items:baseline; gap:2rem; justify-content:space-between">
     <div>
       <div class="muted">Wallet balance</div>
       <div id="balance" style="font-size:2rem; font-weight:700">—</div>
+      <div id="balance-videos" class="muted"></div>
     </div>
-    <div id="wallet-badges"></div>
-  </div>
-</div>
-
-<div class="card" id="topup-card">
-  <h2>Add money</h2>
-  <div class="row" style="align-items:flex-end">
-    <div class="field">
-      <label>Amount (₹) — wallet credit</label>
-      <input id="topup-base" type="number" min="500" step="100" value="500">
+    <div style="text-align:right">
+      <div id="wallet-badges" style="margin-bottom:8px"></div>
+      <button class="primary" id="open-topup">Buy video credits</button>
+      <div id="topup-note" class="muted" style="margin-top:6px"></div>
     </div>
-    <button class="primary" id="topup-btn">Pay &amp; add to wallet</button>
   </div>
-  <div id="breakdown" class="muted" style="margin-top:.6rem"></div>
-  <div id="topup-note" class="muted"></div>
 </div>
 
 <div class="card table-wrap">
   <h2>Transactions</h2>
   <table id="txn-table">
-    <thead><tr><th>When</th><th>Type</th><th>Amount</th><th>Balance</th><th>Details</th></tr></thead>
+    <thead><tr><th>When</th><th>Type</th><th>Videos</th><th>Amount</th><th>Balance</th></tr></thead>
     <tbody></tbody>
   </table>
+</div>
+
+<!-- Pay-as-you-go modal -->
+<div class="modal-backdrop" id="topup-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>Pay as you go</h2>
+      <button class="modal-close" id="close-topup" aria-label="Close">×</button>
+    </div>
+    <p class="muted" style="margin:0 0 8px">₹50 per video · buy in packs of 10. Choose a pack:</p>
+    <div id="pack-list"></div>
+    <p class="muted" style="margin-top:12px; font-size:12px">
+      Each amount includes 18% GST and a 2.5% payment-gateway fee on (credit + GST).
+      Your wallet is credited the video-credit amount only.</p>
+  </div>
 </div>
 
 <script>
 const fmtRs = (paise) => '₹' + (Number(paise) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 let CFG = null;
 
+// Mirror of the server's topupBreakdown (rounded to whole paise).
+function packMath(videos) {
+  const base = videos * CFG.pricePerUnitPaise;
+  const gst = Math.round(base * CFG.gstPercent / 100);
+  const fee = Math.round((base + gst) * CFG.gatewayPercent / 100);
+  return { base, gst, fee, total: base + gst + fee };
+}
+
 async function loadWallet() {
   CFG = await api('/billing');
+  const perVideo = CFG.pricePerUnitPaise;
   const b = document.getElementById('balance');
   b.textContent = fmtRs(CFG.balance_paise);
-  b.style.color = CFG.balance_paise < 0 ? 'var(--err, #c0392b)' : '';
+  b.style.color = CFG.balance_paise < 0 ? 'var(--err)' : '';
+
+  const vids = document.getElementById('balance-videos');
+  if (CFG.unlimited) vids.textContent = 'Unmetered — uploads are not charged.';
+  else if (CFG.balance_paise > 0) vids.textContent = '≈ ' + Math.floor(CFG.balance_paise / perVideo) + ' videos of credit';
+  else if (CFG.balance_paise < 0) vids.textContent = 'Negative — buy credits to keep pushing.';
+  else vids.textContent = CFG.free_upload_used ? 'No credits — buy a pack to push.' : '';
+
   const badges = [];
   if (CFG.unlimited) badges.push('<span class="badge ok">unlimited (unmetered)</span>');
   if (!CFG.free_upload_used) badges.push('<span class="badge">1 free upload available</span>');
-  if (CFG.balance_paise < 0) badges.push('<span class="badge warn">negative — top up to continue</span>');
+  if (CFG.balance_paise < 0) badges.push('<span class="badge warn">negative balance</span>');
   document.getElementById('wallet-badges').innerHTML = badges.join(' ');
 
-  document.getElementById('topup-base').min = CFG.minTopupPaise / 100;
-  document.getElementById('topup-base').value = CFG.minTopupPaise / 100;
   const note = document.getElementById('topup-note');
+  const btn = document.getElementById('open-topup');
   if (!CFG.razorpayConfigured) {
-    note.innerHTML = '<span class="badge warn">Payments not enabled yet</span> Ask the platform admin to add Razorpay keys.';
-    document.getElementById('topup-btn').disabled = true;
-  } else { note.textContent = ''; document.getElementById('topup-btn').disabled = false; }
-  refreshBreakdown();
+    note.innerHTML = '<span class="badge warn">Payments not enabled yet</span>';
+    btn.disabled = true;
+  } else { note.textContent = ''; btn.disabled = false; }
 }
 
-async function refreshBreakdown() {
-  const base = Math.round(Number(document.getElementById('topup-base').value) * 100);
-  const el = document.getElementById('breakdown');
-  if (!base || base <= 0) { el.textContent = ''; return; }
-  try {
-    const q = await api('/billing/quote?base_paise=' + base);
-    el.innerHTML = `Wallet credit ${fmtRs(q.base)} + GST (${CFG.gstPercent}%) ${fmtRs(q.gst)} `
-      + `+ gateway (${CFG.gatewayPercent}%) ${fmtRs(q.fee)} = <b>you pay ${fmtRs(q.total)}</b>`;
-  } catch (e) { el.innerHTML = '<span class="badge warn">' + esc(e.message) + '</span>'; }
+function buildPacks() {
+  const perPack = Math.max(1, Math.round(CFG.minTopupPaise / CFG.pricePerUnitPaise)); // = 10 videos
+  const counts = [1, 2, 3, 4, 5, 10].map((n) => n * perPack); // 10,20,30,40,50,100
+  document.getElementById('pack-list').innerHTML = counts.map((videos) => {
+    const m = packMath(videos);
+    return `<button class="pack" onclick="buy(${videos})">
+      <span class="videos">${videos} videos<small>up to 1 GB each</small></span>
+      <span class="amt">
+        <span class="total">${fmtRs(m.total)}</span>
+        <span class="brk">${fmtRs(m.base)} credit + ${fmtRs(m.gst)} GST + ${fmtRs(m.fee)} fee</span>
+      </span>
+    </button>`;
+  }).join('');
 }
-document.getElementById('topup-base').addEventListener('input', refreshBreakdown);
 
-document.getElementById('topup-btn').onclick = async () => {
-  const base = Math.round(Number(document.getElementById('topup-base').value) * 100);
+const modal = document.getElementById('topup-modal');
+document.getElementById('open-topup').onclick = () => { buildPacks(); modal.classList.add('open'); };
+document.getElementById('close-topup').onclick = () => modal.classList.remove('open');
+modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('open'); });
+
+async function buy(videos) {
+  const base = videos * CFG.pricePerUnitPaise;
   let order;
   try {
     order = await api('/billing/topup', { method: 'POST', body: { base_paise: base } });
   } catch (e) { toast(e.message, 'err'); return; }
+  modal.classList.remove('open');
   const rzp = new Razorpay({
     key: order.keyId,
     order_id: order.orderId,
     amount: order.amount,
     currency: 'INR',
     name: 'VideoRouter',
-    description: 'Wallet top-up (credit ' + fmtRs(order.breakdown.base) + ')',
+    description: videos + ' video credits (' + fmtRs(order.breakdown.base) + ')',
     handler: async (resp) => {
       try {
         await api('/billing/confirm', { method: 'POST', body: {
@@ -94,7 +124,7 @@ document.getElementById('topup-btn').onclick = async () => {
           payment_id: resp.razorpay_payment_id,
           signature: resp.razorpay_signature,
         }});
-        toast('Payment received — wallet updated.');
+        toast(videos + ' video credits added.');
         loadWallet(); loadTxns();
       } catch (e) { toast('Paid, but confirmation failed: ' + e.message + ' (it will reconcile via webhook).', 'err'); }
     },
@@ -102,25 +132,28 @@ document.getElementById('topup-btn').onclick = async () => {
   });
   rzp.on('payment.failed', (r) => toast('Payment failed: ' + (r.error?.description || 'unknown'), 'err'));
   rzp.open();
-};
+}
 
 async function loadTxns() {
   const rows = await api('/billing/history');
   document.querySelector('#txn-table tbody').innerHTML = rows.map(t => {
     const amt = Number(t.amount_paise);
     const cls = amt >= 0 ? 'ok' : 'err';
-    const detail = t.units ? `${t.units} unit(s)` : (t.note || '');
+    const vids = t.type === 'topup' && CFG ? Math.round(Number(t.amount_paise) / CFG.pricePerUnitPaise)
+      : (t.units ? t.units : '');
     return `<tr>
       <td class="nowrap">${fmtDate(t.created_at)}</td>
       <td><span class="badge ${t.type === 'topup' ? 'ok' : (t.type === 'deduction' ? 'warn' : '')}">${esc(t.type)}</span></td>
+      <td>${vids !== '' ? vids : '—'}</td>
       <td class="mono ${cls}">${amt >= 0 ? '+' : ''}${fmtRs(amt)}</td>
       <td class="mono">${fmtRs(t.balance_after_paise)}</td>
-      <td class="muted">${esc(detail)}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="5" class="muted">No transactions yet.</td></tr>';
 }
 
-loadWallet().catch(e => toast(e.message, 'err'));
-loadTxns().catch(e => toast(e.message, 'err'));
+(async () => {
+  try { await loadWallet(); await loadTxns(); }
+  catch (e) { toast(e.message, 'err'); }
+})();
 </script>
 <%- include('partials/foot') %>
