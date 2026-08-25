@@ -81,6 +81,9 @@ apiRouter.post('/impersonate/stop', requireSuperAdmin, wrap(async (_req, res) =>
 apiRouter.get('/admin/billing/config', requireSuperAdmin, wrap(async (_req, res) => {
   const c = await billing.getBillingConfig();
   res.json({
+    provider: c.provider,
+    providers: billing.PROVIDERS,
+    liveProviders: billing.LIVE_PROVIDERS,
     configured: Boolean(c.razorpayKeyId && c.razorpayKeySecret),
     hasWebhookSecret: Boolean(c.razorpayWebhookSecret),
     keyId: c.razorpayKeyId || '',
@@ -90,6 +93,14 @@ apiRouter.get('/admin/billing/config', requireSuperAdmin, wrap(async (_req, res)
     gatewayPercent: c.gatewayPercent,
     minTopupPaise: c.minTopupPaise,
   });
+}));
+
+// Choose the active gateway (razorpay live; easebuzz/phonepe pending adapters).
+apiRouter.post('/admin/billing/provider', requireSuperAdmin, wrap(async (req, res) => {
+  try {
+    await billing.setPaymentProvider(req.body.provider);
+    res.json({ ok: true });
+  } catch (err) { res.status(400).json({ error: err.message }); }
 }));
 
 // Set/rotate Razorpay keys (stored encrypted in app_config; no redeploy needed).
@@ -725,6 +736,9 @@ apiRouter.delete('/staff/:id', requireOwner, wrap(async (req, res) => {
 apiRouter.get('/billing', wrap(async (req, res) => {
   const w = await billing.getWallet(T(req));
   const c = await billing.getBillingConfig();
+  const razorpayReady = Boolean(c.razorpayKeyId && c.razorpayKeySecret);
+  const paymentsEnabled = billing.LIVE_PROVIDERS.includes(c.provider)
+    && (c.provider !== 'razorpay' || razorpayReady);
   res.json({
     balance_paise: Number(w?.balance_paise || 0),
     unlimited: Boolean(w?.unlimited),
@@ -734,7 +748,9 @@ apiRouter.get('/billing', wrap(async (req, res) => {
     gstPercent: c.gstPercent,
     gatewayPercent: c.gatewayPercent,
     minTopupPaise: c.minTopupPaise,
-    razorpayConfigured: Boolean(c.razorpayKeyId && c.razorpayKeySecret),
+    provider: c.provider,
+    paymentsEnabled,
+    razorpayConfigured: razorpayReady,
   });
 }));
 

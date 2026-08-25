@@ -104,7 +104,7 @@ async function loadWallet() {
 
   const note = document.getElementById('topup-note');
   const btn = document.getElementById('open-topup');
-  if (!CFG.razorpayConfigured) {
+  if (!CFG.paymentsEnabled) {
     note.innerHTML = '<span class="badge warn">Payments not enabled yet</span>';
     btn.disabled = true;
   } else { note.textContent = ''; btn.disabled = false; }
@@ -169,6 +169,8 @@ async function buy(videos) {
     order = await api('/billing/topup', { method: 'POST', body: { base_paise: base } });
   } catch (e) { toast(e.message, 'err'); return; }
   modal.classList.remove('open');
+  // Hosted-redirect gateways (Easebuzz/PhonePe) send the browser to their page.
+  if (order.mode === 'redirect' && order.redirectUrl) { window.location.href = order.redirectUrl; return; }
   const rzp = new Razorpay({
     key: order.keyId,
     order_id: order.orderId,

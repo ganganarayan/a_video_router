@@ -5,9 +5,16 @@ import { createOrder, verifyPaymentSignature, verifyWebhookSignature } from './p
 
 // ---------- config (global platform-level, in app_config) ----------
 
+export const PROVIDERS = ['razorpay', 'easebuzz', 'phonepe'];
+// Providers with a working adapter today. Easebuzz/PhonePe schema + credential
+// storage exist now; their adapters land when those accounts activate.
+export const LIVE_PROVIDERS = ['razorpay'];
+
 export async function getBillingConfig() {
   const c = await getConfigMap();
+  const provider = PROVIDERS.includes(c.payment_provider) ? c.payment_provider : 'razorpay';
   return {
+    provider,
     pricePerUnitPaise: Number(c.price_per_unit_paise) || 5000,   // ₹50
     unitBytes: Number(c.unit_bytes) || 1073741824,               // 1 GiB
     gstPercent: Number(c.gst_percent) || 18,
@@ -17,6 +24,11 @@ export async function getBillingConfig() {
     razorpayKeySecret: decrypt(c.razorpay_key_secret || '') || '',
     razorpayWebhookSecret: decrypt(c.razorpay_webhook_secret || '') || '',
   };
+}
+
+export async function setPaymentProvider(provider) {
+  if (!PROVIDERS.includes(provider)) throw new Error('Unknown payment provider.');
+  await setConfigValue('payment_provider', provider);
 }
 
 export async function saveRazorpayKeys({ keyId, keySecret, webhookSecret }) {
@@ -123,19 +135,29 @@ export async function createTopup(tenantId, basePaise) {
     const packVideos = Math.round(cfg.minTopupPaise / cfg.pricePerUnitPaise);
     throw new Error(`Top-up must be in multiples of ${packVideos} videos (₹${cfg.minTopupPaise / 100}).`);
   }
-  if (!cfg.razorpayKeyId || !cfg.razorpayKeySecret) throw new Error('Razorpay is not configured yet.');
   const bd = topupBreakdown(base, cfg);
-  const order = await createOrder(
-    { keyId: cfg.razorpayKeyId, keySecret: cfg.razorpayKeySecret },
-    bd.total,
-    { tenant_id: String(tenantId), base_paise: String(base) },
-  );
-  await query(
-    `INSERT INTO payments (tenant_id, razorpay_order_id, base_paise, gst_paise, fee_paise, total_paise, status, notes)
-     VALUES ($1, $2, $3, $4, $5, $6, 'created', $7)`,
-    [tenantId, order.id, bd.base, bd.gst, bd.fee, bd.total, JSON.stringify(order.notes || {})],
-  );
-  return { orderId: order.id, amount: bd.total, keyId: cfg.razorpayKeyId, breakdown: bd };
+  const merchantTxnId = `vr_${tenantId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+  if (cfg.provider === 'razorpay') {
+    if (!cfg.razorpayKeyId || !cfg.razorpayKeySecret) throw new Error('Razorpay is not configured yet.');
+    const order = await createOrder(
+      { keyId: cfg.razorpayKeyId, keySecret: cfg.razorpayKeySecret },
+      bd.total,
+      { tenant_id: String(tenantId), base_paise: String(base), merchant_txn_id: merchantTxnId },
+    );
+    await query(
+      `INSERT INTO payments (tenant_id, provider, merchant_txn_id, provider_order_id, razorpay_order_id,
+                             base_paise, gst_paise, fee_paise, total_paise, status, notes)
+       VALUES ($1, 'razorpay', $2, $3, $3, $4, $5, $6, $7, 'created', $8)`,
+      [tenantId, merchantTxnId, order.id, bd.base, bd.gst, bd.fee, bd.total, JSON.stringify(order.notes || {})],
+    );
+    // mode 'modal' -> Razorpay Checkout opens in-page (see billing.ejs)
+    return { mode: 'modal', provider: 'razorpay', orderId: order.id, amount: bd.total, keyId: cfg.razorpayKeyId, breakdown: bd };
+  }
+
+  // Easebuzz / PhonePe: schema + credential storage exist; the hosted-redirect
+  // adapters land when those accounts activate.
+  throw new Error(`The ${cfg.provider} gateway isn't enabled yet — switch the active gateway to Razorpay on the Admin page.`);
 }
 
 // Credit the wallet for a paid order (idempotent). Called from webhook + checkout callback.
@@ -144,13 +166,13 @@ async function creditPaidOrder(orderId, paymentId) {
   try {
     await client.query('BEGIN');
     const { rows } = await client.query(
-      "SELECT * FROM payments WHERE razorpay_order_id = $1 FOR UPDATE", [orderId],
+      "SELECT * FROM payments WHERE provider_order_id = $1 FOR UPDATE", [orderId],
     );
     const p = rows[0];
     if (!p) { await client.query('ROLLBACK'); return { ok: false, reason: 'unknown order' }; }
     if (p.status === 'paid') { await client.query('ROLLBACK'); return { ok: true, already: true }; }
     await client.query(
-      "UPDATE payments SET status = 'paid', razorpay_payment_id = $1, updated_at = now() WHERE id = $2",
+      "UPDATE payments SET status = 'paid', provider_payment_id = $1, razorpay_payment_id = $1, updated_at = now() WHERE id = $2",
       [paymentId || null, p.id],
     );
     const { rows: wr } = await client.query('SELECT balance_paise FROM wallets WHERE tenant_id = $1 FOR UPDATE', [p.tenant_id]);

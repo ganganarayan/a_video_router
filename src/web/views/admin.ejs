@@ -3,9 +3,16 @@
 <p class="muted">All tenant workspaces. Impersonate one to work inside it exactly as its admin sees it.</p>
 
 <div class="card" id="rzp-card">
-  <h2>Platform payments (Razorpay)</h2>
-  <p class="muted">Your single platform Razorpay account collects all tenant top-ups. Keys are
-  stored encrypted — no redeploy needed. Set the webhook to
+  <h2>Platform payments</h2>
+  <div class="field" style="max-width:300px">
+    <label>Active gateway</label>
+    <select id="pay-provider"></select>
+  </div>
+  <div id="provider-note" class="muted" style="margin:6px 0 14px"></div>
+
+  <h3 style="margin:0 0 6px">Razorpay</h3>
+  <p class="muted">Your platform Razorpay account collects tenant top-ups. Keys are stored
+  encrypted — no redeploy needed. Set the webhook to
   <span class="mono" id="webhook-url">…/api/billing/webhook</span> (event <span class="mono">payment.captured</span>).</p>
   <div id="rzp-status" class="muted"></div>
   <div class="row" style="align-items:flex-end; flex-wrap:wrap">
@@ -33,10 +40,28 @@ function rupees(paise) {
   return '₹' + (Number(paise) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+const PROVIDER_LABELS = { razorpay: 'Razorpay', easebuzz: 'Easebuzz', phonepe: 'PhonePe' };
+
 async function loadConfig() {
   document.getElementById('webhook-url').textContent = location.origin + '/api/billing/webhook';
   try {
     const c = await api('/admin/billing/config');
+
+    const sel = document.getElementById('pay-provider');
+    sel.innerHTML = (c.providers || ['razorpay']).map((p) => {
+      const live = (c.liveProviders || []).includes(p);
+      return `<option value="${p}"${p === c.provider ? ' selected' : ''}>`
+        + `${PROVIDER_LABELS[p] || p}${live ? '' : ' (activation pending)'}</option>`;
+    }).join('');
+    const note = document.getElementById('provider-note');
+    if (!(c.liveProviders || []).includes(c.provider)) {
+      note.innerHTML = `<span class="badge warn">${PROVIDER_LABELS[c.provider] || c.provider} adapter not built yet</span> `
+        + 'tenant top-ups will fail until you switch back to Razorpay.';
+    } else {
+      note.innerHTML = `Tenants pay through <b>${PROVIDER_LABELS[c.provider] || c.provider}</b>. `
+        + 'Easebuzz and PhonePe are wired into the schema and will be enabled once those accounts activate.';
+    }
+
     document.getElementById('rzp-keyid').value = c.keyId || '';
     document.getElementById('rzp-status').innerHTML = (c.configured
       ? '<span class="badge ok">Razorpay connected</span>'
@@ -46,6 +71,14 @@ async function loadConfig() {
       + `GST ${c.gstPercent}% · gateway ${c.gatewayPercent}% · min top-up ${rupees(c.minTopupPaise)}`;
   } catch (e) { document.getElementById('rzp-status').textContent = e.message; }
 }
+
+document.getElementById('pay-provider').onchange = async (e) => {
+  try {
+    await api('/admin/billing/provider', { method: 'POST', body: { provider: e.target.value } });
+    toast('Active gateway set to ' + (PROVIDER_LABELS[e.target.value] || e.target.value));
+    loadConfig();
+  } catch (err) { toast(err.message, 'err'); loadConfig(); }
+};
 
 document.getElementById('rzp-save').onclick = async () => {
   try {
