@@ -115,14 +115,15 @@ export function topupBreakdown(baseP, cfg) {
 
 export async function createTopup(tenantId, basePaise) {
   const cfg = await getBillingConfig();
-  if (!cfg.razorpayKeyId || !cfg.razorpayKeySecret) throw new Error('Razorpay is not configured yet.');
   const base = Math.round(Number(basePaise));
-  // Sold in whole "packs" of videos (the minimum = one pack). This keeps top-ups
-  // to multiples of 10 videos — never odd counts like 11–19.
+  // Validate the amount before touching the gateway. Sold in whole "packs" of
+  // videos (the minimum = one pack), keeping top-ups to multiples of 10 videos —
+  // never odd counts like 11–19.
   if (base < cfg.minTopupPaise || base % cfg.minTopupPaise !== 0) {
     const packVideos = Math.round(cfg.minTopupPaise / cfg.pricePerUnitPaise);
     throw new Error(`Top-up must be in multiples of ${packVideos} videos (₹${cfg.minTopupPaise / 100}).`);
   }
+  if (!cfg.razorpayKeyId || !cfg.razorpayKeySecret) throw new Error('Razorpay is not configured yet.');
   const bd = topupBreakdown(base, cfg);
   const order = await createOrder(
     { keyId: cfg.razorpayKeyId, keySecret: cfg.razorpayKeySecret },
