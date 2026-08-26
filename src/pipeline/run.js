@@ -13,7 +13,7 @@ import {
 import { lock, unlock, isLocked, recordingKey } from './locks.js';
 import { ProgressTracker } from './progress.js';
 import { sendRunSummary } from '../notifier.js';
-import { deductForUpload } from '../billing.js';
+import { deductForUpload, canPush } from '../billing.js';
 
 let running = false;
 export const isRunning = () => running;
@@ -101,6 +101,21 @@ async function postUploadSteps(ctx, rec, rule, details) {
 // --- the download → upload core, shared by both sources ---
 
 async function downloadUploadFinish(ctx, rec, rule, downloadFn, counts, details, progress = null) {
+  // PAYMENT LOCK — enforced here at the single upload chokepoint, so manual pushes,
+  // scheduled runs and the retry sweep are all gated identically. Checked BEFORE any
+  // bytes move, so no in-flight upload is ever aborted: the one upload that takes the
+  // balance to/below zero already passed this check and finishes; every further
+  // recording is held here until the wallet is topped up. Free first upload and
+  // "unlimited" tenants pass through (see canPush). The row's status is left untouched
+  // so it resumes automatically on the next run once credits are added.
+  const gate = await canPush(ctx.tenantId);
+  if (!gate.allowed) {
+    log(`payment lock: holding rec ${rec.id} (tenant ${ctx.tenantId}) — ${gate.reason}`);
+    counts.skipped++;
+    details.skipped.push({ title: rec.title, source: rec.source, reason: gate.reason });
+    return;
+  }
+
   // The verified download is kept at cachePath and only deleted after a
   // successful YouTube upload — so a failed upload never forces a re-download.
   const cachePath = cacheFilePath(rec.id);
