@@ -6,7 +6,7 @@
 // 'finish' so tracking can never delay or break a page.
 import crypto from 'node:crypto';
 import { query } from '../db.js';
-import { logError } from './lib/logger.js';
+import { logError } from '../lib/logger.js';
 
 const VID_COOKIE = 'vr_vid';
 const VID_MAXAGE = 2 * 365 * 24 * 3600 * 1000; // 2 years
