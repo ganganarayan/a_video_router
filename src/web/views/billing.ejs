@@ -1,11 +1,11 @@
 <%- include('partials/head') %>
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <h1>Billing</h1>
-<p class="muted">Pay as you go — <b>₹50 per video</b> (up to 1&nbsp;GB each; a file over 1&nbsp;GB
-counts as 2). Your first upload is free. Buy credits in multiples of 10 videos; an upload already
-in progress always finishes even if credits run out, and the shortfall is settled on your next
-top-up. Add your GSTIN (in <a href="/settings">Settings</a> or the top-up popup) to get a GST
-invoice in your business name; we also email an invoice for every transaction.</p>
+<p class="muted">Pay as you go — <b>₹50 per unit of transfer</b> (one unit = up to 1&nbsp;GB per
+file; a file over 1&nbsp;GB counts as 2 units). Your first upload is free. Buy credits in multiples
+of 10; an upload already in progress always finishes even if credits run out, and the shortfall is
+settled on your next top-up. If you have a GST number and want a GST invoice (to claim input credit),
+add your GST details in <a href="/settings">Settings</a> or the top-up popup.</p>
 
 <div class="card" id="wallet-card">
   <div class="row" style="align-items:baseline; gap:2rem; justify-content:space-between">
@@ -25,7 +25,7 @@ invoice in your business name; we also email an invoice for every transaction.</
 <div class="card table-wrap">
   <h2>Transactions</h2>
   <table id="txn-table">
-    <thead><tr><th>When</th><th>Type</th><th>Videos</th><th>Amount</th><th>Balance</th></tr></thead>
+    <thead><tr><th>When</th><th>Type</th><th>Units</th><th>Amount</th><th>Balance</th></tr></thead>
     <tbody></tbody>
   </table>
 </div>
@@ -41,11 +41,11 @@ invoice in your business name; we also email an invoice for every transaction.</
       <label for="modal-gstin">GSTIN <span class="muted">(optional — for a GST invoice)</span></label>
       <input id="modal-gstin" maxlength="15" placeholder="15-character GSTIN" style="text-transform:uppercase; width:100%">
     </div>
-    <p class="muted" style="margin:0 0 8px">₹50 per video · buy in multiples of 10. Choose a pack:</p>
+    <p class="muted" style="margin:0 0 8px">₹50 per unit of transfer · buy in multiples of 10. Choose a pack:</p>
     <div id="pack-list"></div>
 
     <div style="margin-top:16px; border-top:1px solid var(--line); padding-top:14px">
-      <label for="cust-videos">Or enter number of videos <span class="muted">(multiples of 10)</span></label>
+      <label for="cust-videos">Or enter number of units <span class="muted">(multiples of 10)</span></label>
       <div class="row" style="align-items:stretch; margin-top:4px">
         <input id="cust-videos" type="number" min="10" step="10" placeholder="e.g. 40" style="flex:1 1 auto">
         <button class="primary" id="cust-pay">Pay</button>
@@ -77,10 +77,10 @@ function validateVideos(raw) {
   const step = packSize();
   const n = Number(raw);
   if (raw === '' || raw == null || !Number.isFinite(n) || n <= 0) {
-    return { ok: false, message: `Enter a number of videos (multiples of ${step}).` };
+    return { ok: false, message: `Enter a number of units (multiples of ${step}).` };
   }
   if (!Number.isInteger(n)) return { ok: false, message: `Whole numbers only, in multiples of ${step}.` };
-  if (n < step) return { ok: false, message: `Minimum ${step} videos.` };
+  if (n < step) return { ok: false, message: `Minimum ${step} units.` };
   if (n % step !== 0) {
     const lo = Math.max(step, Math.floor(n / step) * step), hi = Math.ceil(n / step) * step;
     return { ok: false, message: `Only multiples of ${step} allowed — try ${lo} or ${hi}.` };
@@ -97,7 +97,7 @@ async function loadWallet() {
 
   const vids = document.getElementById('balance-videos');
   if (CFG.unlimited) vids.textContent = 'Unmetered — uploads are not charged.';
-  else if (CFG.balance_paise > 0) vids.textContent = '≈ ' + Math.floor(CFG.balance_paise / perVideo) + ' videos of credit';
+  else if (CFG.balance_paise > 0) vids.textContent = '≈ ' + Math.floor(CFG.balance_paise / perVideo) + ' units of credit';
   else if (CFG.balance_paise < 0) vids.textContent = 'Negative — buy credits to keep pushing.';
   else vids.textContent = CFG.free_upload_used ? 'No credits — buy a pack to push.' : '';
 
@@ -121,7 +121,7 @@ function buildPacks() {
   document.getElementById('pack-list').innerHTML = counts.map((videos) => {
     const m = packMath(videos);
     return `<button class="pack" onclick="buy(${videos})">
-      <span class="videos">${videos} videos<small>up to 1 GB each</small></span>
+      <span class="videos">${videos} units<small>1 unit = up to 1 GB</small></span>
       <span class="amt">
         <span class="total">${fmtRs(m.total)}</span>
         <span class="brk">${fmtRs(m.base)} credit + ${fmtRs(m.gst)} GST + ${fmtRs(m.fee)} fee</span>
@@ -137,7 +137,7 @@ function refreshCustom() {
   if (r.ok) {
     const m = packMath(r.videos);
     calc.className = 'muted';
-    calc.innerHTML = `<b>${r.videos} videos = ${fmtRs(m.total)}</b><br>`
+    calc.innerHTML = `<b>${r.videos} units = ${fmtRs(m.total)}</b><br>`
       + `${fmtRs(m.base)} credit + ${fmtRs(m.gst)} GST + ${fmtRs(m.fee)} fee`;
   } else {
     calc.innerHTML = `<span class="badge warn">${esc(r.message)}</span>`;
@@ -162,7 +162,7 @@ document.getElementById('cust-pay').onclick = () => {
   const r = validateVideos(document.getElementById('cust-videos').value);
   if (!r.ok) {
     refreshCustom();
-    toast('In multiples of 10 videos allowed', 'warn');
+    toast('In multiples of 10 units allowed', 'warn');
     return;
   }
   buy(r.videos);
@@ -184,7 +184,7 @@ async function buy(videos) {
     amount: order.amount,
     currency: 'INR',
     name: 'AVideoRouter',
-    description: videos + ' video credits (' + fmtRs(order.breakdown.base) + ')',
+    description: videos + ' units of credit (' + fmtRs(order.breakdown.base) + ')',
     // Prefill the customer email so Razorpay can email the payment receipt / GST invoice.
     prefill: { email: (order.prefill && order.prefill.email) || CFG.email || '', name: (order.prefill && order.prefill.name) || '' },
     handler: async (resp) => {
@@ -194,7 +194,7 @@ async function buy(videos) {
           payment_id: resp.razorpay_payment_id,
           signature: resp.razorpay_signature,
         }});
-        toast(videos + ' video credits added.');
+        toast(videos + ' units of credit added.');
         loadWallet(); loadTxns();
       } catch (e) { toast('Paid, but confirmation failed: ' + e.message + ' (it will reconcile via webhook).', 'err'); }
     },
