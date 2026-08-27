@@ -82,7 +82,7 @@ Rolling window (default 3 days), **manual delete method** (`trash` / `delete` â€
 
 | Branch | Railway service | Command |
 |---|---|---|
-| `master` (production) | `videorouter` | `npm run deploy:prod` |
+| `main` (production) | `videorouter` | `npm run deploy:prod` |
 | `orbitq` (staging) | `videorouter-staging` | `npm run deploy:staging` |
 
 The deploy scripts refuse to run from the wrong branch or with uncommitted changes

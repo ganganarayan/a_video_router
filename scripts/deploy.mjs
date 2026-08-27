@@ -1,11 +1,11 @@
 // Branch-guarded Railway deploys:
-//   npm run deploy:prod     -> service "videorouter"          only from branch master
+//   npm run deploy:prod     -> service "videorouter"          only from branch main
 //   npm run deploy:staging  -> service "videorouter-staging"  only from branch orbitq
 // `railway up` ships the working directory, so the guard also refuses dirty trees.
 import { execSync, spawnSync } from 'node:child_process';
 
 const TARGETS = {
-  prod: { branch: 'master', service: 'videorouter' },
+  prod: { branch: 'main', service: 'videorouter' },
   staging: { branch: 'orbitq', service: 'videorouter-staging' },
 };
 

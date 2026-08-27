@@ -12,7 +12,7 @@ A multi-tenant SaaS that **automatically routes recordings from Zoom & Fathom â†
 ## Tech stack & deployment
 - Node 22 (ESM), Express, raw `pg` (no ORM), EJS server-rendered views, bcryptjs, JWT cookie sessions.
 - Hosted on **Railway** (Docker, `node:22-slim` + ffmpeg). Postgres on Railway.
-- Two environments: **prod** (`videorouter`, branch `master`) and **staging** (`videorouter-staging`, branch `orbitq`), deployed via `npm run deploy:prod` / `deploy:staging` (guarded scripts refuse wrong branch / dirty tree).
+- Two environments: **prod** (`videorouter`, branch `main`) and **staging** (`videorouter-staging`, branch `orbitq`), deployed via `npm run deploy:prod` / `deploy:staging` (guarded scripts refuse wrong branch / dirty tree).
 - Self-service DB backup/restore via `/dbadmin/export` + `/dbadmin/import` (Hobby plan has no managed backups), gated by `PASSWORD_RESET_KEY`.
 
 ---
