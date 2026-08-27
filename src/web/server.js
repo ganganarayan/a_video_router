@@ -89,7 +89,11 @@ export function createServer() {
       const user = await getOptionalUser(req);
       if (user) return res.redirect(user.isSuperAdmin ? '/admin' : '/runs');
       const videoUrl = (await getConfigValue('landing_video_url')) || '';
-      res.render('landing', { videoUrl });
+      // Pricing is rendered from the live billing config so the landing and the
+      // in-app top-up modal always show the same numbers (one source of truth).
+      const cfg = await billing.getBillingConfig();
+      const packs = billing.PACK_PRESETS.map((u) => billing.packQuote(u, cfg));
+      res.render('landing', { videoUrl, packs, alwaysOnPricePaise: cfg.alwaysOnPricePaise });
     } catch (err) { next(err); }
   });
 

@@ -100,6 +100,10 @@
     .price ul{list-style:none;padding:0;margin:20px 0;text-align:left;display:inline-block}
     .price li{padding:7px 0;color:var(--text)}
     .price li::before{content:"✓";color:var(--ok);font-weight:800;margin-right:10px}
+    .price-row{display:flex;gap:22px;justify-content:center;flex-wrap:wrap;align-items:stretch}
+    .price-row .price{margin:0;flex:1 1 340px;max-width:420px;text-align:left}
+    .price-row .price .amt{text-align:left}
+    .price small{color:var(--muted)}
 
     .faq{max-width:760px;margin:0 auto}
     .faq details{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 20px;margin-bottom:12px}
@@ -120,14 +124,15 @@
   <div class="wrap">
     <!-- HERO -->
     <div class="hero">
-      <h1>Your Zoom &amp; Fathom recordings,<br><span class="hl">auto-published</span> to YouTube and your LMS</h1>
-      <p class="sub">Stop downloading, re-uploading, renaming and filing recordings by hand.
-        Connect once, set your rules, and every session lands on the right channel and course — hands-free.</p>
+      <h1>Your Zoom &amp; Fathom recordings — auto-published to YouTube <span class="hl">and into your course</span></h1>
+      <p class="sub">Most tools stop at YouTube. AVideoRouter also files every recording into the right
+        LMS course and module, then clears it off Zoom. Connect once, set your rules, and it runs —
+        on a schedule or one click.</p>
       <div class="cta-row">
         <a class="btn primary big" href="/login">Start free — first upload's on us</a>
         <a class="btn big" href="#how">See how it works</a>
       </div>
-      <div class="tiny">No subscription · Pay as you go · GST invoice provided</div>
+      <div class="tiny">Start free · Pay as you go · GST invoice provided</div>
     </div>
 
     <!-- HERO VIDEO (URL pulled live from settings) -->
@@ -142,9 +147,10 @@
     <div class="speed">
       <div><div class="num">~90 sec</div><div class="muted">for a full 1&nbsp;GB video</div></div>
       <div style="text-align:left">
-        <b>Blazing transfers.</b><br>
-        <span class="muted">≈ 60 seconds to download from the source, ≈ 30 seconds to upload to YouTube.
-        A day's recordings are done before your coffee is.</span>
+        <b>Built for 2–4&nbsp;GB class recordings.</b><br>
+        <span class="muted">≈ 60 seconds to download from the source, ≈ 30 seconds to upload. And because we
+        <b>stream</b> the whole file — instead of handing a URL to YouTube — the big recordings that break
+        other tools go through cleanly.</span>
       </div>
     </div>
   </div>
@@ -153,10 +159,15 @@
   <section>
     <div class="wrap">
       <h2>The after-class grind, gone</h2>
-      <p class="lead">If you teach live, you know the drill after every session: download the recording,
-        wait; upload to YouTube and set the title and privacy; add it to the right course and module;
-        then clear it off Zoom before storage fills. Fifteen to thirty minutes of babysitting — every single recording.
-        VideoRouter does all of it for you.</p>
+      <p class="lead">Every recording is 10–20 minutes of the same busywork: download and wait; upload to
+        YouTube and set the title and privacy; file it into the right course and module; then clear it off
+        Zoom before storage fills. Thirty recordings a month is <b>8–10 hours</b> of it. AVideoRouter does
+        the whole chain for you.</p>
+      <div class="speed" style="margin-top:28px">
+        <span class="muted" style="text-align:left">Unlike general automation tools, AVideoRouter is built for exactly this job:
+          it <b>streams large files</b> without choking, and it routes into your <b>LMS course</b> — not just YouTube.
+          No scenario-building, no subscription to start, priced in ₹ with a GST invoice.</span>
+      </div>
     </div>
   </section>
 
@@ -167,11 +178,11 @@
       <p class="lead">Set it up once. Then it just runs.</p>
       <div class="steps">
         <div class="step"><div class="n">1</div><h3>Connect</h3>
-          <p>Link your Zoom and Fathom recordings, your YouTube channel(s), and your LMS. One-time, secure.</p></div>
+          <p>Link Zoom &amp; Fathom, your YouTube channel(s), and your LMS. One-time, secure.</p></div>
         <div class="step"><div class="n">2</div><h3>Set rules</h3>
-          <p>Map which recordings go to which channel, course and module — with your title and privacy defaults.</p></div>
+          <p>Map each recording to its channel, course and module — with your title and privacy defaults.</p></div>
         <div class="step"><div class="n">3</div><h3>Relax</h3>
-          <p>On a schedule or one click, every new recording is routed end-to-end — and logged in your dashboard.</p></div>
+          <p>On a schedule or one click, every recording is routed end-to-end and logged.</p></div>
       </div>
     </div>
   </section>
@@ -181,18 +192,18 @@
     <div class="wrap">
       <h2>Everything you need to publish at scale</h2>
       <div class="grid">
+        <div class="feat"><div class="ic">🎯</div><h3>YouTube <em>and</em> your LMS course</h3>
+          <p>The difference: publish to YouTube and file straight into the right LMS course and module. Most tools stop at YouTube.</p></div>
         <div class="feat"><div class="ic">🎥</div><h3>Zoom &amp; Fathom sources</h3>
-          <p>Pull recordings from Zoom and Fathom automatically — no manual downloads.</p></div>
-        <div class="feat"><div class="ic">📺</div><h3>YouTube &amp; LMS destinations</h3>
-          <p>Publish straight to your YouTube channels and push into your course platform via its API.</p></div>
-        <div class="feat"><div class="ic">⏱️</div><h3>Schedule &amp; forget</h3>
-          <p>Regular sessions? Run on a daily schedule and watch every step in the dashboard logs.</p></div>
-        <div class="feat"><div class="ic">👥</div><h3>Staff &amp; permissions</h3>
-          <p>Add team members with view or edit access. So simple, anyone on your team can run it — even your kid.</p></div>
+          <p>Recordings are pulled from Zoom and Fathom automatically — no manual downloads.</p></div>
+        <div class="feat"><div class="ic">⚡</div><h3>Built for big files</h3>
+          <p>We stream the whole file, so 2–4&nbsp;GB class recordings upload cleanly where URL-passing tools fail.</p></div>
         <div class="feat"><div class="ic">🧹</div><h3>Delete from Zoom, right here</h3>
           <p>Clear published recordings off Zoom from the dashboard — without ever signing in to Zoom.</p></div>
-        <div class="feat"><div class="ic">⚡</div><h3>Seriously fast</h3>
-          <p>A full 1&nbsp;GB video moves in about 90 seconds. Your whole day's recordings, minutes.</p></div>
+        <div class="feat"><div class="ic">⏱️</div><h3>Daily scheduler <small class="muted">· Always-On</small></h3>
+          <p>Regular sessions? Run batches on a daily schedule, hands-free, and watch every step in the logs.</p></div>
+        <div class="feat"><div class="ic">👥</div><h3>Team seats <small class="muted">· Always-On</small></h3>
+          <p>Add your team with view or edit access — so simple anyone can run it.</p></div>
       </div>
     </div>
   </section>
@@ -200,18 +211,33 @@
   <!-- PRICING -->
   <section id="pricing">
     <div class="wrap">
-      <h2>Simple, pay-as-you-go pricing</h2>
-      <p class="lead">No subscription, no lock-in. Buy video credits when you need them.</p>
-      <div class="price">
-        <div class="amt">₹50 <small>/ unit of transfer</small></div>
-        <ul>
-          <li>First upload free — try it at zero cost</li>
-          <li>1 unit = up to 1&nbsp;GB per file (over 1&nbsp;GB = 2 units)</li>
-          <li>Buy credits in simple packs of 10</li>
-          <li>GST invoice on request — just add your GSTIN</li>
-          <li>Add staff at no extra cost</li>
-        </ul>
-        <div><a class="btn primary big" href="/login">Start free</a></div>
+      <h2>Simple pricing. Two ways to pay.</h2>
+      <p class="lead">Start pay-as-you-go. Go Always-On when you're running regular batches.</p>
+      <div class="price-row">
+        <div class="price">
+          <div class="amt">From ₹50 <small>/ unit</small></div>
+          <p class="muted" style="margin:.3rem 0 6px">Pay as you go · first upload free</p>
+          <ul>
+            <% packs.forEach(function (p) { %>
+            <li><b><%= p.units %> units</b> — ₹<%= (p.base / 100).toLocaleString('en-IN') %>
+              <span class="muted">(₹<%= Math.round(p.ratePerUnitPaise / 100) %>/unit<%= p.bonusPaise > 0 ? ' — bigger pack, lower rate' : '' %>)</span></li>
+            <% }); %>
+            <li>1 unit = up to 1&nbsp;GB per file (over 1&nbsp;GB = 2 units)</li>
+            <li>GST invoice on request — just add your GSTIN</li>
+          </ul>
+          <div><a class="btn primary big" href="/login">Start free</a></div>
+        </div>
+        <div class="price">
+          <div class="amt">₹<%= (alwaysOnPricePaise / 100).toLocaleString('en-IN') %> <small>/ month</small></div>
+          <p class="muted" style="margin:.3rem 0 6px">Always-On · for regular batches</p>
+          <ul>
+            <li>Unlocks the daily scheduler</li>
+            <li>Unlimited staff seats (view / edit)</li>
+            <li>Transfers stay pay-as-you-go on top</li>
+            <li>Cancel anytime — access runs to period end</li>
+          </ul>
+          <div><a class="btn big" href="/login">Get Always-On</a></div>
+        </div>
       </div>
     </div>
   </section>
@@ -226,10 +252,14 @@
           an LMS that exposes an API. You connect them once in the dashboard.</p></details>
         <details><summary>Do I have to keep the tab open?</summary>
           <p>No. Set a schedule and VideoRouter routes new recordings on its own. You can also push any recording manually with one click.</p></details>
+        <details><summary>Can it publish into my course platform / LMS?</summary>
+          <p>Yes — that's the point. Set a rule and each recording is filed into the right LMS course and module automatically, in addition to YouTube. Your LMS needs a video-ingest API.</p></details>
+        <details><summary>Does it work if my recordings are 2–4&nbsp;GB?</summary>
+          <p>Yes. We stream the full file to YouTube and your LMS, so large 2–4&nbsp;GB class recordings go through cleanly — where tools that just pass a URL tend to fail.</p></details>
         <details><summary>Can my team help run it?</summary>
-          <p>Yes. Add staff with view or edit permissions. It's designed to be simple enough for anyone to operate.</p></details>
+          <p>Yes, with an Always-On subscription — add staff with view or edit permissions. It's designed to be simple enough for anyone to operate.</p></details>
         <details><summary>How is it priced?</summary>
-          <p>Pay as you go at ₹50 per unit of transfer (one unit = up to 1&nbsp;GB per file; larger files count as two units). Your first upload is free, and you top up in packs of 10. Add your GSTIN if you need a GST invoice.</p></details>
+          <p>Pay as you go from ₹50 per unit of transfer (one unit = up to 1&nbsp;GB per file; larger files count as two units), dropping to ₹45 and ₹40 on bigger packs. Your first upload is free. Add your GSTIN for a GST invoice. Optional Always-On (₹999/month) unlocks the daily scheduler and unlimited staff seats; transfers stay pay-as-you-go on top.</p></details>
       </div>
     </div>
   </section>
@@ -238,7 +268,8 @@
   <section class="final">
     <div class="wrap">
       <h2>Publish your next recording in minutes</h2>
-      <p class="lead">Connect your accounts and let VideoRouter handle the rest.</p>
+      <p class="lead">From Zoom to YouTube <b>and into your course</b> — automatically, even at 4&nbsp;GB.
+        No subscription to start. GST invoice. Done before your coffee.</p>
       <a class="btn primary big" href="/login">Start free — first upload's on us</a>
       <p style="margin-top:16px"><a href="/knowledge-base" style="color:var(--accent);font-weight:600">Browse the Knowledge Base →</a>
         <span style="color:var(--muted)"> — see exactly how VideoRouter removes the busywork after every live session.</span></p>
