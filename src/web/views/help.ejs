@@ -1,0 +1,166 @@
+<%- include('partials/head') %>
+<h1>Help &amp; Knowledge Base</h1>
+<p class="muted">How-to guides for every part of AVideoRouter. Search below, or open a
+category. Can't find an answer? Ask your workspace owner, or your AVideoRouter contact.</p>
+
+<div class="card">
+  <div class="field">
+    <label>Search help</label>
+    <input id="kb-search" type="search" placeholder="Search e.g. Zoom, schedule, wallet, permissions…" autocomplete="off">
+  </div>
+  <p class="muted" id="kb-count" style="margin:.4rem 0 0"></p>
+</div>
+
+<div id="kb-list"></div>
+<p class="muted" id="kb-empty" style="display:none">No articles match your search.</p>
+
+<style>
+  .kb-cat { margin: 1.1rem 0 .3rem; font-size: 1.05rem; }
+  .kb-art { border:1px solid var(--border,#2a2a2a); border-radius:8px; margin:.45rem 0; overflow:hidden; }
+  .kb-art > summary { cursor:pointer; padding:.7rem .9rem; font-weight:600; list-style:none; }
+  .kb-art > summary::-webkit-details-marker { display:none; }
+  .kb-art > summary::before { content:'▸'; color:var(--accent); margin-right:.55rem; display:inline-block; transition:transform .12s; }
+  .kb-art[open] > summary::before { transform:rotate(90deg); }
+  .kb-art .kb-body { padding:0 .9rem .8rem 1.8rem; }
+  .kb-art .kb-body p { margin:.5rem 0; }
+  .kb-art .kb-body ol, .kb-art .kb-body ul { margin:.5rem 0; padding-left:1.2rem; }
+  .kb-art .kb-body li { margin:.25rem 0; }
+  mark { background:var(--accent); color:#000; border-radius:2px; padding:0 1px; }
+</style>
+
+<script>
+// Phase 1 Help/KB — content-driven, no backend. Keep articles accurate to shipped features.
+const KB = [
+  { cat: 'Getting started', q: 'What does AVideoRouter do?',
+    a: `<p>AVideoRouter automatically moves your meeting and webinar recordings from a
+        <b>source</b> (Zoom or Fathom) to your <b>destinations</b> (YouTube and/or your LMS),
+        on a schedule you control. It downloads the recording, uploads it, logs the result,
+        and can delete the original from Zoom afterwards — all without you signing into Zoom
+        or YouTube each time.</p>` },
+  { cat: 'Getting started', q: 'What is the typical setup order?',
+    a: `<ol>
+          <li><b>Connections</b> — connect Zoom / Fathom (sources) and YouTube / LMS (destinations).</li>
+          <li><b>Routing</b> — choose which source goes to which destination.</li>
+          <li><b>Schedules</b> — set when automatic pulls run (or run manually from Sources).</li>
+          <li><b>Runs / Logs</b> — watch transfers and check results.</li>
+        </ol>` },
+
+  { cat: 'Connections', q: 'How do I connect Zoom as a source?',
+    a: `<p>Go to <b>Connections</b> and connect your Zoom account. Once connected, AVideoRouter
+        can list your cloud recordings on the <b>Sources</b> page. You never have to sign into
+        Zoom again for day-to-day transfers.</p>` },
+  { cat: 'Connections', q: 'How do I connect Fathom as a source?',
+    a: `<p>On <b>Connections</b>, add your Fathom account. Fathom recordings then appear alongside
+        Zoom recordings as available sources for routing and manual push.</p>` },
+  { cat: 'Connections', q: 'How do I connect a YouTube channel?',
+    a: `<p>On <b>Connections</b>, connect YouTube and authorise the Google account that owns the
+        channel. You can connect more than one channel. Uploads use the channel's stored
+        authorisation, so you don't re-sign-in for each upload.</p>` },
+  { cat: 'Connections', q: 'How do I connect my LMS?',
+    a: `<p>On <b>Connections</b>, save your LMS account details. Recordings routed to the LMS are
+        pushed via the LMS video-ingest API. If your LMS isn't fully live yet, rows stay in a
+        <span class="badge">pending</span> state and back-fill automatically once the account is
+        active — no re-work needed.</p>` },
+
+  { cat: 'Routing', q: 'How does routing work?',
+    a: `<p>On the <b>Routing</b> page you connect each source to one or more destinations. For
+        example: Zoom → YouTube + LMS. When a recording is pulled, AVideoRouter sends it to
+        every destination in that route.</p>` },
+
+  { cat: 'Sources & manual push', q: 'How do I push a single recording right now?',
+    a: `<p>Open <b>Sources</b>, find the recording, and use its <b>Push</b> button. This routes
+        that one file immediately using its configured destinations — handy when you don't want
+        to wait for the next scheduled run.</p>` },
+  { cat: 'Sources & manual push', q: 'Can I set a YouTube title and description before upload?',
+    a: `<p>Yes. On <b>Sources</b> you can set the title and description before pushing, and you can
+        edit a YouTube video's title/description later from the <b>Logs</b> link for that video.</p>` },
+  { cat: 'Sources & manual push', q: 'How do I delete a recording from Zoom?',
+    a: `<p>Deletion is <b>manual only</b> — AVideoRouter never auto-deletes. On <b>Sources</b>, the
+        <b>Delete from Zoom</b> button becomes available only after the recording has a YouTube
+        video ID (i.e. it's safely uploaded). You do this from the dashboard, without signing
+        into Zoom.</p>` },
+
+  { cat: 'Schedules', q: 'How do automatic pulls work?',
+    a: `<p>On <b>Schedules</b> you create one or more schedules (add / edit / stop / resume /
+        delete). Each runs on its own time. When a schedule fires, it pulls new recordings and
+        routes them automatically. If no schedule is active, nothing runs automatically — use
+        manual push instead.</p>` },
+  { cat: 'Schedules', q: 'Automatic runs stopped — how do I re-enable them?',
+    a: `<p>Go to <b>Schedules</b> and <b>Resume</b> a stopped schedule (or add a new one). Schedules
+        can be paused at any time without losing their configuration.</p>` },
+
+  { cat: 'Runs & logs', q: 'Where do I see transfer progress?',
+    a: `<p><b>Runs</b> shows live transfer telemetry — speed, ETA, progress and a log — while a push
+        is in flight. As a rule of thumb, roughly 1&nbsp;GB moves in about 90&nbsp;seconds.</p>` },
+  { cat: 'Runs & logs', q: 'A row says "Skipped — wallet empty". What does that mean?',
+    a: `<p>The upload was held because your wallet had no video credits left. Top up on
+        <b>Billing</b> and the held rows resume automatically on the next run — nothing is lost.</p>` },
+
+  { cat: 'Billing & wallet', q: 'How does billing work?',
+    a: `<p>AVideoRouter is pay-as-you-go. Each uploaded video draws one credit from your wallet.
+        You buy credits in <b>video packs</b> on the <b>Billing</b> page. Your balance is shown in
+        both ₹ and an approximate number of videos.</p>` },
+  { cat: 'Billing & wallet', q: 'How do I buy video credits?',
+    a: `<p>On <b>Billing</b>, click <b>Buy video credits</b>. Credits are sold in multiples of 10
+        (10 / 20 / 30 presets, or a custom whole multiple of 10, minimum 10). Prices shown
+        include GST and gateway fees; the wallet is credited the base amount.</p>` },
+  { cat: 'Billing & wallet', q: 'Why is my Buy button disabled?',
+    a: `<p>Payments are enabled per workspace. If the button is disabled, a payment gateway isn't
+        active yet for your workspace — contact your AVideoRouter administrator. Some owner
+        workspaces are unmetered and never need to buy credits.</p>` },
+
+  { cat: 'Team & permissions', q: 'How do I add staff to my workspace?',
+    a: `<p>On <b>Team</b>, add a staff member by name, email and permission. They sign in with their
+        email — no password the first time — and set a password on first login.</p>` },
+  { cat: 'Team & permissions', q: 'What is the difference between View and Edit?',
+    a: `<p><b>View</b> is read-only. <b>Edit</b> can push and edit, but cannot manage staff,
+        connections or billing, and cannot delete. Only the workspace <b>owner</b> can manage
+        those. </p>` },
+  { cat: 'Team & permissions', q: 'A staff member forgot their password.',
+    a: `<p>On <b>Team</b>, use <b>Reset password</b> for that person. They then log in with their
+        email (no password) and set a new one.</p>` },
+
+  { cat: 'Troubleshooting', q: 'A recording didn\'t upload.',
+    a: `<p>Check <b>Logs</b> for the error on that row. Common causes: the destination isn't
+        connected (fix on <b>Connections</b>), the wallet is empty (top up on <b>Billing</b>), or
+        the LMS endpoint isn't live yet (the row stays pending and back-fills automatically).</p>` },
+  { cat: 'Troubleshooting', q: 'My LMS videos are stuck as "pending".',
+    a: `<p>That's expected until your LMS account is fully active. Once it's connected and live,
+        pending rows push automatically — you don't need to re-run anything.</p>` },
+];
+
+const listEl = document.getElementById('kb-list');
+const emptyEl = document.getElementById('kb-empty');
+const countEl = document.getElementById('kb-count');
+const searchEl = document.getElementById('kb-search');
+
+function render(filter) {
+  const f = (filter || '').trim().toLowerCase();
+  const matched = KB.filter(a => !f || (a.q + ' ' + a.a + ' ' + a.cat).toLowerCase().includes(f));
+  const cats = [...new Set(matched.map(a => a.cat))];
+  listEl.innerHTML = cats.map(cat => {
+    const arts = matched.filter(a => a.cat === cat).map(a => `
+      <details class="kb-art"${f ? ' open' : ''}>
+        <summary>${hl(a.q, f)}</summary>
+        <div class="kb-body">${a.a}</div>
+      </details>`).join('');
+    return `<h2 class="kb-cat">${esc(cat)}</h2>${arts}`;
+  }).join('');
+  emptyEl.style.display = matched.length ? 'none' : 'block';
+  countEl.textContent = f
+    ? `${matched.length} article${matched.length === 1 ? '' : 's'} matching “${f}”`
+    : `${KB.length} articles across ${new Set(KB.map(a => a.cat)).size} categories`;
+}
+
+function hl(text, f) {
+  const safe = esc(text);
+  if (!f) return safe;
+  try {
+    return safe.replace(new RegExp('(' + f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'ig'), '<mark>$1</mark>');
+  } catch { return safe; }
+}
+
+searchEl.addEventListener('input', () => render(searchEl.value));
+render('');
+</script>
+<%- include('partials/foot') %>
