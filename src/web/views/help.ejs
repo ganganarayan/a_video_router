@@ -45,6 +45,8 @@ or open a section. Still stuck? See <a href="/contact">Contact us</a>.</p>
 const vid  = (id, label) => `<div class="kb-video" data-video="${id}"><span class="kb-play">▶</span>
   <span>Walkthrough video — ${label}<br><small>placeholder · add your video here later</small></span></div>`;
 const shot = (id, label) => `<span class="kb-shot" data-shot="${id}">Screenshot: ${label} — add your image here</span>`;
+// External deep-link that opens in a new tab.
+const ext  = (url, label) => `<a href="${url}" target="_blank" rel="noopener">${label}</a>`;
 
 const KB = [
   // ---------------- GETTING STARTED ----------------
@@ -68,8 +70,8 @@ const KB = [
   { cat: 'Connect Zoom', q: 'Step 1 — Turn on cloud recording in Zoom (one time)',
     a: `${vid('zoom-recording', 'enabling Zoom cloud recording')}
         <ol class="kb-steps">
-          <li>Sign in to the Zoom web portal at <b>zoom.us</b> (browser, not the desktop app).</li>
-          <li>Open <b>Settings → Recording</b>.</li>
+          <li>Sign in to the Zoom web portal at ${ext('https://zoom.us', 'zoom.us')} (browser, not the desktop app).</li>
+          <li>Open ${ext('https://zoom.us/account/setting?tab=recording', 'Settings → Recording')} (direct link).</li>
           <li>Turn on <b>Cloud recording</b>.</li>
           <li>Enable <b>Record active speaker with shared screen</b> — this produces the
               “shared screen with speaker view” layout that AVideoRouter picks up automatically.</li>
@@ -81,8 +83,8 @@ const KB = [
   { cat: 'Connect Zoom', q: 'Step 2 — Create a Server-to-Server OAuth app in Zoom',
     a: `${vid('zoom-s2s', 'creating the Zoom Server-to-Server OAuth app')}
         <ol class="kb-steps">
-          <li>Go to the Zoom App Marketplace at <b>marketplace.zoom.us</b> and sign in.</li>
-          <li>Top right: <b>Develop → Build App</b>.</li>
+          <li>Go to the ${ext('https://marketplace.zoom.us', 'Zoom App Marketplace')} and sign in.</li>
+          <li>Top right: ${ext('https://marketplace.zoom.us/develop/create', 'Develop → Build App')}.</li>
           <li>Choose <b>Server-to-Server OAuth</b> → <b>Create</b>. Give it a name like “AVideoRouter”.</li>
           <li>On the <b>App Credentials</b> screen, copy the three values: <b>Account ID</b>,
               <b>Client ID</b>, and <b>Client Secret</b>.</li>
@@ -114,19 +116,19 @@ const KB = [
         <div class="kb-note">Use <b>one Google Cloud project per YouTube channel</b> — this keeps each
           channel's upload quota separate. Sign in with the Google account that <b>owns the channel</b>.</div>
         <ol class="kb-steps">
-          <li>Go to <b>console.cloud.google.com</b> and sign in.</li>
-          <li>Top bar → project dropdown → <b>New Project</b>. Name it (e.g. “AVR – Gita main”) → <b>Create</b>.</li>
+          <li>Go to ${ext('https://console.cloud.google.com', 'console.cloud.google.com')} and sign in.</li>
+          <li>Top bar → project dropdown → ${ext('https://console.cloud.google.com/projectcreate', 'New Project')}. Name it (e.g. “AVR – Gita main”) → <b>Create</b>.</li>
           <li>Make sure the new project is selected in the top bar.</li>
-          <li>Open <b>APIs &amp; Services → Library</b>, search <b>YouTube Data API v3</b>, open it → <b>Enable</b>.</li>
+          <li>Open ${ext('https://console.cloud.google.com/apis/library', 'APIs &amp; Services → Library')}, then open the ${ext('https://console.cloud.google.com/apis/library/youtube.googleapis.com', 'YouTube Data API v3')} page → <b>Enable</b>.</li>
         </ol>
         ${shot('yt-enable-api', 'YouTube Data API v3 page with the Enable button')}` },
   { cat: 'Connect YouTube', q: 'Step 2 — Configure the OAuth consent screen (and PUBLISH it)',
     a: `<ol class="kb-steps">
-          <li>Open <b>APIs &amp; Services → OAuth consent screen</b>.</li>
+          <li>Open ${ext('https://console.cloud.google.com/apis/credentials/consent', 'APIs &amp; Services → OAuth consent screen')} (direct link).</li>
           <li>User type: <b>External</b> → <b>Create</b>.</li>
           <li>Fill <b>App name</b>, <b>User support email</b>, and <b>Developer contact email</b> → Save
               and continue through the remaining steps (you can leave scopes/test users default).</li>
-          <li><b>Important:</b> back on the OAuth consent screen, set <b>Publishing status</b> to
+          <li><b>Important:</b> back on the ${ext('https://console.cloud.google.com/apis/credentials/consent', 'OAuth consent screen')}, set <b>Publishing status</b> to
               <b>In production</b> (click <b>Publish app</b>).</li>
         </ol>
         ${shot('yt-consent-publish', 'OAuth consent screen showing Publishing status = In production')}
@@ -136,7 +138,7 @@ const KB = [
   { cat: 'Connect YouTube', q: 'Step 3 — Create the OAuth client & add the redirect URI',
     a: `${vid('yt-oauth', 'creating the OAuth client ID')}
         <ol class="kb-steps">
-          <li>Open <b>APIs &amp; Services → Credentials</b>.</li>
+          <li>Open ${ext('https://console.cloud.google.com/apis/credentials', 'APIs &amp; Services → Credentials')} (direct link).</li>
           <li><b>Create Credentials → OAuth client ID</b>.</li>
           <li>Application type: <b>Web application</b>. Give it a name.</li>
           <li>Under <b>Authorized redirect URIs → Add URI</b>, paste the exact URI shown on the
@@ -163,7 +165,7 @@ const KB = [
   { cat: 'Connect Fathom', q: 'Connect Fathom as a source',
     a: `${vid('fathom', 'connecting Fathom')}
         <ol class="kb-steps">
-          <li>In Fathom, open your account settings and find your <b>API key</b> (Settings → integrations / API).</li>
+          <li>In ${ext('https://fathom.video', 'Fathom')}, open your account settings and find your <b>API key</b> (Settings → integrations / API).</li>
           <li>In AVideoRouter open <b>Connections</b> → the <b>Fathom</b> card.</li>
           <li>Paste the <b>API key</b> → <b>Save</b> → <b>Test connection</b>.</li>
         </ol>
@@ -249,8 +251,8 @@ const KB = [
         needs reconnecting, or the LMS isn't live yet (the row stays pending and back-fills automatically).</p>` },
   { cat: 'Troubleshooting', q: 'YouTube keeps asking me to reconnect every week',
     a: `<p>Your Google OAuth consent screen is still in “Testing”, so Google expires the token every ~7 days.
-        Fix it once: Google Cloud → <b>APIs &amp; Services → OAuth consent screen → Publish app</b>
-        (see Connect YouTube, Step 2), then <b>Reconnect</b> the channel.</p>` },
+        Fix it once: open the ${ext('https://console.cloud.google.com/apis/credentials/consent', 'OAuth consent screen')}
+        and click <b>Publish app</b> (see Connect YouTube, Step 2), then <b>Reconnect</b> the channel.</p>` },
 ];
 
 const listEl = document.getElementById('kb-list');
