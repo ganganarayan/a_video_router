@@ -1,12 +1,12 @@
 <%- include('partials/head') %>
 <h1>Help &amp; Knowledge Base</h1>
-<p class="muted">How-to guides for every part of AVideoRouter. Search below, or open a
-category. Can't find an answer? Ask your workspace owner, or your AVideoRouter contact.</p>
+<p class="muted">Step-by-step setup guides and answers for every part of AVideoRouter. Search below,
+or open a section. Still stuck? See <a href="/contact">Contact us</a>.</p>
 
 <div class="card">
   <div class="field">
     <label>Search help</label>
-    <input id="kb-search" type="search" placeholder="Search e.g. Zoom, schedule, wallet, permissions…" autocomplete="off">
+    <input id="kb-search" type="search" placeholder="Search e.g. Zoom, YouTube, OAuth, schedule, wallet…" autocomplete="off">
   </div>
   <p class="muted" id="kb-count" style="margin:.4rem 0 0"></p>
 </div>
@@ -15,118 +15,242 @@ category. Can't find an answer? Ask your workspace owner, or your AVideoRouter c
 <p class="muted" id="kb-empty" style="display:none">No articles match your search.</p>
 
 <style>
-  .kb-cat { margin: 1.1rem 0 .3rem; font-size: 1.05rem; }
-  .kb-art { border:1px solid var(--border,#2a2a2a); border-radius:8px; margin:.45rem 0; overflow:hidden; }
-  .kb-art > summary { cursor:pointer; padding:.7rem .9rem; font-weight:600; list-style:none; }
+  .kb-cat { margin: 1.2rem 0 .3rem; font-size: 1.05rem; }
+  .kb-art { border:1px solid var(--line,#2e3d5c); border-radius:8px; margin:.45rem 0; overflow:hidden; }
+  .kb-art > summary { cursor:pointer; padding:.75rem .9rem; font-weight:600; list-style:none; }
   .kb-art > summary::-webkit-details-marker { display:none; }
   .kb-art > summary::before { content:'▸'; color:var(--accent); margin-right:.55rem; display:inline-block; transition:transform .12s; }
   .kb-art[open] > summary::before { transform:rotate(90deg); }
-  .kb-art .kb-body { padding:0 .9rem .8rem 1.8rem; }
+  .kb-art .kb-body { padding:.2rem .9rem 1rem 1.8rem; }
   .kb-art .kb-body p { margin:.5rem 0; }
-  .kb-art .kb-body ol, .kb-art .kb-body ul { margin:.5rem 0; padding-left:1.2rem; }
-  .kb-art .kb-body li { margin:.25rem 0; }
+  .kb-art .kb-body ol.kb-steps { margin:.5rem 0; padding-left:1.3rem; }
+  .kb-art .kb-body ol.kb-steps > li { margin:.55rem 0; }
+  .kb-part { margin:1rem 0 .3rem; font-weight:700; color:var(--text); border-top:1px solid var(--line,#2e3d5c); padding-top:.8rem; }
+  .kb-note { border-left:3px solid var(--accent); background:rgba(79,140,255,.08); padding:.5rem .75rem; border-radius:0 6px 6px 0; margin:.6rem 0; }
+  /* Media placeholders — replace with your own screenshots / videos later. */
+  .kb-video { display:flex; align-items:center; justify-content:center; gap:.6rem; min-height:150px;
+    border:2px dashed var(--accent); border-radius:10px; background:rgba(79,140,255,.06);
+    color:var(--muted); margin:.6rem 0; text-align:center; padding:1rem; font-weight:600; }
+  .kb-video .kb-play { font-size:1.6rem; }
+  .kb-shot { display:block; border:1px dashed var(--line,#2e3d5c); border-radius:8px;
+    background:repeating-linear-gradient(45deg, rgba(255,255,255,.02) 0 10px, transparent 10px 20px);
+    color:var(--muted); font-size:.85rem; padding:.7rem .8rem; margin:.4rem 0 .2rem; }
+  .kb-shot::before { content:'📷 '; }
   mark { background:var(--accent); color:#000; border-radius:2px; padding:0 1px; }
 </style>
 
 <script>
-// Phase 1 Help/KB — content-driven, no backend. Keep articles accurate to shipped features.
+// Placeholders: elements with data-shot / data-video are where the user will drop their own
+// screenshots and walkthrough videos later (edit this file, or a future admin content editor).
+const vid  = (id, label) => `<div class="kb-video" data-video="${id}"><span class="kb-play">▶</span>
+  <span>Walkthrough video — ${label}<br><small>placeholder · add your video here later</small></span></div>`;
+const shot = (id, label) => `<span class="kb-shot" data-shot="${id}">Screenshot: ${label} — add your image here</span>`;
+
 const KB = [
-  { cat: 'Getting started', q: 'What does AVideoRouter do?',
-    a: `<p>AVideoRouter automatically moves your meeting and webinar recordings from a
-        <b>source</b> (Zoom or Fathom) to your <b>destinations</b> (YouTube and/or your LMS),
-        on a schedule you control. It downloads the recording, uploads it, logs the result,
-        and can delete the original from Zoom afterwards — all without you signing into Zoom
-        or YouTube each time.</p>` },
-  { cat: 'Getting started', q: 'What is the typical setup order?',
-    a: `<ol>
+  // ---------------- GETTING STARTED ----------------
+  { cat: 'Getting started', q: 'What does AVideoRouter do, and what do I need?',
+    a: `<p>AVideoRouter automatically moves your Zoom / Fathom recordings to YouTube and/or your LMS,
+        on a schedule you control — it downloads, uploads, logs the result, and can delete the Zoom
+        original afterwards, without you signing into Zoom or YouTube each time.</p>
+        <p>You'll need: a <b>Zoom</b> (or Fathom) account, a <b>YouTube channel</b> with its own Google
+        account, and — if you publish to a course platform — an <b>LMS with an API</b>. Connect each
+        once under <b>Connections</b>, then set up <b>Routing</b> and <b>Schedules</b>.</p>` },
+  { cat: 'Getting started', q: 'Setup order (do these in sequence)',
+    a: `${vid('getting-started', 'full setup, start to finish')}
+        <ol class="kb-steps">
           <li><b>Connections</b> — connect Zoom / Fathom (sources) and YouTube / LMS (destinations).</li>
-          <li><b>Routing</b> — choose which source goes to which destination.</li>
-          <li><b>Schedules</b> — set when automatic pulls run (or run manually from Sources).</li>
-          <li><b>Runs / Logs</b> — watch transfers and check results.</li>
+          <li><b>Routing</b> — decide which source title patterns go to which YouTube channel / LMS course.</li>
+          <li><b>Schedules</b> — set when automatic pulls run (or push manually from Sources).</li>
+          <li><b>Runs / Logs</b> — watch transfers live and check results.</li>
         </ol>` },
 
-  { cat: 'Connections', q: 'How do I connect Zoom as a source?',
-    a: `<p>Go to <b>Connections</b> and connect your Zoom account. Once connected, AVideoRouter
-        can list your cloud recordings on the <b>Sources</b> page. You never have to sign into
-        Zoom again for day-to-day transfers.</p>` },
-  { cat: 'Connections', q: 'How do I connect Fathom as a source?',
-    a: `<p>On <b>Connections</b>, add your Fathom account. Fathom recordings then appear alongside
-        Zoom recordings as available sources for routing and manual push.</p>` },
-  { cat: 'Connections', q: 'How do I connect a YouTube channel?',
-    a: `<p>On <b>Connections</b>, connect YouTube and authorise the Google account that owns the
-        channel. You can connect more than one channel. Uploads use the channel's stored
-        authorisation, so you don't re-sign-in for each upload.</p>` },
-  { cat: 'Connections', q: 'How do I connect my LMS?',
-    a: `<p>On <b>Connections</b>, save your LMS account details. Recordings routed to the LMS are
-        pushed via the LMS video-ingest API. If your LMS isn't fully live yet, rows stay in a
-        <span class="badge">pending</span> state and back-fill automatically once the account is
-        active — no re-work needed.</p>` },
+  // ---------------- CONNECT ZOOM ----------------
+  { cat: 'Connect Zoom', q: 'Step 1 — Turn on cloud recording in Zoom (one time)',
+    a: `${vid('zoom-recording', 'enabling Zoom cloud recording')}
+        <ol class="kb-steps">
+          <li>Sign in to the Zoom web portal at <b>zoom.us</b> (browser, not the desktop app).</li>
+          <li>Open <b>Settings → Recording</b>.</li>
+          <li>Turn on <b>Cloud recording</b>.</li>
+          <li>Enable <b>Record active speaker with shared screen</b> — this produces the
+              “shared screen with speaker view” layout that AVideoRouter picks up automatically.</li>
+          <li>Click <b>Save</b>.</li>
+        </ol>
+        ${shot('zoom-recording', 'Zoom Settings → Recording with Cloud recording enabled')}
+        <div class="kb-note">Record your meetings <b>to the cloud</b> (not to your computer) — only
+          cloud recordings are visible to AVideoRouter.</div>` },
+  { cat: 'Connect Zoom', q: 'Step 2 — Create a Server-to-Server OAuth app in Zoom',
+    a: `${vid('zoom-s2s', 'creating the Zoom Server-to-Server OAuth app')}
+        <ol class="kb-steps">
+          <li>Go to the Zoom App Marketplace at <b>marketplace.zoom.us</b> and sign in.</li>
+          <li>Top right: <b>Develop → Build App</b>.</li>
+          <li>Choose <b>Server-to-Server OAuth</b> → <b>Create</b>. Give it a name like “AVideoRouter”.</li>
+          <li>On the <b>App Credentials</b> screen, copy the three values: <b>Account ID</b>,
+              <b>Client ID</b>, and <b>Client Secret</b>.</li>
+          ${''}
+          <li>Fill in <b>Basic Information</b> (company name + a contact name/email) — Zoom requires
+              this before the app can activate.</li>
+          <li>Open <b>Scopes → Add Scopes</b> and add the Cloud Recording scopes:
+              <span class="mono">cloud_recording:read</span> and
+              <span class="mono">cloud_recording:write</span> (read lets us fetch recordings; write
+              lets you delete them from the dashboard).</li>
+          <li>Click <b>Activate your app</b>.</li>
+        </ol>
+        ${shot('zoom-credentials', 'Zoom App Credentials page showing Account ID / Client ID / Client Secret')}` },
+  { cat: 'Connect Zoom', q: 'Step 3 — Paste the Zoom credentials into AVideoRouter',
+    a: `<ol class="kb-steps">
+          <li>In AVideoRouter, open <b>Connections</b>.</li>
+          <li>In the <b>Zoom (Server-to-Server OAuth)</b> card, paste your <b>Account ID</b>,
+              <b>Client ID</b> and <b>Client Secret</b>.</li>
+          <li>Click <b>Save</b>, then <b>Test connection</b>. Success shows
+              “Connected as &lt;your email&gt;”.</li>
+        </ol>
+        ${shot('zoom-connections', 'AVideoRouter Connections → Zoom card filled in, showing Connected')}
+        <div class="kb-note">Credentials are stored <b>encrypted</b> (AES-256-GCM) in the database —
+          never in plain text or environment variables.</div>` },
 
+  // ---------------- CONNECT YOUTUBE ----------------
+  { cat: 'Connect YouTube', q: 'Step 1 — Create a Google Cloud project & enable the YouTube API',
+    a: `${vid('yt-project', 'creating the Google Cloud project')}
+        <div class="kb-note">Use <b>one Google Cloud project per YouTube channel</b> — this keeps each
+          channel's upload quota separate. Sign in with the Google account that <b>owns the channel</b>.</div>
+        <ol class="kb-steps">
+          <li>Go to <b>console.cloud.google.com</b> and sign in.</li>
+          <li>Top bar → project dropdown → <b>New Project</b>. Name it (e.g. “AVR – Gita main”) → <b>Create</b>.</li>
+          <li>Make sure the new project is selected in the top bar.</li>
+          <li>Open <b>APIs &amp; Services → Library</b>, search <b>YouTube Data API v3</b>, open it → <b>Enable</b>.</li>
+        </ol>
+        ${shot('yt-enable-api', 'YouTube Data API v3 page with the Enable button')}` },
+  { cat: 'Connect YouTube', q: 'Step 2 — Configure the OAuth consent screen (and PUBLISH it)',
+    a: `<ol class="kb-steps">
+          <li>Open <b>APIs &amp; Services → OAuth consent screen</b>.</li>
+          <li>User type: <b>External</b> → <b>Create</b>.</li>
+          <li>Fill <b>App name</b>, <b>User support email</b>, and <b>Developer contact email</b> → Save
+              and continue through the remaining steps (you can leave scopes/test users default).</li>
+          <li><b>Important:</b> back on the OAuth consent screen, set <b>Publishing status</b> to
+              <b>In production</b> (click <b>Publish app</b>).</li>
+        </ol>
+        ${shot('yt-consent-publish', 'OAuth consent screen showing Publishing status = In production')}
+        <div class="kb-note"><b>Why publish matters:</b> if the app is left in “Testing”, Google expires
+          the channel's refresh token about every <b>7 days</b> and you'll have to reconnect weekly.
+          Publishing to production stops that.</div>` },
+  { cat: 'Connect YouTube', q: 'Step 3 — Create the OAuth client & add the redirect URI',
+    a: `${vid('yt-oauth', 'creating the OAuth client ID')}
+        <ol class="kb-steps">
+          <li>Open <b>APIs &amp; Services → Credentials</b>.</li>
+          <li><b>Create Credentials → OAuth client ID</b>.</li>
+          <li>Application type: <b>Web application</b>. Give it a name.</li>
+          <li>Under <b>Authorized redirect URIs → Add URI</b>, paste the exact URI shown on the
+              AVideoRouter <b>Connections</b> page (under “YouTube channels”). It looks like
+              <span class="mono">https://your-domain/oauth/youtube/callback</span> — copy it precisely,
+              no trailing slash.</li>
+          <li><b>Create</b>, then copy the <b>Client ID</b> and <b>Client Secret</b>.</li>
+        </ol>
+        ${shot('yt-redirect-uri', 'OAuth client with the Authorized redirect URI added')}` },
+  { cat: 'Connect YouTube', q: 'Step 4 — Add the channel in AVideoRouter & authorise',
+    a: `<ol class="kb-steps">
+          <li>In AVideoRouter open <b>Connections → YouTube channels → Add channel</b>.</li>
+          <li>Enter a <b>Label</b>, paste the <b>OAuth Client ID</b> and <b>Client Secret</b>, then
+              click <b>Add &amp; connect</b>.</li>
+          <li>You're sent to Google — pick the channel's Google account and <b>Allow</b> the requested
+              permissions (upload &amp; manage videos).</li>
+          <li>You return to AVideoRouter and the channel shows <b>connected</b>. Repeat for more channels.</li>
+        </ol>
+        ${shot('yt-connected', 'Connections → YouTube channels table showing a connected channel')}
+        <div class="kb-note">If a channel ever shows <b>needs reconnect</b>, its authorisation expired
+          or was revoked — click <b>Reconnect</b> (and make sure the consent screen is Published, Step 2).</div>` },
+
+  // ---------------- CONNECT FATHOM ----------------
+  { cat: 'Connect Fathom', q: 'Connect Fathom as a source',
+    a: `${vid('fathom', 'connecting Fathom')}
+        <ol class="kb-steps">
+          <li>In Fathom, open your account settings and find your <b>API key</b> (Settings → integrations / API).</li>
+          <li>In AVideoRouter open <b>Connections</b> → the <b>Fathom</b> card.</li>
+          <li>Paste the <b>API key</b> → <b>Save</b> → <b>Test connection</b>.</li>
+        </ol>
+        ${shot('fathom-key', 'AVideoRouter Fathom card with API key saved')}
+        <div class="kb-note">Fathom is <b>read-only</b> — AVideoRouter never deletes anything on Fathom.</div>` },
+
+  // ---------------- CONNECT LMS ----------------
+  { cat: 'Connect your LMS', q: 'Connect your LMS (video-ingest API)',
+    a: `${vid('lms', 'connecting your LMS')}
+        <ol class="kb-steps">
+          <li>In your LMS admin, get the <b>video-ingest API base URL</b> and an <b>API key</b>.</li>
+          <li>In AVideoRouter open <b>Connections</b> → the <b>LMS</b> card.</li>
+          <li>Enter the <b>Base URL</b> and <b>API key</b> → <b>Save</b> → <b>Test connection</b>.</li>
+          <li>Set the <b>course/module IDs</b> per tag on the <b>Routing</b> page so each video lands in
+              the right course.</li>
+        </ol>
+        ${shot('lms-card', 'AVideoRouter LMS card with Base URL + API key')}
+        <div class="kb-note">The LMS is optional. Until it's connected, uploaded videos stay
+          <span class="mono">lms_status=pending</span> and are pushed automatically the moment you connect —
+          no re-work.</div>` },
+
+  // ---------------- ROUTING ----------------
   { cat: 'Routing', q: 'How does routing work?',
-    a: `<p>On the <b>Routing</b> page you connect each source to one or more destinations. For
-        example: Zoom → YouTube + LMS. When a recording is pulled, AVideoRouter sends it to
-        every destination in that route.</p>` },
+    a: `<p>On <b>Routing</b> you create rules that match a recording's title (contains / prefix / regex)
+        and send it to a chosen <b>YouTube channel</b> (and optionally an <b>LMS course/module</b>), with
+        options like playlist, privacy, and a custom title. When a recording is pulled, AVideoRouter
+        applies the first matching rule.</p>` },
+  { cat: 'Routing', q: 'A recording was “skipped — no routing rule matched”',
+    a: `<p>Add a rule on <b>Routing</b> whose pattern matches that title. Old skipped recordings are
+        retried automatically on the next run once a matching rule exists.</p>` },
 
-  { cat: 'Sources & manual push', q: 'How do I push a single recording right now?',
-    a: `<p>Open <b>Sources</b>, find the recording, and use its <b>Push</b> button. This routes
-        that one file immediately using its configured destinations — handy when you don't want
-        to wait for the next scheduled run.</p>` },
-  { cat: 'Sources & manual push', q: 'Can I set a YouTube title and description before upload?',
-    a: `<p>Yes. On <b>Sources</b> you can set the title and description before pushing, and you can
-        edit a YouTube video's title/description later from the <b>Logs</b> link for that video.</p>` },
-  { cat: 'Sources & manual push', q: 'How do I delete a recording from Zoom?',
-    a: `<p>Deletion is <b>manual only</b> — AVideoRouter never auto-deletes. On <b>Sources</b>, the
-        <b>Delete from Zoom</b> button becomes available only after the recording has a YouTube
-        video ID (i.e. it's safely uploaded). You do this from the dashboard, without signing
-        into Zoom.</p>` },
+  // ---------------- SOURCES & MANUAL PUSH ----------------
+  { cat: 'Sources & manual push', q: 'Push a single recording right now',
+    a: `<ol class="kb-steps">
+          <li>Open <b>Sources</b> and find the recording.</li>
+          <li>(Optional) set a YouTube <b>title</b>/<b>description</b> before pushing.</li>
+          <li>Click <b>Push</b> — it uploads immediately using that recording's destinations.</li>
+        </ol>` },
+  { cat: 'Sources & manual push', q: 'Delete a recording from Zoom',
+    a: `<p>Deletion is <b>manual only</b> — the pipeline never auto-deletes. On <b>Sources</b>, the
+        <b>Delete from Zoom</b> button unlocks only after the recording has a YouTube video ID (i.e. it's
+        safely uploaded). You do it from the dashboard, without signing into Zoom.</p>` },
 
-  { cat: 'Schedules', q: 'How do automatic pulls work?',
-    a: `<p>On <b>Schedules</b> you create one or more schedules (add / edit / stop / resume /
-        delete). Each runs on its own time. When a schedule fires, it pulls new recordings and
-        routes them automatically. If no schedule is active, nothing runs automatically — use
-        manual push instead.</p>` },
-  { cat: 'Schedules', q: 'Automatic runs stopped — how do I re-enable them?',
-    a: `<p>Go to <b>Schedules</b> and <b>Resume</b> a stopped schedule (or add a new one). Schedules
-        can be paused at any time without losing their configuration.</p>` },
+  // ---------------- SCHEDULES ----------------
+  { cat: 'Schedules', q: 'Set up automatic pulls',
+    a: `<ol class="kb-steps">
+          <li>Open <b>Schedules</b> → add a schedule and choose its time.</li>
+          <li>When it fires, AVideoRouter pulls new recordings and routes them automatically.</li>
+          <li>You can <b>stop / resume / edit / delete</b> a schedule anytime without losing its setup.</li>
+        </ol>
+        <div class="kb-note">If no schedule is active, nothing runs automatically — use manual push instead.</div>` },
 
-  { cat: 'Runs & logs', q: 'Where do I see transfer progress?',
-    a: `<p><b>Runs</b> shows live transfer telemetry — speed, ETA, progress and a log — while a push
-        is in flight. As a rule of thumb, roughly 1&nbsp;GB moves in about 90&nbsp;seconds.</p>` },
-  { cat: 'Runs & logs', q: 'A row says "Skipped — wallet empty". What does that mean?',
-    a: `<p>The upload was held because your wallet had no video credits left. Top up on
-        <b>Billing</b> and the held rows resume automatically on the next run — nothing is lost.</p>` },
+  // ---------------- RUNS & LOGS ----------------
+  { cat: 'Runs & logs', q: 'Where do I see progress and results?',
+    a: `<p><b>Runs</b> shows live speed / ETA / progress while a push is in flight (roughly 1&nbsp;GB per
+        90&nbsp;seconds). <b>Logs</b> shows the outcome and any error per recording.</p>` },
+  { cat: 'Runs & logs', q: 'A row says “Skipped — wallet empty”',
+    a: `<p>The upload was held because your wallet had no video credits. Top up on <b>Billing</b> — held
+        rows resume automatically on the next run. Nothing is lost.</p>` },
 
-  { cat: 'Billing & wallet', q: 'How does billing work?',
-    a: `<p>AVideoRouter is pay-as-you-go. Each uploaded video draws one credit from your wallet.
-        You buy credits in <b>video packs</b> on the <b>Billing</b> page. Your balance is shown in
-        both ₹ and an approximate number of videos.</p>` },
-  { cat: 'Billing & wallet', q: 'How do I buy video credits?',
-    a: `<p>On <b>Billing</b>, click <b>Buy video credits</b>. Credits are sold in multiples of 10
-        (10 / 20 / 30 presets, or a custom whole multiple of 10, minimum 10). Prices shown
-        include GST and gateway fees; the wallet is credited the base amount.</p>` },
-  { cat: 'Billing & wallet', q: 'Why is my Buy button disabled?',
-    a: `<p>Payments are enabled per workspace. If the button is disabled, a payment gateway isn't
-        active yet for your workspace — contact your AVideoRouter administrator. Some owner
-        workspaces are unmetered and never need to buy credits.</p>` },
+  // ---------------- BILLING ----------------
+  { cat: 'Billing & wallet', q: 'How billing works & buying credits',
+    a: `<p>Pay-as-you-go: each uploaded video draws one credit. Your first upload is free. Buy credits in
+        <b>packs of 10</b> (10 / 20 / 30, or a custom whole multiple of 10) on the <b>Billing</b> page;
+        prices shown include GST + gateway fees, and the wallet is credited the base amount. Balance shows
+        in ₹ and an approximate number of videos.</p>
+        <div class="kb-note">There are <b>no refunds</b> — see <a href="/refund">Refund policy</a>. Your
+          balance stays in your wallet until you use it.</div>` },
 
-  { cat: 'Team & permissions', q: 'How do I add staff to my workspace?',
-    a: `<p>On <b>Team</b>, add a staff member by name, email and permission. They sign in with their
-        email — no password the first time — and set a password on first login.</p>` },
-  { cat: 'Team & permissions', q: 'What is the difference between View and Edit?',
-    a: `<p><b>View</b> is read-only. <b>Edit</b> can push and edit, but cannot manage staff,
-        connections or billing, and cannot delete. Only the workspace <b>owner</b> can manage
-        those. </p>` },
-  { cat: 'Team & permissions', q: 'A staff member forgot their password.',
-    a: `<p>On <b>Team</b>, use <b>Reset password</b> for that person. They then log in with their
-        email (no password) and set a new one.</p>` },
+  // ---------------- TEAM ----------------
+  { cat: 'Team & permissions', q: 'Add staff and set permissions',
+    a: `<ol class="kb-steps">
+          <li>Open <b>Team</b> → add a staff member (name, email, permission).</li>
+          <li>They sign in with their email — no password the first time — and set one on first login.</li>
+        </ol>
+        <p><b>View</b> = read-only. <b>Edit</b> = can push &amp; edit, but cannot manage staff,
+        connections or billing, and cannot delete. Only the <b>owner</b> can do those.</p>` },
 
-  { cat: 'Troubleshooting', q: 'A recording didn\'t upload.',
-    a: `<p>Check <b>Logs</b> for the error on that row. Common causes: the destination isn't
-        connected (fix on <b>Connections</b>), the wallet is empty (top up on <b>Billing</b>), or
-        the LMS endpoint isn't live yet (the row stays pending and back-fills automatically).</p>` },
-  { cat: 'Troubleshooting', q: 'My LMS videos are stuck as "pending".',
-    a: `<p>That's expected until your LMS account is fully active. Once it's connected and live,
-        pending rows push automatically — you don't need to re-run anything.</p>` },
+  // ---------------- TROUBLESHOOTING ----------------
+  { cat: 'Troubleshooting', q: 'A recording didn’t upload',
+    a: `<p>Open <b>Logs</b> and read the error on that row. Common causes: the destination isn't connected
+        (fix on <b>Connections</b>), the wallet is empty (top up on <b>Billing</b>), the YouTube channel
+        needs reconnecting, or the LMS isn't live yet (the row stays pending and back-fills automatically).</p>` },
+  { cat: 'Troubleshooting', q: 'YouTube keeps asking me to reconnect every week',
+    a: `<p>Your Google OAuth consent screen is still in “Testing”, so Google expires the token every ~7 days.
+        Fix it once: Google Cloud → <b>APIs &amp; Services → OAuth consent screen → Publish app</b>
+        (see Connect YouTube, Step 2), then <b>Reconnect</b> the channel.</p>` },
 ];
 
 const listEl = document.getElementById('kb-list');
@@ -149,7 +273,7 @@ function render(filter) {
   emptyEl.style.display = matched.length ? 'none' : 'block';
   countEl.textContent = f
     ? `${matched.length} article${matched.length === 1 ? '' : 's'} matching “${f}”`
-    : `${KB.length} articles across ${new Set(KB.map(a => a.cat)).size} categories`;
+    : `${KB.length} articles across ${new Set(KB.map(a => a.cat)).size} sections`;
 }
 
 function hl(text, f) {
