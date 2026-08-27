@@ -1,11 +1,12 @@
 <%- include('partials/head') %>
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <h1>Billing</h1>
-<p class="muted">Pay as you go — <b>₹50 per unit of transfer</b> (one unit = up to 1&nbsp;GB per
-file; a file over 1&nbsp;GB counts as 2 units). Your first upload is free. Buy credits in multiples
-of 10; an upload already in progress always finishes even if credits run out, and the shortfall is
-settled on your next top-up. If you have a GST number and want a GST invoice (to claim input credit),
-add your GST details in <a href="/settings">Settings</a> or the top-up popup.</p>
+<p class="muted">Pay as you go — from <b>₹50 per unit of transfer</b>, dropping to ₹45 (50 units) and ₹40
+(100 units). One unit = up to 1&nbsp;GB per file; a file over 1&nbsp;GB counts as 2 units. Your first
+upload is free. Buy credits in multiples of 10; an upload already in progress always finishes even if
+credits run out, and the shortfall is settled on your next top-up. If you have a GST number and want a
+GST invoice (to claim input credit), add your GST details in <a href="/settings">Settings</a> or the
+top-up popup.</p>
 
 <div class="card" id="wallet-card">
   <div class="row" style="align-items:baseline; gap:2rem; justify-content:space-between">
@@ -41,7 +42,7 @@ add your GST details in <a href="/settings">Settings</a> or the top-up popup.</p
       <label for="modal-gstin">GSTIN <span class="muted">(optional — for a GST invoice)</span></label>
       <input id="modal-gstin" maxlength="15" placeholder="15-character GSTIN" style="text-transform:uppercase; width:100%">
     </div>
-    <p class="muted" style="margin:0 0 8px">₹50 per unit of transfer · buy in multiples of 10. Choose a pack:</p>
+    <p class="muted" style="margin:0 0 8px">Bigger packs bill at a lower rate — the discount lands as bonus credit. Buy in multiples of 10; choose a pack:</p>
     <div id="pack-list"></div>
 
     <div style="margin-top:16px; border-top:1px solid var(--line); padding-top:14px">
@@ -62,14 +63,19 @@ add your GST details in <a href="/settings">Settings</a> or the top-up popup.</p
 <script>
 const fmtRs = (paise) => '₹' + (Number(paise) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 let CFG = null;
-const packSize = () => Math.max(1, Math.round(CFG.minTopupPaise / CFG.pricePerUnitPaise)); // = 10
+const packSize = () => Math.max(1, Number(CFG.unitsStep) || 10);
 
-// Mirror of the server's topupBreakdown (rounded to whole paise).
-function packMath(videos) {
-  const base = videos * CFG.pricePerUnitPaise;
+// Client mirror of the server's packQuote (single source: CFG.packTiers + base rate).
+// Larger packs bill at a lower rate; the discount is delivered as bonus wallet credit.
+function quote(units) {
+  const u = Math.max(0, Math.round(Number(units) || 0));
+  const tier = (CFG.packTiers || []).find((t) => u >= t.minUnits) || {};
+  const rate = tier.chargePerUnitPaise != null ? tier.chargePerUnitPaise : CFG.pricePerUnitPaise;
+  const credit = u * CFG.pricePerUnitPaise;
+  const base = u * rate;
   const gst = Math.round(base * CFG.gstPercent / 100);
   const fee = Math.round((base + gst) * CFG.gatewayPercent / 100);
-  return { base, gst, fee, total: base + gst + fee };
+  return { units: u, rate, credit, base, gst, fee, total: base + gst + fee, bonus: credit - base };
 }
 
 // In-situ validation: only whole multiples of the pack (10), at least one pack.
@@ -116,15 +122,15 @@ async function loadWallet() {
 }
 
 function buildPacks() {
-  const step = packSize();
-  const counts = [1, 2, 3].map((n) => n * step); // 10, 20, 30
-  document.getElementById('pack-list').innerHTML = counts.map((videos) => {
-    const m = packMath(videos);
-    return `<button class="pack" onclick="buy(${videos})">
-      <span class="videos">${videos} units<small>1 unit = up to 1 GB</small></span>
+  // Server-computed pack quotes (CFG.packs) — presets with descending rates.
+  document.getElementById('pack-list').innerHTML = (CFG.packs || []).map((p) => {
+    const rate = fmtRs(p.ratePerUnitPaise) + '/unit';
+    const bonus = p.bonusPaise > 0 ? ` · +${fmtRs(p.bonusPaise)} bonus credit` : '';
+    return `<button class="pack" onclick="buy(${p.units})">
+      <span class="videos">${p.units} units<small>${rate}${bonus}</small></span>
       <span class="amt">
-        <span class="total">${fmtRs(m.total)}</span>
-        <span class="brk">${fmtRs(m.base)} credit + ${fmtRs(m.gst)} GST + ${fmtRs(m.fee)} fee</span>
+        <span class="total">${fmtRs(p.total)}</span>
+        <span class="brk">${fmtRs(p.creditPaise)} credit · incl. GST + fee</span>
       </span>
     </button>`;
   }).join('');
@@ -135,10 +141,11 @@ function refreshCustom() {
   const calc = document.getElementById('cust-calc');
   const r = validateVideos(document.getElementById('cust-videos').value);
   if (r.ok) {
-    const m = packMath(r.videos);
+    const m = quote(r.videos);
+    const bonus = m.bonus > 0 ? ` · +${fmtRs(m.bonus)} bonus credit` : '';
     calc.className = 'muted';
-    calc.innerHTML = `<b>${r.videos} units = ${fmtRs(m.total)}</b><br>`
-      + `${fmtRs(m.base)} credit + ${fmtRs(m.gst)} GST + ${fmtRs(m.fee)} fee`;
+    calc.innerHTML = `<b>${r.videos} units = ${fmtRs(m.total)}</b> <span class="muted">(${fmtRs(m.rate)}/unit${bonus})</span><br>`
+      + `${fmtRs(m.credit)} credit · incl. GST + fee`;
   } else {
     calc.innerHTML = `<span class="badge warn">${esc(r.message)}</span>`;
   }
@@ -169,11 +176,10 @@ document.getElementById('cust-pay').onclick = () => {
 };
 
 async function buy(videos) {
-  const base = videos * CFG.pricePerUnitPaise;
   const gstin = (document.getElementById('modal-gstin').value || '').trim();
   let order;
   try {
-    order = await api('/billing/topup', { method: 'POST', body: { base_paise: base, gstin } });
+    order = await api('/billing/topup', { method: 'POST', body: { units: videos, gstin } });
   } catch (e) { toast(e.message, 'err'); return; }
   modal.classList.remove('open');
   // Hosted-redirect gateways (Easebuzz/PhonePe) send the browser to their page.
@@ -184,7 +190,7 @@ async function buy(videos) {
     amount: order.amount,
     currency: 'INR',
     name: 'AVideoRouter',
-    description: videos + ' units of credit (' + fmtRs(order.breakdown.base) + ')',
+    description: videos + ' units of credit (' + fmtRs(order.breakdown.creditPaise) + ')',
     // Prefill the customer email so Razorpay can email the payment receipt / GST invoice.
     prefill: { email: (order.prefill && order.prefill.email) || CFG.email || '', name: (order.prefill && order.prefill.name) || '' },
     handler: async (resp) => {

@@ -851,6 +851,11 @@ apiRouter.get('/billing', wrap(async (req, res) => {
     gstPercent: c.gstPercent,
     gatewayPercent: c.gatewayPercent,
     minTopupPaise: c.minTopupPaise,
+    // Descending pack pricing — computed server-side so the modal (and landing)
+    // render identical numbers from one source.
+    unitsStep: billing.UNITS_STEP,
+    packTiers: billing.PACK_TIERS,
+    packs: billing.PACK_PRESETS.map((u) => billing.packQuote(u, c)),
     provider: c.provider,
     paymentsEnabled,
     razorpayConfigured: razorpayReady,
@@ -865,12 +870,12 @@ apiRouter.get('/billing/history', wrap(async (req, res) => {
   res.json(await billing.history(T(req)));
 }));
 
-// Preview the top-up breakdown (base + GST + gateway) without creating an order.
+// Preview a pack quote (credit + charge base + GST + gateway) without creating an order.
 apiRouter.get('/billing/quote', wrap(async (req, res) => {
   const c = await billing.getBillingConfig();
-  const base = Math.round(Number(req.query.base_paise));
-  if (!Number.isFinite(base) || base <= 0) return res.status(400).json({ error: 'base_paise required' });
-  res.json({ ...billing.topupBreakdown(base, c), minTopupPaise: c.minTopupPaise });
+  const v = billing.validateUnits(Number(req.query.units));
+  if (!v.ok) return res.status(400).json({ error: v.error });
+  res.json(billing.packQuote(v.units, c));
 }));
 
 // Create a Razorpay order for a wallet top-up (owner only).
@@ -879,7 +884,7 @@ apiRouter.post('/billing/topup', requireOwner, wrap(async (req, res) => {
     const s = await getTenantSettings(T(req));
     // GSTIN from the modal wins; else fall back to the saved setting. Optional either way.
     const gstin = String(req.body.gstin ?? s.gstin ?? '').replace(/\s+/g, '').toUpperCase();
-    const out = await billing.createTopup(T(req), Number(req.body.base_paise), {
+    const out = await billing.createTopup(T(req), Number(req.body.units), {
       gstin,
       businessName: s.gst_business_name || '',
       email: req.user?.email || '',

@@ -125,22 +125,63 @@ export function topupBreakdown(baseP, cfg) {
   return { base: baseP, gst, fee, total: baseP + gst + fee };
 }
 
-export async function createTopup(tenantId, basePaise, extra = {}) {
-  const cfg = await getBillingConfig();
-  const base = Math.round(Number(basePaise));
-  // Validate the amount before touching the gateway. Sold in whole "packs" of
-  // videos (the minimum = one pack), keeping top-ups to multiples of 10 videos —
-  // never odd counts like 11–19.
-  if (base < cfg.minTopupPaise || base % cfg.minTopupPaise !== 0) {
-    const packVideos = Math.round(cfg.minTopupPaise / cfg.pricePerUnitPaise);
-    throw new Error(`Top-up must be in multiples of ${packVideos} videos (₹${cfg.minTopupPaise / 100}).`);
+// ---------- descending pack pricing (single source of truth) ----------
+// Larger packs bill at a lower per-unit rate. The discount is delivered as bonus
+// wallet credit: you always RECEIVE units × base rate (₹50) of credit, but you PAY
+// the tiered charge rate. So per-upload deduction (fixed ₹50/unit) never changes.
+// chargePerUnitPaise: null = use the configured base rate (cfg.pricePerUnitPaise).
+export const PACK_TIERS = [
+  { minUnits: 100, chargePerUnitPaise: 4000 }, // ₹40/unit for 100+ units
+  { minUnits: 50, chargePerUnitPaise: 4500 },  // ₹45/unit for 50–99 units
+  { minUnits: 0, chargePerUnitPaise: null },   // base rate (₹50) below 50
+];
+export const PACK_PRESETS = [10, 50, 100];
+export const UNITS_STEP = 10; // packs are sold in multiples of this
+
+export function packRatePaise(units, cfg) {
+  const tier = PACK_TIERS.find((t) => units >= t.minUnits);
+  return tier.chargePerUnitPaise ?? cfg.pricePerUnitPaise;
+}
+
+// Full quote for buying `units`: what's charged (base+GST+fee) vs what's credited.
+export function packQuote(units, cfg) {
+  const u = Math.max(0, Math.round(Number(units) || 0));
+  const rate = packRatePaise(u, cfg);
+  const creditPaise = u * cfg.pricePerUnitPaise; // face value credited to the wallet
+  const bd = topupBreakdown(u * rate, cfg);      // GST + gateway on the (discounted) charge base
+  return {
+    units: u,
+    ratePerUnitPaise: rate,
+    creditPaise,
+    bonusPaise: creditPaise - bd.base,
+    base: bd.base, gst: bd.gst, fee: bd.fee, total: bd.total,
+  };
+}
+
+// Validate a requested unit count (integer, ≥ step, whole multiples of step).
+export function validateUnits(units) {
+  const u = Number(units);
+  if (!Number.isInteger(u) || u < UNITS_STEP || u % UNITS_STEP !== 0) {
+    return { ok: false, error: `Buy units in multiples of ${UNITS_STEP} (minimum ${UNITS_STEP}).` };
   }
-  const bd = topupBreakdown(base, cfg);
+  return { ok: true, units: u };
+}
+
+export async function createTopup(tenantId, units, extra = {}) {
+  const cfg = await getBillingConfig();
+  const v = validateUnits(units);
+  if (!v.ok) throw new Error(v.error);
+  // Tiered quote: customer pays q.total (on the discounted charge base); the wallet
+  // is credited q.creditPaise (full face value) once the payment is captured.
+  const q = packQuote(v.units, cfg);
   const merchantTxnId = `vr_${tenantId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
   // Notes ride along on the Razorpay order/payment. The optional GSTIN + business
   // name are recorded here so Razorpay can raise a GST invoice for the customer.
-  const notes = { tenant_id: String(tenantId), base_paise: String(base), merchant_txn_id: merchantTxnId };
+  const notes = {
+    tenant_id: String(tenantId), units: String(q.units),
+    base_paise: String(q.base), credit_paise: String(q.creditPaise), merchant_txn_id: merchantTxnId,
+  };
   if (extra.gstin) notes.gstin = extra.gstin;
   if (extra.businessName) notes.business_name = extra.businessName;
   if (extra.email) notes.email = extra.email;
@@ -149,19 +190,20 @@ export async function createTopup(tenantId, basePaise, extra = {}) {
     if (!cfg.razorpayKeyId || !cfg.razorpayKeySecret) throw new Error('Razorpay is not configured yet.');
     const order = await createOrder(
       { keyId: cfg.razorpayKeyId, keySecret: cfg.razorpayKeySecret },
-      bd.total,
+      q.total,
       notes,
     );
     await query(
       `INSERT INTO payments (tenant_id, provider, merchant_txn_id, provider_order_id, razorpay_order_id,
-                             base_paise, gst_paise, fee_paise, total_paise, status, notes)
-       VALUES ($1, 'razorpay', $2, $3, $3, $4, $5, $6, $7, 'created', $8)`,
-      [tenantId, merchantTxnId, order.id, bd.base, bd.gst, bd.fee, bd.total, JSON.stringify(order.notes || {})],
+                             base_paise, gst_paise, fee_paise, total_paise, credit_paise, units, status, notes)
+       VALUES ($1, 'razorpay', $2, $3, $3, $4, $5, $6, $7, $8, $9, 'created', $10)`,
+      [tenantId, merchantTxnId, order.id, q.base, q.gst, q.fee, q.total, q.creditPaise, q.units,
+        JSON.stringify(order.notes || {})],
     );
     // mode 'modal' -> Razorpay Checkout opens in-page (see billing.ejs)
     return {
-      mode: 'modal', provider: 'razorpay', orderId: order.id, amount: bd.total,
-      keyId: cfg.razorpayKeyId, breakdown: bd,
+      mode: 'modal', provider: 'razorpay', orderId: order.id, amount: q.total,
+      keyId: cfg.razorpayKeyId, breakdown: q, units: q.units,
       prefill: { email: extra.email || '', name: extra.businessName || '' },
       gstin: extra.gstin || '',
     };
@@ -188,12 +230,15 @@ async function creditPaidOrder(orderId, paymentId) {
       [paymentId || null, p.id],
     );
     const { rows: wr } = await client.query('SELECT balance_paise FROM wallets WHERE tenant_id = $1 FOR UPDATE', [p.tenant_id]);
-    const newBalance = Number(wr[0]?.balance_paise || 0) + Number(p.base_paise);
+    // Credit the face value (credit_paise) so pack discounts arrive as bonus credit.
+    // Older orders (pre-migration 009) have no credit_paise → fall back to base_paise (they were 1:1).
+    const creditPaise = Number(p.credit_paise ?? p.base_paise);
+    const newBalance = Number(wr[0]?.balance_paise || 0) + creditPaise;
     await client.query('UPDATE wallets SET balance_paise = $1, updated_at = now() WHERE tenant_id = $2', [newBalance, p.tenant_id]);
     await client.query(
-      `INSERT INTO wallet_txns (tenant_id, type, amount_paise, balance_after_paise, payment_id, note)
-       VALUES ($1, 'topup', $2, $3, $4, $5)`,
-      [p.tenant_id, Number(p.base_paise), newBalance, p.id, `top-up (order ${orderId})`],
+      `INSERT INTO wallet_txns (tenant_id, type, amount_paise, balance_after_paise, units, payment_id, note)
+       VALUES ($1, 'topup', $2, $3, $4, $5, $6)`,
+      [p.tenant_id, creditPaise, newBalance, p.units || null, p.id, `top-up (order ${orderId})`],
     );
     await client.query('COMMIT');
     log(`billing: tenant ${p.tenant_id} topped up ${p.base_paise} paise -> balance ${newBalance}`);
