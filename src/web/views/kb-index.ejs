@@ -1,0 +1,77 @@
+<%
+// Public, server-rendered KB landing. `topics` is KB_TOPICS.
+const itemList = {
+  '@context': 'https://schema.org',
+  '@type': 'ItemList',
+  name: 'AVideoRouter Knowledge Base',
+  itemListElement: topics.map((t, i) => ({
+    '@type': 'ListItem', position: i + 1, name: t.title, url: `/knowledge-base/${t.slug}`,
+  })),
+};
+%>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Knowledge Base — AVideoRouter</title>
+  <meta name="description" content="How AVideoRouter removes the busywork after every live session — automating Zoom & Fathom recording transfers to YouTube and your LMS. Browse the pain points it solves.">
+  <link rel="canonical" href="/knowledge-base">
+  <script type="application/ld+json"><%- JSON.stringify(itemList) %></script>
+  <style>
+    :root{ --bg:#0f1420; --panel:#1a2233; --panel2:#223048; --line:#2e3d5c; --text:#e8edf7; --muted:#93a1bd; --accent:#4f8cff; }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font:16px/1.65 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+    a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+    .wrap{max-width:920px;margin:0 auto;padding:0 20px}
+    header.top{border-bottom:1px solid var(--line);padding:16px 0}
+    header.top .wrap{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    .brand{font-weight:800;font-size:1.15rem} .brand .a{color:var(--accent)}
+    .signup{display:inline-block;padding:9px 16px;border-radius:8px;background:var(--accent);color:#fff;font-weight:700}
+    .signup:hover{text-decoration:none}
+    main{padding:32px 0 12px}
+    h1{font-size:2rem;margin:.2rem 0 .3rem}
+    .lead{color:var(--muted);margin:0 0 1.4rem;max-width:70ch}
+    .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+    .card{display:block;border:1px solid var(--line);border-radius:12px;padding:18px;background:var(--panel);transition:border-color .12s,transform .12s}
+    .card:hover{border-color:var(--accent);transform:translateY(-2px);text-decoration:none}
+    .card h2{font-size:1.12rem;margin:0 0 .4rem;color:var(--text)}
+    .card p{margin:0;color:var(--muted);font-size:.95rem}
+    .card .go{color:var(--accent);font-weight:700;margin-top:.7rem;display:inline-block}
+    footer{border-top:1px solid var(--line);margin-top:34px;padding:20px 0;color:var(--muted);font-size:.9rem;text-align:center}
+    footer .links{display:flex;flex-wrap:wrap;gap:14px;justify-content:center;margin-bottom:8px}
+  </style>
+</head>
+<body>
+  <header class="top"><div class="wrap">
+    <a class="brand" href="/"><span class="a">A</span>Video<span class="a">Router</span></a>
+    <span><a href="/">Home</a> · <a href="/faq">FAQ</a> · <a class="signup" href="/">Free sign up</a></span>
+  </div></header>
+
+  <main><div class="wrap">
+    <h1>Knowledge Base</h1>
+    <p class="lead">The busywork after a live session — downloading, uploading, filing, deleting — quietly
+      eats your week. Here are the specific pain points teachers and creators hit, and exactly how
+      AVideoRouter removes each one.</p>
+    <div class="cards">
+      <% topics.forEach(function (t) { %>
+        <a class="card" href="/knowledge-base/<%= t.slug %>">
+          <h2><%= t.title %></h2>
+          <p><%= t.teaser %></p>
+          <span class="go">Read →</span>
+        </a>
+      <% }); %>
+    </div>
+  </div></main>
+
+  <footer><div class="wrap">
+    <div class="links">
+      <a href="/">Home</a><a href="/faq">FAQ</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a>
+      <a href="/refund">Refund</a><a href="/shipping">Shipping</a><a href="/contact">Contact us</a>
+    </div>
+    <div style="margin-bottom:6px">Support: <a href="mailto:connect@divineleads.guru?subject=AVideoRouter">connect@divineleads.guru</a></div>
+    <div>© <%= new Date().getFullYear() %> AVideoRouter · an app by Divine Leads</div>
+  </div></footer>
+  <script src="/public/beacon.js"></script>
+</body>
+</html>

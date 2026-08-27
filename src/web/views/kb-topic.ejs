@@ -1,0 +1,113 @@
+<%
+// Public, server-rendered KB topic page. Locals: topic, prev, next, index, total.
+const prevHref = prev ? `/knowledge-base/${prev.slug}` : '/knowledge-base';
+const nextHref = next ? `/knowledge-base/${next.slug}` : '/knowledge-base';
+const strip = (h) => h.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+const ld = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'Article',
+    headline: topic.title,
+    description: topic.metaDescription,
+    keywords: topic.keywords.join(', '),
+    articleBody: strip(topic.pain) + ' ' + strip(topic.solution),
+    about: 'Automating Zoom and Fathom recording transfers to YouTube and LMS',
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: '/' },
+      { '@type': 'ListItem', position: 2, name: 'Knowledge Base', item: '/knowledge-base' },
+      { '@type': 'ListItem', position: 3, name: topic.title, item: `/knowledge-base/${topic.slug}` },
+    ],
+  },
+];
+%>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title><%= topic.title %> — AVideoRouter</title>
+  <meta name="description" content="<%= topic.metaDescription %>">
+  <meta name="keywords" content="<%= topic.keywords.join(', ') %>">
+  <link rel="canonical" href="/knowledge-base/<%= topic.slug %>">
+  <% if (prev) { %><link rel="prev" href="<%= prevHref %>"><% } %>
+  <% if (next) { %><link rel="next" href="<%= nextHref %>"><% } %>
+  <script type="application/ld+json"><%- JSON.stringify(ld) %></script>
+  <style>
+    :root{ --bg:#0f1420; --panel:#1a2233; --panel2:#223048; --line:#2e3d5c; --text:#e8edf7; --muted:#93a1bd; --accent:#4f8cff; --ok:#2ecc71; }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font:16px/1.7 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+    a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+    .wrap{max-width:820px;margin:0 auto;padding:0 20px}
+    header.top{border-bottom:1px solid var(--line);padding:14px 0;position:sticky;top:0;background:var(--bg);z-index:5}
+    header.top .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+    .navbtn{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);font-weight:600;white-space:nowrap}
+    .navbtn:hover{border-color:var(--accent);text-decoration:none}
+    .right{display:flex;align-items:center;gap:10px}
+    .signup{padding:8px 16px;border-radius:8px;background:var(--accent);color:#fff;font-weight:700;white-space:nowrap}
+    .signup:hover{text-decoration:none}
+    .crumb{color:var(--muted);font-size:.85rem;margin:18px 0 2px}
+    main{padding:8px 0 12px}
+    h1{font-size:1.85rem;margin:.2rem 0 1rem;line-height:1.25}
+    .block{border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:16px 0;background:var(--panel)}
+    .block.pain{border-left:4px solid #e0803a}
+    .block.sol{border-left:4px solid var(--ok)}
+    .block h2{font-size:1.15rem;margin:0 0 .5rem}
+    .block.pain h2{color:#e0a06a} .block.sol h2{color:var(--ok)}
+    .cta{display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin:26px 0 8px}
+    .cta .big{padding:12px 22px;border-radius:8px;background:var(--accent);color:#fff;font-weight:700;font-size:1.02rem}
+    .cta .big:hover{text-decoration:none}
+    .pager{display:flex;justify-content:space-between;gap:12px;margin:26px 0 10px;border-top:1px solid var(--line);padding-top:16px}
+    .pager a{color:var(--muted)} .pager a:hover{color:var(--accent)}
+    footer{border-top:1px solid var(--line);margin-top:24px;padding:20px 0;color:var(--muted);font-size:.9rem;text-align:center}
+    footer .links{display:flex;flex-wrap:wrap;gap:14px;justify-content:center;margin-bottom:8px}
+    @media(max-width:560px){ .navbtn .lbl{display:none} }
+  </style>
+</head>
+<body>
+  <header class="top"><div class="wrap"><div class="row">
+    <a class="navbtn" href="<%= prevHref %>" title="Back" aria-label="Back">←<span class="lbl"> Back</span></a>
+    <div class="right">
+      <a class="signup" href="/">Free sign up</a>
+      <a class="navbtn" href="<%= nextHref %>" title="Forward" aria-label="Forward"><span class="lbl">Next </span>→</a>
+    </div>
+  </div></div></header>
+
+  <main><div class="wrap">
+    <div class="crumb"><a href="/">Home</a> › <a href="/knowledge-base">Knowledge Base</a> › <span><%= index + 1 %> of <%= total %></span></div>
+    <h1><%= topic.title %></h1>
+
+    <div class="block pain">
+      <h2><%= topic.painHeading %></h2>
+      <%- topic.pain %>
+    </div>
+    <div class="block sol">
+      <h2><%= topic.solutionHeading %></h2>
+      <%- topic.solution %>
+    </div>
+
+    <div class="cta">
+      <a class="big" href="/">Free sign up — first upload's on us</a>
+      <a href="/knowledge-base">← All topics</a>
+    </div>
+
+    <div class="pager">
+      <a href="<%= prevHref %>"><%= prev ? '← ' + prev.title : '← Back to Knowledge Base' %></a>
+      <a href="<%= nextHref %>" style="text-align:right"><%= next ? next.title + ' →' : 'Back to Knowledge Base →' %></a>
+    </div>
+  </div></main>
+
+  <footer><div class="wrap">
+    <div class="links">
+      <a href="/">Home</a><a href="/knowledge-base">Knowledge Base</a><a href="/faq">FAQ</a>
+      <a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/contact">Contact us</a>
+    </div>
+    <div style="margin-bottom:6px">Support: <a href="mailto:connect@divineleads.guru?subject=AVideoRouter">connect@divineleads.guru</a></div>
+    <div>© <%= new Date().getFullYear() %> AVideoRouter · an app by Divine Leads</div>
+  </div></footer>
+  <script src="/public/beacon.js"></script>
+</body>
+</html>

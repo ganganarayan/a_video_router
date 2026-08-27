@@ -15,6 +15,7 @@ import { dbadminRouter } from './routes/dbadmin.js';
 import * as billing from '../billing.js';
 import { getConfigValue } from '../db.js';
 import { LEGAL, LEGAL_ORDER, LAST_UPDATED } from './content/legal.js';
+import { KB_TOPICS } from './content/kb.js';
 
 const LEGAL_LABELS = { privacy: 'Privacy', terms: 'Terms', refund: 'Refund', shipping: 'Shipping', contact: 'Contact us' };
 const LEGAL_LINKS = LEGAL_ORDER.map((slug) => ({ href: `/${slug}`, label: LEGAL_LABELS[slug] }));
@@ -111,13 +112,30 @@ export function createServer() {
   // Public FAQ (anonymous) — curated Q&A for visitors, linked from the landing footer.
   app.get('/faq', (_req, res) => res.render('faq'));
 
+  // Public Knowledge Base (anonymous, crawlable) — pain-point/solution pages for
+  // prospects and AI search. Distinct from the in-app Help center. Index + one
+  // page per topic; /knowledge-base/:slug falls through to 404 for unknown slugs.
+  app.get('/knowledge-base', (_req, res) => res.render('kb-index', { topics: KB_TOPICS }));
+  app.get('/knowledge-base/:slug', (req, res, next) => {
+    const i = KB_TOPICS.findIndex((t) => t.slug === req.params.slug);
+    if (i < 0) return next();
+    res.render('kb-topic', {
+      topic: KB_TOPICS[i],
+      prev: i > 0 ? KB_TOPICS[i - 1] : null,
+      next: i < KB_TOPICS.length - 1 ? KB_TOPICS[i + 1] : null,
+      index: i,
+      total: KB_TOPICS.length,
+    });
+  });
+
   // Crawlability: allow bots on public pages, keep them off the auth-walled app,
   // and advertise the sitemap. Base URL is taken from the request so it matches
   // whichever host is being crawled.
-  const PUBLIC_PATHS = ['/', '/faq', '/privacy', '/terms', '/refund', '/shipping', '/contact'];
+  const PUBLIC_PATHS = ['/', '/faq', '/knowledge-base', '/privacy', '/terms', '/refund', '/shipping', '/contact'];
+  const KB_PATHS = KB_TOPICS.map((t) => `/knowledge-base/${t.slug}`);
   const PRIVATE_PATHS = ['/api/', '/oauth/', '/dbadmin', '/admin', '/login', '/reset', '/set-password',
     '/runs', '/sources', '/logs', '/connections', '/routing', '/schedules', '/team', '/billing',
-    '/settings', '/help', '/knowledge-base', '/visitors', '/traffic'];
+    '/settings', '/help', '/visitors', '/traffic'];
   const baseUrl = (req) => `${req.protocol}://${req.get('host')}`;
 
   app.get('/robots.txt', (req, res) => {
@@ -130,8 +148,8 @@ export function createServer() {
   app.get('/sitemap.xml', (req, res) => {
     const base = baseUrl(req);
     const today = new Date().toISOString().slice(0, 10);
-    const urls = PUBLIC_PATHS.map((p) =>
-      `  <url><loc>${base}${p === '/' ? '/' : p}</loc><lastmod>${today}</lastmod></url>`).join('\n');
+    const urls = [...PUBLIC_PATHS, ...KB_PATHS].map((p) =>
+      `  <url><loc>${base}${p}</loc><lastmod>${today}</lastmod></url>`).join('\n');
     res.type('application/xml').send(
       `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`);
   });
@@ -145,11 +163,6 @@ export function createServer() {
     app.get(`/${route}`, requirePageAuth, resolveTenant, requireSuperAdmin,
       (req, res) => res.render(route, { page: route, title, user: req.user }));
   }
-
-  // Knowledge Base — any logged-in user (tenant users AND the super admin, who has
-  // no tenant context), so no requireTenant. Separate from the Help center.
-  app.get('/knowledge-base', requirePageAuth, resolveTenant,
-    (req, res) => res.render('knowledge', { page: 'knowledge-base', title: 'Knowledge Base', user: req.user }));
 
   const pages = { connections: 'Connections', routing: 'Routing', runs: 'Runs', sources: 'Sources', logs: 'Logs', schedules: 'Schedules', team: 'Team', billing: 'Billing', settings: 'Settings', help: 'Help' };
   for (const [route, title] of Object.entries(pages)) {
