@@ -1,3 +1,50 @@
+<%
+// Server-rendered so AI/search crawlers read the content without executing JS.
+// The client script below only adds search filtering over this same DOM.
+const FAQ = [
+  { q: 'What does AVideoRouter do?',
+    a: `<p>It automatically moves your Zoom and Fathom recordings to YouTube and/or your course platform (LMS)
+        — downloading, uploading, logging the result, and optionally deleting the Zoom original — on a schedule
+        you set, without signing into Zoom or YouTube each time.</p>` },
+  { q: 'Which sources and destinations are supported?',
+    a: `<p><b>Sources:</b> Zoom cloud recordings and Fathom. <b>Destinations:</b> YouTube channels and any LMS with a
+        video-ingest API. You connect each once, then set routing rules and schedules.</p>` },
+  { q: 'How much does AVideoRouter cost?',
+    a: `<p>Pay as you go: <b>₹50 per unit of transfer</b>, where one unit is up to 1&nbsp;GB per file (a file over
+        1&nbsp;GB counts as 2 units, and so on). Your <b>first upload is free</b>. You buy credits in advance and
+        they never expire until used. GST invoicing is available if you add your GSTIN.</p>` },
+  { q: 'How fast is it?',
+    a: `<p>Very fast — a 1&nbsp;GB recording moves in roughly 90 seconds end to end (about 60s to download from the
+        source and 30s to upload to the destination). Large batches run unattended on your schedule.</p>` },
+  { q: 'Do I need to be technical to set it up?',
+    a: `<p>No. Connecting Zoom, YouTube, Fathom and your LMS is a one-time guided setup (paste a couple of keys,
+        click authorise). After that it runs hands-free. Staff you invite can operate it with view or edit
+        permissions — even a non-technical team member.</p>` },
+  { q: 'Is my data private?',
+    a: `<p>Yes. We move your recordings between your own accounts and log the results for you. Only anonymous
+        public-page traffic is measured for analytics; your in-app activity is not tracked. See our
+        <a href="/privacy">Privacy policy</a>.</p>` },
+  { q: 'Can I delete the Zoom copy after it is published?',
+    a: `<p>Yes — deletion is manual and in your control. Once a recording has been uploaded, a
+        <b>Delete from Zoom</b> button becomes available in the dashboard. Nothing is deleted automatically.</p>` },
+  { q: 'What is your refund policy?',
+    a: `<p>Credits are non-refundable, but any unused balance stays in your wallet until you use it. Full details on
+        the <a href="/refund">Refund page</a>.</p>` },
+  { q: 'How do I get started?',
+    a: `<p>Create your workspace and connect your first source — your first upload is free. Then set a routing rule
+        and a schedule. <a href="/login">Log in to begin</a>.</p>` },
+];
+const strip = (h) => h.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+const jsonld = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: FAQ.map((f) => ({
+    '@type': 'Question',
+    name: f.q,
+    acceptedAnswer: { '@type': 'Answer', text: strip(f.a) },
+  })),
+};
+%>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -5,6 +52,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>FAQ — AVideoRouter</title>
   <meta name="description" content="Frequently asked questions about AVideoRouter — how it routes Zoom & Fathom recordings to YouTube and your LMS, pricing, speed, and setup.">
+  <link rel="canonical" href="/faq">
+  <script type="application/ld+json"><%- JSON.stringify(jsonld) %></script>
   <style>
     :root{ --bg:#0f1420; --panel:#1a2233; --panel2:#223048; --line:#2e3d5c; --text:#e8edf7; --muted:#93a1bd; --accent:#4f8cff; }
     *{box-sizing:border-box}
@@ -28,7 +77,6 @@
     .faq .body p{margin:.5rem 0}
     .cta{display:inline-block;margin:1.2rem 0;padding:11px 20px;border-radius:8px;background:var(--accent);color:#fff;font-weight:700}
     .cta:hover{text-decoration:none}
-    mark{background:var(--accent);color:#000;border-radius:2px;padding:0 1px}
     footer{border-top:1px solid var(--line);margin-top:28px;padding:20px 0;color:var(--muted);font-size:.9rem;text-align:center}
     footer .links{display:flex;flex-wrap:wrap;gap:14px;justify-content:center;margin-bottom:8px}
   </style>
@@ -43,8 +91,15 @@
     <h1>Frequently asked questions</h1>
     <p class="lead">Quick answers about AVideoRouter. Already a customer? The in-app <b>Help</b> center has full step-by-step guides.</p>
     <input id="q" class="search" type="search" placeholder="Search e.g. pricing, Zoom, YouTube, LMS, speed…" autocomplete="off">
-    <p class="count" id="count"></p>
-    <div id="list"></div>
+    <p class="count" id="count"><%= FAQ.length %> questions</p>
+    <div id="list">
+      <% FAQ.forEach(function (f) { %>
+      <details class="faq" data-text="<%= (f.q + ' ' + strip(f.a)).toLowerCase() %>">
+        <summary><%= f.q %></summary>
+        <div class="body"><%- f.a %></div>
+      </details>
+      <% }); %>
+    </div>
     <p class="count" id="empty" style="display:none">No questions match your search.</p>
     <a class="cta" href="/login">Get started — first upload free</a>
   </div></main>
@@ -60,65 +115,27 @@
   </div></footer>
 
   <script>
-  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
-  const FAQ = [
-    { q: 'What does AVideoRouter do?',
-      a: `<p>It automatically moves your Zoom and Fathom recordings to YouTube and/or your course platform (LMS)
-          — downloading, uploading, logging the result, and optionally deleting the Zoom original — on a schedule
-          you set, without signing into Zoom or YouTube each time.</p>` },
-    { q: 'Which sources and destinations are supported?',
-      a: `<p><b>Sources:</b> Zoom cloud recordings and Fathom. <b>Destinations:</b> YouTube channels and any LMS with a
-          video-ingest API. You connect each once, then set routing rules and schedules.</p>` },
-    { q: 'How much does it cost?',
-      a: `<p>Pay as you go: <b>₹50 per unit of transfer</b>, where one unit is up to 1&nbsp;GB per file (a file over
-          1&nbsp;GB counts as 2 units, and so on). Your <b>first upload is free</b>. You buy credits in advance and
-          they never expire until used. GST invoicing is available if you add your GSTIN.</p>` },
-    { q: 'How fast is it?',
-      a: `<p>Very fast — a 1&nbsp;GB recording moves in roughly 90 seconds end to end (about 60s to download from the
-          source and 30s to upload to the destination). Large batches run unattended on your schedule.</p>` },
-    { q: 'Do I need to be technical to set it up?',
-      a: `<p>No. Connecting Zoom, YouTube, Fathom and your LMS is a one-time guided setup (paste a couple of keys,
-          click authorise). After that it runs hands-free. Staff you invite can operate it with view or edit
-          permissions — even a non-technical team member.</p>` },
-    { q: 'Is my data private?',
-      a: `<p>Yes. We move your recordings between your own accounts and log the results for you. Only anonymous
-          public-page traffic is measured for analytics; your in-app activity is not tracked. See our
-          <a href="/privacy">Privacy policy</a>.</p>` },
-    { q: 'Can I delete the Zoom copy after it is published?',
-      a: `<p>Yes — deletion is manual and in your control. Once a recording has been uploaded, a
-          <b>Delete from Zoom</b> button becomes available in the dashboard. Nothing is deleted automatically.</p>` },
-    { q: 'What is your refund policy?',
-      a: `<p>Credits are non-refundable, but any unused balance stays in your wallet until you use it. Full details on
-          the <a href="/refund">Refund page</a>.</p>` },
-    { q: 'How do I get started?',
-      a: `<p>Create your workspace and connect your first source — your first upload is free. Then set a routing rule
-          and a schedule. <a href="/login">Log in to begin</a>.</p>` },
-  ];
-
-  const listEl = document.getElementById('list');
-  const emptyEl = document.getElementById('empty');
-  const countEl = document.getElementById('count');
-  const qEl = document.getElementById('q');
-
-  function hl(text, f) {
-    const safe = esc(text);
-    if (!f) return safe;
-    try { return safe.replace(new RegExp('(' + f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'ig'), '<mark>$1</mark>'); }
-    catch { return safe; }
-  }
-  function render(filter) {
-    const f = (filter || '').trim().toLowerCase();
-    const matched = FAQ.filter((a) => !f || (a.q + ' ' + a.a).toLowerCase().includes(f));
-    listEl.innerHTML = matched.map((a) => `
-      <details class="faq"${f ? ' open' : ''}>
-        <summary>${hl(a.q, f)}</summary>
-        <div class="body">${a.a}</div>
-      </details>`).join('');
-    emptyEl.style.display = matched.length ? 'none' : 'block';
-    countEl.textContent = f ? `${matched.length} of ${FAQ.length} questions` : `${FAQ.length} questions`;
-  }
-  qEl.addEventListener('input', () => render(qEl.value));
-  render('');
+  // Progressive enhancement: filter the already-rendered questions. Content is in
+  // the HTML above, so crawlers see everything even with JS disabled.
+  (function () {
+    const qEl = document.getElementById('q');
+    const items = Array.from(document.querySelectorAll('#list .faq'));
+    const countEl = document.getElementById('count');
+    const emptyEl = document.getElementById('empty');
+    function render() {
+      const f = qEl.value.trim().toLowerCase();
+      let n = 0;
+      items.forEach((el) => {
+        const show = !f || el.dataset.text.includes(f);
+        el.style.display = show ? '' : 'none';
+        el.open = show && !!f;
+        if (show) n++;
+      });
+      emptyEl.style.display = n ? 'none' : 'block';
+      countEl.textContent = f ? (n + ' of ' + items.length + ' questions') : (items.length + ' questions');
+    }
+    qEl.addEventListener('input', render);
+  })();
   </script>
   <script src="/public/beacon.js"></script>
 </body>

@@ -111,6 +111,31 @@ export function createServer() {
   // Public FAQ (anonymous) — curated Q&A for visitors, linked from the landing footer.
   app.get('/faq', (_req, res) => res.render('faq'));
 
+  // Crawlability: allow bots on public pages, keep them off the auth-walled app,
+  // and advertise the sitemap. Base URL is taken from the request so it matches
+  // whichever host is being crawled.
+  const PUBLIC_PATHS = ['/', '/faq', '/privacy', '/terms', '/refund', '/shipping', '/contact'];
+  const PRIVATE_PATHS = ['/api/', '/oauth/', '/dbadmin', '/admin', '/login', '/reset', '/set-password',
+    '/runs', '/sources', '/logs', '/connections', '/routing', '/schedules', '/team', '/billing',
+    '/settings', '/help', '/knowledge-base', '/visitors', '/traffic'];
+  const baseUrl = (req) => `${req.protocol}://${req.get('host')}`;
+
+  app.get('/robots.txt', (req, res) => {
+    const lines = ['User-agent: *', 'Allow: /$',
+      ...PRIVATE_PATHS.map((p) => `Disallow: ${p}`),
+      '', `Sitemap: ${baseUrl(req)}/sitemap.xml`];
+    res.type('text/plain').send(lines.join('\n') + '\n');
+  });
+
+  app.get('/sitemap.xml', (req, res) => {
+    const base = baseUrl(req);
+    const today = new Date().toISOString().slice(0, 10);
+    const urls = PUBLIC_PATHS.map((p) =>
+      `  <url><loc>${base}${p === '/' ? '/' : p}</loc><lastmod>${today}</lastmod></url>`).join('\n');
+    res.type('application/xml').send(
+      `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`);
+  });
+
   // Super-admin console: all tenants + impersonation.
   app.get('/admin', requirePageAuth, resolveTenant, requireSuperAdmin,
     (req, res) => res.render('admin', { page: 'admin', title: 'Admin', user: req.user }));
