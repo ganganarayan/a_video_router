@@ -1,7 +1,7 @@
 import './helpers/env.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { topupBreakdown, computeUnits, pushDecision, packQuote, packRatePaise, validateUnits } from '../src/billing.js';
+import { topupBreakdown, computeUnits, pushDecision, packQuote, packRatePaise, validateUnits, isAlwaysOn } from '../src/billing.js';
 
 const cfg = { gstPercent: 18, gatewayPercent: 2.5 };
 const cfgP = { gstPercent: 18, gatewayPercent: 2.5, pricePerUnitPaise: 5000 };
@@ -73,6 +73,16 @@ test('validateUnits: multiples of 10, min 10', () => {
   assert.equal(validateUnits(15).ok, false);
   assert.equal(validateUnits(0).ok, false);
   assert.equal(validateUnits(10.5).ok, false);
+});
+
+test('isAlwaysOn: unlimited or unexpired subscription', () => {
+  const future = new Date(Date.now() + 86400000).toISOString();
+  const past = new Date(Date.now() - 86400000).toISOString();
+  assert.equal(isAlwaysOn(null), false);
+  assert.equal(isAlwaysOn({ unlimited: true }), true);              // comped workspace
+  assert.equal(isAlwaysOn({ unlimited: false, always_on_until: future }), true);
+  assert.equal(isAlwaysOn({ unlimited: false, always_on_until: past }), false); // lapsed
+  assert.equal(isAlwaysOn({ unlimited: false, always_on_until: null }), false);
 });
 
 test('push gate: every branch', () => {

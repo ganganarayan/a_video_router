@@ -21,6 +21,13 @@
     <div class="field"><label>Webhook secret</label><input id="rzp-webhook" type="password" placeholder="leave blank to keep"></div>
     <button class="primary" id="rzp-save">Save keys</button>
   </div>
+  <div class="row" style="align-items:flex-end; flex-wrap:wrap; margin-top:14px; border-top:1px solid var(--line); padding-top:14px">
+    <div class="field"><label>Always-On plan ID <span class="muted">(Razorpay Subscriptions plan)</span></label>
+      <input id="ao-plan" placeholder="plan_…" style="min-width:240px"></div>
+    <div class="field"><label>Price ₹/mo (display only)</label><input id="ao-price-rs" type="number" placeholder="999" style="width:130px"></div>
+    <button class="primary" id="ao-plan-save">Save plan</button>
+  </div>
+  <div id="ao-plan-note" class="muted" style="margin-top:6px">Create a monthly ₹999 plan in the Razorpay dashboard (Subscriptions → Plans), then paste its plan_id here to enable Always-On.</div>
 </div>
 
 <div class="card" id="landing-card">
@@ -76,6 +83,8 @@ async function loadConfig() {
     }
 
     document.getElementById('rzp-keyid').value = c.keyId || '';
+    document.getElementById('ao-plan').value = c.alwaysOnPlanId || '';
+    document.getElementById('ao-price-rs').value = c.alwaysOnPricePaise ? (c.alwaysOnPricePaise / 100) : '';
     document.getElementById('rzp-status').innerHTML = (c.configured
       ? '<span class="badge ok">Razorpay connected</span>'
       : '<span class="badge warn">Razorpay not configured — tenants cannot top up</span>')
@@ -95,6 +104,18 @@ document.getElementById('landing-save').onclick = async () => {
   try {
     await api('/admin/landing', { method: 'POST', body: { video_url: document.getElementById('landing-video').value } });
     toast('Landing video updated.');
+  } catch (e) { toast(e.message, 'err'); }
+};
+
+document.getElementById('ao-plan-save').onclick = async () => {
+  try {
+    const rs = Number(document.getElementById('ao-price-rs').value);
+    await api('/admin/billing/always-on', { method: 'POST', body: {
+      plan_id: document.getElementById('ao-plan').value.trim(),
+      price_paise: rs > 0 ? Math.round(rs * 100) : undefined,
+    } });
+    toast('Always-On plan saved.');
+    loadConfig();
   } catch (e) { toast(e.message, 'err'); }
 };
 

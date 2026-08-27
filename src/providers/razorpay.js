@@ -44,6 +44,39 @@ export function verifyPaymentSignature(keySecret, orderId, paymentId, signature)
   return timingSafeEqual(expected, signature);
 }
 
+// ---------- subscriptions (Always-On recurring tier) ----------
+
+// Create a recurring subscription against a dashboard-created plan. total_count is
+// the max number of billing cycles (120 months ~= open-ended monthly); the customer
+// authorises a mandate at Checkout, then Razorpay auto-charges each cycle.
+export function createSubscription(keys, { planId, totalCount = 120, notes }) {
+  return razorpayRequest(keys.keyId, keys.keySecret, 'POST', '/subscriptions', {
+    plan_id: planId,
+    total_count: totalCount,
+    customer_notify: 1,
+    notes: notes || {},
+  });
+}
+
+export function fetchSubscription(keys, subId) {
+  return razorpayRequest(keys.keyId, keys.keySecret, 'GET', `/subscriptions/${subId}`);
+}
+
+// Cancel a subscription. cancelAtCycleEnd=true lets the paid period run out first.
+export function cancelSubscription(keys, subId, cancelAtCycleEnd = true) {
+  return razorpayRequest(keys.keyId, keys.keySecret, 'POST', `/subscriptions/${subId}/cancel`, {
+    cancel_at_cycle_end: cancelAtCycleEnd ? 1 : 0,
+  });
+}
+
+// Verify the subscription Checkout handler signature.
+// For subscriptions Razorpay signs HMAC_SHA256(payment_id + '|' + subscription_id).
+export function verifySubscriptionSignature(keySecret, subscriptionId, paymentId, signature) {
+  const expected = crypto.createHmac('sha256', keySecret)
+    .update(`${paymentId}|${subscriptionId}`).digest('hex');
+  return timingSafeEqual(expected, signature);
+}
+
 // Verify a webhook: HMAC_SHA256(rawBody, webhook_secret) == X-Razorpay-Signature.
 export function verifyWebhookSignature(webhookSecret, rawBody, signature) {
   const expected = crypto.createHmac('sha256', webhookSecret)

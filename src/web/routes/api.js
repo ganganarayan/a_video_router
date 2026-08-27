@@ -175,7 +175,17 @@ apiRouter.get('/admin/billing/config', requireSuperAdmin, wrap(async (_req, res)
     gstPercent: c.gstPercent,
     gatewayPercent: c.gatewayPercent,
     minTopupPaise: c.minTopupPaise,
+    alwaysOnPlanId: c.alwaysOnPlanId || '',
+    alwaysOnPricePaise: c.alwaysOnPricePaise,
   });
+}));
+
+// Configure the Always-On subscription plan (created in the Razorpay dashboard).
+apiRouter.post('/admin/billing/always-on', requireSuperAdmin, wrap(async (req, res) => {
+  try {
+    await billing.setAlwaysOnPlan(req.body.plan_id, req.body.price_paise);
+    res.json({ ok: true });
+  } catch (err) { res.status(400).json({ error: err.message }); }
 }));
 
 // Choose the active gateway (razorpay live; easebuzz/phonepe pending adapters).
@@ -237,6 +247,16 @@ apiRouter.post('/settings/account', wrap(async (req, res) => {
 apiRouter.use(requireTenant);
 
 const T = (req) => req.tenantId;
+
+// Gate a feature behind Always-On (an active subscription, or a comped/unlimited
+// workspace). Used for the scheduler and staff seats.
+const requireAlwaysOn = wrap(async (req, res, next) => {
+  if (await billing.hasAlwaysOn(T(req))) return next();
+  res.status(402).json({
+    error: 'This needs Always-On. Subscribe on the Billing page to unlock the daily scheduler and staff seats.',
+    needsAlwaysOn: true,
+  });
+});
 
 // ---------- overview / dashboard ----------
 
@@ -319,7 +339,7 @@ apiRouter.get('/schedules', wrap(async (req, res) => {
   res.json(rows.map((s) => ({ ...s, nextRun: nextRunOf(s) })));
 }));
 
-apiRouter.post('/schedules', requireOwner, wrap(async (req, res) => {
+apiRouter.post('/schedules', requireOwner, requireAlwaysOn, wrap(async (req, res) => {
   const { name, cron_expression, timezone, enabled } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
   if (!cron.validate(cron_expression || '')) return res.status(400).json({ error: 'invalid cron expression' });
@@ -331,7 +351,7 @@ apiRouter.post('/schedules', requireOwner, wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
-apiRouter.put('/schedules/:id', requireOwner, wrap(async (req, res) => {
+apiRouter.put('/schedules/:id', requireOwner, requireAlwaysOn, wrap(async (req, res) => {
   const { name, cron_expression, timezone, enabled } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
   if (!cron.validate(cron_expression || '')) return res.status(400).json({ error: 'invalid cron expression' });
@@ -343,7 +363,7 @@ apiRouter.put('/schedules/:id', requireOwner, wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
-apiRouter.post('/schedules/:id/toggle', requireOwner, wrap(async (req, res) => {
+apiRouter.post('/schedules/:id/toggle', requireOwner, requireAlwaysOn, wrap(async (req, res) => {
   await query('UPDATE schedules SET enabled = $1 WHERE id = $2 AND tenant_id = $3',
     [req.body.enabled !== false, Number(req.params.id), T(req)]);
   await reloadSchedules();
@@ -804,7 +824,7 @@ apiRouter.get('/staff', requireOwner, wrap(async (req, res) => {
   res.json(await listTenantUsers(T(req)));
 }));
 
-apiRouter.post('/staff', requireOwner, wrap(async (req, res) => {
+apiRouter.post('/staff', requireOwner, requireAlwaysOn, wrap(async (req, res) => {
   const result = await createStaff(T(req), {
     email: req.body.email, name: req.body.name, permission: req.body.permission,
   });
@@ -856,6 +876,12 @@ apiRouter.get('/billing', wrap(async (req, res) => {
     unitsStep: billing.UNITS_STEP,
     packTiers: billing.PACK_TIERS,
     packs: billing.PACK_PRESETS.map((u) => billing.packQuote(u, c)),
+    // Always-On subscription (features tier).
+    alwaysOn: billing.isAlwaysOn(w),
+    alwaysOnUntil: w?.always_on_until || null,
+    subscriptionStatus: w?.subscription_status || null,
+    alwaysOnPricePaise: c.alwaysOnPricePaise,
+    alwaysOnAvailable: Boolean(c.alwaysOnPlanId) && paymentsEnabled,
     provider: c.provider,
     paymentsEnabled,
     razorpayConfigured: razorpayReady,
@@ -903,4 +929,26 @@ apiRouter.post('/billing/confirm', requireOwner, wrap(async (req, res) => {
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
+}));
+
+// --- Always-On subscription (owner only) ---
+apiRouter.post('/billing/subscribe', requireOwner, wrap(async (req, res) => {
+  try {
+    const out = await billing.startSubscription(T(req), { email: req.user?.email });
+    res.json({ ok: true, ...out });
+  } catch (err) { res.status(400).json({ error: err.message }); }
+}));
+
+apiRouter.post('/billing/subscription/confirm', requireOwner, wrap(async (req, res) => {
+  try {
+    const r = await billing.confirmSubscription(
+      T(req), req.body.subscription_id, req.body.payment_id, req.body.signature);
+    res.json({ ok: true, ...r });
+  } catch (err) { res.status(400).json({ error: err.message }); }
+}));
+
+apiRouter.post('/billing/subscription/cancel', requireOwner, wrap(async (req, res) => {
+  try {
+    res.json({ ok: true, ...await billing.cancelAlwaysOn(T(req)) });
+  } catch (err) { res.status(400).json({ error: err.message }); }
 }));

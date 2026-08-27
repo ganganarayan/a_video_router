@@ -1,7 +1,10 @@
 import { pool, query, getConfigMap, setConfigValue } from './db.js';
 import { encrypt, decrypt } from './lib/secrets.js';
 import { log } from './lib/logger.js';
-import { createOrder, verifyPaymentSignature, verifyWebhookSignature } from './providers/razorpay.js';
+import {
+  createOrder, verifyPaymentSignature, verifyWebhookSignature,
+  createSubscription, cancelSubscription, verifySubscriptionSignature,
+} from './providers/razorpay.js';
 
 // ---------- config (global platform-level, in app_config) ----------
 
@@ -20,10 +23,20 @@ export async function getBillingConfig() {
     gstPercent: Number(c.gst_percent) || 18,
     gatewayPercent: Number(c.gateway_percent) || 2.5,
     minTopupPaise: Number(c.min_topup_paise) || 50000,           // ₹500
+    // Always-On subscription (features-only tier). Plan is created in the Razorpay
+    // dashboard by the super admin, its id saved here; price is display-only (the
+    // real amount is fixed by the plan).
+    alwaysOnPlanId: c.always_on_plan_id || '',
+    alwaysOnPricePaise: Number(c.always_on_price_paise) || 99900, // ₹999/mo
     razorpayKeyId: c.razorpay_key_id || '',
     razorpayKeySecret: decrypt(c.razorpay_key_secret || '') || '',
     razorpayWebhookSecret: decrypt(c.razorpay_webhook_secret || '') || '',
   };
+}
+
+export async function setAlwaysOnPlan(planId, pricePaise) {
+  if (planId !== undefined) await setConfigValue('always_on_plan_id', String(planId).trim());
+  if (pricePaise) await setConfigValue('always_on_price_paise', String(Math.round(Number(pricePaise))));
 }
 
 export async function setPaymentProvider(provider) {
@@ -268,7 +281,12 @@ export async function handleWebhook(rawBody, signature) {
     throw new Error('Webhook signature verification failed.');
   }
   const evt = JSON.parse(rawBody);
+  if (typeof evt.event === 'string' && evt.event.startsWith('subscription.')) {
+    return handleSubscriptionEvent(evt);
+  }
   const pe = evt?.payload?.payment?.entity;
+  // A subscription's recurring charges also arrive as payment.captured but carry a
+  // subscription_id and no order_id — those are handled via subscription.charged above.
   if (evt.event === 'payment.captured' && pe?.order_id) {
     return creditPaidOrder(pe.order_id, pe.id);
   }
@@ -302,4 +320,91 @@ export async function adjustBalance(tenantId, amountPaise, note) {
 
 export async function setUnlimited(tenantId, unlimited) {
   await query('UPDATE wallets SET unlimited = $1, updated_at = now() WHERE tenant_id = $2', [Boolean(unlimited), tenantId]);
+}
+
+// ---------- Always-On subscription (features-only tier) ----------
+
+// Premium access (scheduler + unlimited staff). Pure so it's unit-testable.
+// wallet.unlimited (owner/comped workspaces) always counts as Always-On.
+export function isAlwaysOn(wallet) {
+  if (!wallet) return false;
+  if (wallet.unlimited) return true;
+  return Boolean(wallet.always_on_until) && new Date(wallet.always_on_until) > new Date();
+}
+
+export async function hasAlwaysOn(tenantId) {
+  return isAlwaysOn(await getWallet(tenantId));
+}
+
+// Start a subscription: create it at Razorpay, store the id, return what Checkout needs.
+export async function startSubscription(tenantId, extra = {}) {
+  const cfg = await getBillingConfig();
+  if (cfg.provider !== 'razorpay') throw new Error('Always-On requires the Razorpay gateway.');
+  if (!cfg.razorpayKeyId || !cfg.razorpayKeySecret) throw new Error('Razorpay is not configured yet.');
+  if (!cfg.alwaysOnPlanId) throw new Error('The Always-On plan is not set up yet — ask the admin to configure it.');
+  const notes = { tenant_id: String(tenantId) };
+  if (extra.email) notes.email = extra.email;
+  const sub = await createSubscription(
+    { keyId: cfg.razorpayKeyId, keySecret: cfg.razorpayKeySecret },
+    { planId: cfg.alwaysOnPlanId, notes },
+  );
+  await query(
+    `UPDATE wallets SET rzp_subscription_id = $1, subscription_status = 'created', updated_at = now()
+     WHERE tenant_id = $2`,
+    [sub.id, tenantId],
+  );
+  return { subscriptionId: sub.id, keyId: cfg.razorpayKeyId, shortUrl: sub.short_url, planId: cfg.alwaysOnPlanId };
+}
+
+// Confirm the in-page subscription Checkout (verify signature, activate access).
+export async function confirmSubscription(tenantId, subscriptionId, paymentId, signature) {
+  const cfg = await getBillingConfig();
+  if (!verifySubscriptionSignature(cfg.razorpayKeySecret, subscriptionId, paymentId, signature)) {
+    throw new Error('Subscription signature verification failed.');
+  }
+  const { rows } = await query(
+    `UPDATE wallets SET subscription_status = 'active', rzp_subscription_id = $1,
+       always_on_until = now() + interval '35 days', updated_at = now()
+     WHERE tenant_id = $2 RETURNING always_on_until`,
+    [subscriptionId, tenantId],
+  );
+  return { ok: true, until: rows[0]?.always_on_until };
+}
+
+// Cancel at cycle end — access runs until always_on_until, then lapses.
+export async function cancelAlwaysOn(tenantId) {
+  const cfg = await getBillingConfig();
+  const w = await getWallet(tenantId);
+  if (w?.rzp_subscription_id && cfg.razorpayKeyId && cfg.razorpayKeySecret) {
+    await cancelSubscription({ keyId: cfg.razorpayKeyId, keySecret: cfg.razorpayKeySecret }, w.rzp_subscription_id, true)
+      .catch(() => {}); // best-effort; still mark locally
+  }
+  await query(
+    `UPDATE wallets SET subscription_status = 'cancelled', updated_at = now() WHERE tenant_id = $1`,
+    [tenantId],
+  );
+  return { ok: true, until: w?.always_on_until || null };
+}
+
+// Razorpay subscription.* webhook events → keep always_on_until in step.
+async function handleSubscriptionEvent(evt) {
+  const subId = evt?.payload?.subscription?.entity?.id;
+  if (!subId) return { ok: true, ignored: evt.event };
+  if (['subscription.charged', 'subscription.activated', 'subscription.authenticated', 'subscription.resumed']
+    .includes(evt.event)) {
+    await query(
+      `UPDATE wallets SET subscription_status = 'active',
+         always_on_until = now() + interval '35 days', updated_at = now()
+       WHERE rzp_subscription_id = $1`,
+      [subId],
+    );
+  } else if (['subscription.cancelled', 'subscription.halted', 'subscription.completed', 'subscription.paused']
+    .includes(evt.event)) {
+    // Leave always_on_until as-is (access runs to the paid-through date); just record status.
+    await query(
+      `UPDATE wallets SET subscription_status = $2, updated_at = now() WHERE rzp_subscription_id = $1`,
+      [subId, evt.event.replace('subscription.', '')],
+    );
+  }
+  return { ok: true, event: evt.event };
 }

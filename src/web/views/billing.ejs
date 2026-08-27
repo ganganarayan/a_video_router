@@ -23,6 +23,22 @@ top-up popup.</p>
   </div>
 </div>
 
+<div class="card" id="alwayson-card">
+  <div class="row" style="align-items:baseline; justify-content:space-between; gap:2rem; flex-wrap:wrap">
+    <div>
+      <h2 style="margin:0 0 4px">Always-On</h2>
+      <div id="ao-status" class="muted">—</div>
+      <div class="muted" style="font-size:13px; margin-top:6px">Unlocks the daily scheduler and unlimited staff seats. Transfers are still metered on top.</div>
+    </div>
+    <div style="text-align:right">
+      <div id="ao-price" style="font-weight:700; margin-bottom:8px"></div>
+      <button class="primary" id="ao-subscribe">Subscribe</button>
+      <button id="ao-cancel" style="display:none">Cancel</button>
+      <div id="ao-note" class="muted" style="margin-top:6px"></div>
+    </div>
+  </div>
+</div>
+
 <div class="card table-wrap">
   <h2>Transactions</h2>
   <table id="txn-table">
@@ -119,7 +135,68 @@ async function loadWallet() {
     note.innerHTML = '<span class="badge warn">Payments not enabled yet</span>';
     btn.disabled = true;
   } else { note.textContent = ''; btn.disabled = false; }
+
+  renderAlwaysOn();
 }
+
+// --- Always-On subscription ---
+function renderAlwaysOn() {
+  const status = document.getElementById('ao-status');
+  const subBtn = document.getElementById('ao-subscribe');
+  const canBtn = document.getElementById('ao-cancel');
+  const note = document.getElementById('ao-note');
+  document.getElementById('ao-price').textContent = fmtRs(CFG.alwaysOnPricePaise) + ' / month';
+  if (CFG.unlimited) {
+    status.innerHTML = '<span class="badge ok">Always-On — included with this workspace</span>';
+    subBtn.style.display = 'none'; canBtn.style.display = 'none'; note.textContent = ''; return;
+  }
+  if (CFG.alwaysOn) {
+    const until = CFG.alwaysOnUntil ? fmtDate(CFG.alwaysOnUntil) : '';
+    const cancelled = CFG.subscriptionStatus === 'cancelled';
+    status.innerHTML = '<span class="badge ok">Active</span>' + (until ? ` · ${cancelled ? 'access until' : 'renews around'} ${until}` : '');
+    subBtn.style.display = 'none';
+    canBtn.style.display = cancelled ? 'none' : '';
+    note.textContent = cancelled ? 'Cancelled — access runs until the date above.' : '';
+  } else {
+    status.innerHTML = '<span class="badge warn">Not active</span> — the scheduler and staff seats are locked.';
+    canBtn.style.display = 'none';
+    if (!CFG.alwaysOnAvailable) { subBtn.disabled = true; subBtn.style.display = ''; note.innerHTML = '<span class="badge warn">Subscriptions not enabled yet</span>'; }
+    else { subBtn.disabled = false; subBtn.style.display = ''; note.textContent = ''; }
+  }
+}
+
+document.getElementById('ao-subscribe').onclick = async () => {
+  let sub;
+  try { sub = await api('/billing/subscribe', { method: 'POST' }); }
+  catch (e) { toast(e.message, 'err'); return; }
+  const rzp = new Razorpay({
+    key: sub.keyId,
+    subscription_id: sub.subscriptionId,
+    name: 'AVideoRouter',
+    description: 'Always-On subscription',
+    prefill: { email: CFG.email || '' },
+    handler: async (resp) => {
+      try {
+        await api('/billing/subscription/confirm', { method: 'POST', body: {
+          subscription_id: resp.razorpay_subscription_id,
+          payment_id: resp.razorpay_payment_id,
+          signature: resp.razorpay_signature,
+        } });
+        toast('Always-On active — scheduler and staff unlocked.');
+        loadWallet();
+      } catch (e) { toast('Paid, but activation failed: ' + e.message + ' (it will reconcile via webhook).', 'err'); }
+    },
+    modal: { ondismiss: () => toast('Subscription not completed.', 'warn') },
+  });
+  rzp.on('payment.failed', (r) => toast('Payment failed: ' + (r.error?.description || 'unknown'), 'err'));
+  rzp.open();
+};
+
+document.getElementById('ao-cancel').onclick = async () => {
+  if (!confirm('Cancel Always-On? Access continues until the current period ends.')) return;
+  try { await api('/billing/subscription/cancel', { method: 'POST' }); toast('Subscription cancelled.'); loadWallet(); }
+  catch (e) { toast(e.message, 'err'); }
+};
 
 function buildPacks() {
   // Server-computed pack quotes (CFG.packs) — presets with descending rates.

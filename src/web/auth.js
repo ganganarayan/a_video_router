@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { config } from '../config.js';
 import { query } from '../db.js';
+import { hasAlwaysOn } from '../billing.js';
 
 const RESET_KEY = process.env.PASSWORD_RESET_KEY || '';
 export const resetEnabled = () => Boolean(RESET_KEY);
@@ -121,6 +122,14 @@ function toReqUser(u) {
 
 // --- middleware ---
 
+// Staff seats are an Always-On feature: a staff user whose workspace is not on
+// Always-On (subscription or comped/unlimited) is locked out until the owner
+// subscribes. Owners are never gated here (they can log in and subscribe).
+const STAFF_LOCK_MSG = 'Staff access needs an Always-On subscription. Ask the workspace owner to subscribe on the Billing page.';
+async function staffLocked(user) {
+  return user.isStaff && !(await hasAlwaysOn(user.tenantId).catch(() => false));
+}
+
 export async function requirePageAuth(req, res, next) {
   const u = await loadSessionUser(req).catch(() => null);
   if (!u) return res.redirect('/login');
@@ -129,6 +138,7 @@ export async function requirePageAuth(req, res, next) {
   if (req.user.mustChangePassword && req.path !== '/set-password') {
     return res.redirect('/set-password');
   }
+  if (await staffLocked(req.user)) return res.status(403).send(STAFF_LOCK_MSG);
   next();
 }
 
@@ -139,6 +149,7 @@ export async function requireApiAuth(req, res, next) {
   if (req.user.mustChangePassword) {
     return res.status(409).json({ error: 'password change required', redirect: '/set-password' });
   }
+  if (await staffLocked(req.user)) return res.status(403).json({ error: STAFF_LOCK_MSG, needsAlwaysOn: true });
   next();
 }
 

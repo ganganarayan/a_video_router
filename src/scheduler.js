@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { query } from './db.js';
 import { runPipeline } from './pipeline/run.js';
+import { hasAlwaysOn } from './billing.js';
 import { log, logError } from './lib/logger.js';
 
 // id -> node-cron task, for the currently-enabled schedules.
@@ -20,7 +21,16 @@ export async function getSchedules(tenantId) {
 export async function reloadSchedules() {
   for (const task of tasks.values()) task.stop();
   tasks.clear();
-  const { rows } = await query('SELECT * FROM schedules WHERE enabled = true ORDER BY id');
+  // The scheduler is an Always-On feature: only load schedules for tenants that are
+  // unlimited (comped) or hold an active subscription. (Belt-and-suspenders: each
+  // fire re-checks, so a lapse between reloads is still caught.)
+  const { rows } = await query(
+    `SELECT s.* FROM schedules s
+       JOIN wallets w ON w.tenant_id = s.tenant_id
+      WHERE s.enabled = true
+        AND (w.unlimited = true OR (w.always_on_until IS NOT NULL AND w.always_on_until > now()))
+      ORDER BY s.id`,
+  );
   for (const s of rows) {
     if (!cron.validate(s.cron_expression)) {
       logError(`schedule #${s.id} "${s.name}" has invalid cron "${s.cron_expression}" — skipped`);
@@ -29,8 +39,11 @@ export async function reloadSchedules() {
     const task = cron.schedule(
       s.cron_expression,
       () => {
-        log(`schedule "${s.name}" (#${s.id}) firing for tenant ${s.tenant_id}`);
-        runPipeline(s.tenant_id, 'scheduled').catch((err) => logError('scheduled run crashed:', err));
+        hasAlwaysOn(s.tenant_id).then((ok) => {
+          if (!ok) { log(`schedule "${s.name}" (#${s.id}) skipped — tenant ${s.tenant_id} not Always-On`); return; }
+          log(`schedule "${s.name}" (#${s.id}) firing for tenant ${s.tenant_id}`);
+          runPipeline(s.tenant_id, 'scheduled').catch((err) => logError('scheduled run crashed:', err));
+        }).catch((err) => logError('schedule Always-On check failed:', err));
       },
       { timezone: s.timezone || 'Asia/Kolkata' },
     );
@@ -51,6 +64,8 @@ function startRetention() {
       const r = await query(`DELETE FROM page_hits WHERE ts < now() - interval '${RETENTION_DAYS} days'`);
       if (r.rowCount) log(`retention: pruned ${r.rowCount} page_hits older than ${RETENTION_DAYS}d`);
     } catch (err) { logError('retention prune failed:', err); }
+    // Re-evaluate schedules daily so a lapsed Always-On subscription stops firing.
+    try { await reloadSchedules(); } catch (err) { logError('daily schedule reload failed:', err); }
   }, { timezone: 'Asia/Kolkata' });
 }
 
