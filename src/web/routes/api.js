@@ -680,7 +680,7 @@ apiRouter.delete('/rules/:id', requireOwner, wrap(async (req, res) => {
 
 // ---------- settings (per-tenant) ----------
 
-const SETTING_KEYS = ['rolling_window_days', 'zoom_delete_mode', 'email_to', 'email_from'];
+const SETTING_KEYS = ['rolling_window_days', 'zoom_delete_mode', 'email_to', 'email_from', 'gstin', 'gst_business_name'];
 
 apiRouter.get('/settings', wrap(async (req, res) => {
   const s = await getTenantSettings(T(req));
@@ -698,6 +698,14 @@ apiRouter.post('/settings', requireOwner, wrap(async (req, res) => {
   }
   if (body.rolling_window_days && !(Number(body.rolling_window_days) >= 1)) {
     return res.status(400).json({ error: 'rolling_window_days must be >= 1.' });
+  }
+  // GSTIN is optional; if given, normalise (no spaces, uppercase) and sanity-check the 15-char format.
+  if (body.gstin !== undefined) {
+    const g = String(body.gstin).replace(/\s+/g, '').toUpperCase();
+    if (g && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(g)) {
+      return res.status(400).json({ error: 'That does not look like a valid 15-character GSTIN. Leave it blank if you do not have one.' });
+    }
+    body.gstin = g;
   }
   for (const key of SETTING_KEYS) {
     if (body[key] !== undefined) await setTenantSetting(tid, key, String(body[key]).trim());
@@ -748,6 +756,7 @@ apiRouter.delete('/staff/:id', requireOwner, wrap(async (req, res) => {
 apiRouter.get('/billing', wrap(async (req, res) => {
   const w = await billing.getWallet(T(req));
   const c = await billing.getBillingConfig();
+  const s = await getTenantSettings(T(req));
   const razorpayReady = Boolean(c.razorpayKeyId && c.razorpayKeySecret);
   const paymentsEnabled = billing.LIVE_PROVIDERS.includes(c.provider)
     && (c.provider !== 'razorpay' || razorpayReady);
@@ -763,6 +772,10 @@ apiRouter.get('/billing', wrap(async (req, res) => {
     provider: c.provider,
     paymentsEnabled,
     razorpayConfigured: razorpayReady,
+    // Saved GST details (prefill the modal) + the customer email for the Checkout receipt.
+    gstin: s.gstin || '',
+    gst_business_name: s.gst_business_name || '',
+    email: req.user?.email || '',
   });
 }));
 
@@ -781,7 +794,14 @@ apiRouter.get('/billing/quote', wrap(async (req, res) => {
 // Create a Razorpay order for a wallet top-up (owner only).
 apiRouter.post('/billing/topup', requireOwner, wrap(async (req, res) => {
   try {
-    const out = await billing.createTopup(T(req), Number(req.body.base_paise));
+    const s = await getTenantSettings(T(req));
+    // GSTIN from the modal wins; else fall back to the saved setting. Optional either way.
+    const gstin = String(req.body.gstin ?? s.gstin ?? '').replace(/\s+/g, '').toUpperCase();
+    const out = await billing.createTopup(T(req), Number(req.body.base_paise), {
+      gstin,
+      businessName: s.gst_business_name || '',
+      email: req.user?.email || '',
+    });
     res.json({ ok: true, ...out });
   } catch (err) {
     res.status(400).json({ error: err.message });

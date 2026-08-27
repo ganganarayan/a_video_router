@@ -4,7 +4,8 @@
 <p class="muted">Pay as you go — <b>₹50 per video</b> (up to 1&nbsp;GB each; a file over 1&nbsp;GB
 counts as 2). Your first upload is free. Buy credits in multiples of 10 videos; an upload already
 in progress always finishes even if credits run out, and the shortfall is settled on your next
-top-up. GST invoices are issued separately.</p>
+top-up. Add your GSTIN (in <a href="/settings">Settings</a> or the top-up popup) to get a GST
+invoice in your business name; we also email an invoice for every transaction.</p>
 
 <div class="card" id="wallet-card">
   <div class="row" style="align-items:baseline; gap:2rem; justify-content:space-between">
@@ -35,6 +36,10 @@ top-up. GST invoices are issued separately.</p>
     <div class="modal-head">
       <h2>Pay as you go</h2>
       <button class="modal-close" id="close-topup" aria-label="Close">×</button>
+    </div>
+    <div style="margin:0 0 12px">
+      <label for="modal-gstin">GSTIN <span class="muted">(optional — for a GST invoice)</span></label>
+      <input id="modal-gstin" maxlength="15" placeholder="15-character GSTIN" style="text-transform:uppercase; width:100%">
     </div>
     <p class="muted" style="margin:0 0 8px">₹50 per video · buy in multiples of 10. Choose a pack:</p>
     <div id="pack-list"></div>
@@ -144,6 +149,7 @@ function openModal() {
   buildPacks();
   document.getElementById('cust-videos').value = '';
   document.getElementById('cust-calc').innerHTML = '';
+  document.getElementById('modal-gstin').value = CFG.gstin || ''; // prefill from saved Settings
   modal.classList.add('open');
 }
 document.getElementById('open-topup').onclick = openModal;
@@ -164,9 +170,10 @@ document.getElementById('cust-pay').onclick = () => {
 
 async function buy(videos) {
   const base = videos * CFG.pricePerUnitPaise;
+  const gstin = (document.getElementById('modal-gstin').value || '').trim();
   let order;
   try {
-    order = await api('/billing/topup', { method: 'POST', body: { base_paise: base } });
+    order = await api('/billing/topup', { method: 'POST', body: { base_paise: base, gstin } });
   } catch (e) { toast(e.message, 'err'); return; }
   modal.classList.remove('open');
   // Hosted-redirect gateways (Easebuzz/PhonePe) send the browser to their page.
@@ -178,6 +185,8 @@ async function buy(videos) {
     currency: 'INR',
     name: 'AVideoRouter',
     description: videos + ' video credits (' + fmtRs(order.breakdown.base) + ')',
+    // Prefill the customer email so Razorpay can email the payment receipt / GST invoice.
+    prefill: { email: (order.prefill && order.prefill.email) || CFG.email || '', name: (order.prefill && order.prefill.name) || '' },
     handler: async (resp) => {
       try {
         await api('/billing/confirm', { method: 'POST', body: {

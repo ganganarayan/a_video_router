@@ -125,7 +125,7 @@ export function topupBreakdown(baseP, cfg) {
   return { base: baseP, gst, fee, total: baseP + gst + fee };
 }
 
-export async function createTopup(tenantId, basePaise) {
+export async function createTopup(tenantId, basePaise, extra = {}) {
   const cfg = await getBillingConfig();
   const base = Math.round(Number(basePaise));
   // Validate the amount before touching the gateway. Sold in whole "packs" of
@@ -138,12 +138,19 @@ export async function createTopup(tenantId, basePaise) {
   const bd = topupBreakdown(base, cfg);
   const merchantTxnId = `vr_${tenantId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
+  // Notes ride along on the Razorpay order/payment. The optional GSTIN + business
+  // name are recorded here so Razorpay can raise a GST invoice for the customer.
+  const notes = { tenant_id: String(tenantId), base_paise: String(base), merchant_txn_id: merchantTxnId };
+  if (extra.gstin) notes.gstin = extra.gstin;
+  if (extra.businessName) notes.business_name = extra.businessName;
+  if (extra.email) notes.email = extra.email;
+
   if (cfg.provider === 'razorpay') {
     if (!cfg.razorpayKeyId || !cfg.razorpayKeySecret) throw new Error('Razorpay is not configured yet.');
     const order = await createOrder(
       { keyId: cfg.razorpayKeyId, keySecret: cfg.razorpayKeySecret },
       bd.total,
-      { tenant_id: String(tenantId), base_paise: String(base), merchant_txn_id: merchantTxnId },
+      notes,
     );
     await query(
       `INSERT INTO payments (tenant_id, provider, merchant_txn_id, provider_order_id, razorpay_order_id,
@@ -152,7 +159,12 @@ export async function createTopup(tenantId, basePaise) {
       [tenantId, merchantTxnId, order.id, bd.base, bd.gst, bd.fee, bd.total, JSON.stringify(order.notes || {})],
     );
     // mode 'modal' -> Razorpay Checkout opens in-page (see billing.ejs)
-    return { mode: 'modal', provider: 'razorpay', orderId: order.id, amount: bd.total, keyId: cfg.razorpayKeyId, breakdown: bd };
+    return {
+      mode: 'modal', provider: 'razorpay', orderId: order.id, amount: bd.total,
+      keyId: cfg.razorpayKeyId, breakdown: bd,
+      prefill: { email: extra.email || '', name: extra.businessName || '' },
+      gstin: extra.gstin || '',
+    };
   }
 
   // Easebuzz / PhonePe: schema + credential storage exist; the hosted-redirect

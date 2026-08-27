@@ -29,6 +29,16 @@
   </div>
 
   <div class="card">
+    <h2>GST details <span class="muted">(optional)</span></h2>
+    <label>Business / legal name</label><input id="s-gst-name" placeholder="As registered for GST">
+    <label>GSTIN</label><input id="s-gstin" placeholder="15-character GSTIN (leave blank if none)" maxlength="15" style="text-transform:uppercase">
+    <p><button class="primary" id="s-gst-save">Save GST details</button></p>
+    <p class="muted">Optional. If you add a GSTIN, it's sent to the payment gateway with each top-up so
+    a <b>GST invoice can be raised in your business name</b>. You can also enter/override it in the
+    top-up popup on the <a href="/billing">Billing</a> page.</p>
+  </div>
+
+  <div class="card">
     <h2>Admin account</h2>
     <label>Current password (required for any change)</label><input id="p-current" type="password">
     <label>New email (leave blank to keep)</label><input id="p-email" type="email">
@@ -45,6 +55,8 @@ async function load() {
   document.getElementById('s-email-to').value = s.email_to;
   document.getElementById('s-email-from').value = s.email_from;
   document.getElementById('s-pass-state').textContent = s.gmail_app_password_set ? '(saved)' : '(not set)';
+  document.getElementById('s-gstin').value = s.gstin || '';
+  document.getElementById('s-gst-name').value = s.gst_business_name || '';
 }
 
 document.getElementById('s-save').onclick = async () => {
@@ -60,6 +72,17 @@ document.getElementById('s-save').onclick = async () => {
     await api('/settings', { method: 'POST', body });
     toast('Settings saved');
     document.getElementById('s-email-pass').value = '';
+    load();
+  } catch (e) { toast(e.message, 'err'); }
+};
+
+document.getElementById('s-gst-save').onclick = async () => {
+  try {
+    await api('/settings', { method: 'POST', body: {
+      gstin: document.getElementById('s-gstin').value,
+      gst_business_name: document.getElementById('s-gst-name').value,
+    }});
+    toast('GST details saved');
     load();
   } catch (e) { toast(e.message, 'err'); }
 };
