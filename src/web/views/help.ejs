@@ -224,7 +224,11 @@ const KB = [
         90&nbsp;seconds). <b>Logs</b> shows the outcome and any error per recording.</p>` },
   { cat: 'Runs & logs', q: 'A row says “Skipped — wallet empty”',
     a: `<p>The upload was held because your wallet had no video credits. Top up on <b>Billing</b> — held
-        rows resume automatically on the next run. Nothing is lost.</p>` },
+        rows resume automatically on the next run. Nothing is lost.</p>
+        <div class="kb-note">A transfer that has <b>already started is never interrupted</b> for a low
+        balance — it finishes uploading even if that takes your wallet <b>below zero</b>. Any negative
+        balance is simply adjusted against your next top-up. Only the <b>next</b> not-yet-started upload
+        waits until credits are added.</div>` },
 
   // ---------------- BILLING ----------------
   { cat: 'Billing & wallet', q: 'How billing works & buying credits',
