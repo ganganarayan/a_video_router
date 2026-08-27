@@ -25,7 +25,7 @@ const str = (v) => {
 // phases 2–3); classification already routes them so no change is needed then.
 export function classifySection(path) {
   if (path === '/') return 'landing';
-  if (/^\/(kb|help|guide|video-analytics-guide)(\/|$)/i.test(path)) return 'kb';
+  if (/^\/(kb|help|guide|faq|video-analytics-guide)(\/|$)/i.test(path)) return 'kb';
   if (/^\/(privacy|terms|refund|shipping|contact)(\/|$)/i.test(path)) return 'legal';
   if (/^\/embed\//i.test(path)) return 'embed';
   return 'other';

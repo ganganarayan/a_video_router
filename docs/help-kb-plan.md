@@ -13,14 +13,23 @@ In-app help so tenant users (owner + staff) can self-serve answers about every f
 - Verified: EJS render smoke test + full `node --test` (52 pass).
 - NOT deployed to staging/prod yet (Railway-only verification pref — awaiting user go).
 
-## Phase 2 — Contextual + public KB  (not started)
-- Per-page "?" links that deep-link into the relevant article (`/help#article-id`).
-- Public (anonymous) KB subset, linked from the landing-page FAQ.
-- Super-admin editable article content (app_config-driven) so copy changes need no redeploy.
+## Phase 2 — Contextual + public KB
+- ✅ **A — Contextual "?" deep-links (DONE 2026-08-27):** stable article ids in `help.ejs`
+  (`id:` on anchor articles, slug fallback for the rest); `/help#<id>` opens + scrolls +
+  flashes the article (`openHash` + `.kb-flash`). A floating "?" help button (`.help-fab`)
+  is injected by `partials/head.ejs` via a `HELP_MAP` of page→article-id (connections→
+  connect-zoom, routing, sources→push-single, schedules, runs/logs→runs, billing, team,
+  settings→getting-started).
+- ✅ **B — Public anonymous FAQ (DONE 2026-08-27):** new `/faq` route (public, no auth) +
+  `views/faq.ejs` — standalone dark-theme page, own search + accordions, 9 prospect-facing
+  Q&As, beacon.js included. Linked from the landing-page footer. `/faq` classified as `kb`
+  in the tracking module (`track.js` classifySection).
+- ❌ **C — Super-admin editable content (CMS):** user opted OUT (2026-08-27). Articles stay
+  hardcoded in `help.ejs` / `faq.ejs`; edit those files + redeploy to change copy.
 
-## Phase 3 — Support + feedback  (not started)
-- "Contact support" form → email + a `support_tickets` table (migration + API).
-- "Was this helpful?" per article; basic search-term analytics.
+## Phase 3 — Support + feedback  (SKIPPED per user, 2026-08-27)
+- Not built. Existing `/contact` page (email + WhatsApp) covers support. No `support_tickets`
+  table, no helpful-votes, no search-term analytics. Revisit if needed later.
 
 ## Notes
 - Keep article copy accurate to SHIPPED features only. When a feature changes, update

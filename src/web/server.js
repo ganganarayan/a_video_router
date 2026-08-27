@@ -108,6 +108,9 @@ export function createServer() {
     res.status(204).end();
   });
 
+  // Public FAQ (anonymous) — curated Q&A for visitors, linked from the landing footer.
+  app.get('/faq', (_req, res) => res.render('faq'));
+
   // Super-admin console: all tenants + impersonation.
   app.get('/admin', requirePageAuth, resolveTenant, requireSuperAdmin,
     (req, res) => res.render('admin', { page: 'admin', title: 'Admin', user: req.user }));

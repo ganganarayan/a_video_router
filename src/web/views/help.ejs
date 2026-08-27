@@ -37,6 +37,8 @@ or open a section. Still stuck? See <a href="/contact">Contact us</a>.</p>
     color:var(--muted); font-size:.85rem; padding:.7rem .8rem; margin:.4rem 0 .2rem; }
   .kb-shot::before { content:'📷 '; }
   mark { background:var(--accent); color:#000; border-radius:2px; padding:0 1px; }
+  .kb-flash { animation: kbflash 1.6s ease-out 1; }
+  @keyframes kbflash { 0%,15% { box-shadow:0 0 0 2px var(--accent); background:rgba(79,140,255,.10); } 100% { box-shadow:none; background:transparent; } }
 </style>
 
 <script>
@@ -50,7 +52,7 @@ const ext  = (url, label) => `<a href="${url}" target="_blank" rel="noopener">${
 
 const KB = [
   // ---------------- GETTING STARTED ----------------
-  { cat: 'Getting started', q: 'What does AVideoRouter do, and what do I need?',
+  { id: 'getting-started', cat: 'Getting started', q: 'What does AVideoRouter do, and what do I need?',
     a: `<p>AVideoRouter automatically moves your Zoom / Fathom recordings to YouTube and/or your LMS,
         on a schedule you control — it downloads, uploads, logs the result, and can delete the Zoom
         original afterwards, without you signing into Zoom or YouTube each time.</p>
@@ -67,7 +69,7 @@ const KB = [
         </ol>` },
 
   // ---------------- CONNECT ZOOM ----------------
-  { cat: 'Connect Zoom', q: 'Step 1 — Turn on cloud recording in Zoom (one time)',
+  { id: 'connect-zoom', cat: 'Connect Zoom', q: 'Step 1 — Turn on cloud recording in Zoom (one time)',
     a: `${vid('zoom-recording', 'enabling Zoom cloud recording')}
         <ol class="kb-steps">
           <li>Sign in to the Zoom web portal at ${ext('https://zoom.us', 'zoom.us')} (browser, not the desktop app).</li>
@@ -188,7 +190,7 @@ const KB = [
           no re-work.</div>` },
 
   // ---------------- ROUTING ----------------
-  { cat: 'Routing', q: 'How does routing work?',
+  { id: 'routing', cat: 'Routing', q: 'How does routing work?',
     a: `<p>On <b>Routing</b> you create rules that match a recording's title (contains / prefix / regex)
         and send it to a chosen <b>YouTube channel</b> (and optionally an <b>LMS course/module</b>), with
         options like playlist, privacy, and a custom title. When a recording is pulled, AVideoRouter
@@ -198,7 +200,7 @@ const KB = [
         retried automatically on the next run once a matching rule exists.</p>` },
 
   // ---------------- SOURCES & MANUAL PUSH ----------------
-  { cat: 'Sources & manual push', q: 'Push a single recording right now',
+  { id: 'push-single', cat: 'Sources & manual push', q: 'Push a single recording right now',
     a: `<ol class="kb-steps">
           <li>Open <b>Sources</b> and find the recording.</li>
           <li>(Optional) set a YouTube <b>title</b>/<b>description</b> before pushing.</li>
@@ -210,7 +212,7 @@ const KB = [
         safely uploaded). You do it from the dashboard, without signing into Zoom.</p>` },
 
   // ---------------- SCHEDULES ----------------
-  { cat: 'Schedules', q: 'Set up automatic pulls',
+  { id: 'schedules', cat: 'Schedules', q: 'Set up automatic pulls',
     a: `<ol class="kb-steps">
           <li>Open <b>Schedules</b> → add a schedule and choose its time.</li>
           <li>When it fires, AVideoRouter pulls new recordings and routes them automatically.</li>
@@ -219,7 +221,7 @@ const KB = [
         <div class="kb-note">If no schedule is active, nothing runs automatically — use manual push instead.</div>` },
 
   // ---------------- RUNS & LOGS ----------------
-  { cat: 'Runs & logs', q: 'Where do I see progress and results?',
+  { id: 'runs', cat: 'Runs & logs', q: 'Where do I see progress and results?',
     a: `<p><b>Runs</b> shows live speed / ETA / progress while a push is in flight (roughly 1&nbsp;GB per
         90&nbsp;seconds). <b>Logs</b> shows the outcome and any error per recording.</p>` },
   { cat: 'Runs & logs', q: 'A row says “Skipped — wallet empty”',
@@ -231,7 +233,7 @@ const KB = [
         waits until credits are added.</div>` },
 
   // ---------------- BILLING ----------------
-  { cat: 'Billing & wallet', q: 'How billing works & buying credits',
+  { id: 'billing', cat: 'Billing & wallet', q: 'How billing works & buying credits',
     a: `<p>Pay-as-you-go: <b>₹50 per unit of transfer</b> — one unit is a single upload up to 1&nbsp;GB;
         a file over 1&nbsp;GB uses 2 units. Your first upload is free. Buy credits in <b>packs of 10</b>
         (10 / 20 / 30, or a custom whole multiple of 10) on the <b>Billing</b> page; prices shown include
@@ -242,7 +244,7 @@ const KB = [
         <a href="/refund">Refund policy</a> — but your balance stays in your wallet until you use it.</div>` },
 
   // ---------------- TEAM ----------------
-  { cat: 'Team & permissions', q: 'Add staff and set permissions',
+  { id: 'team', cat: 'Team & permissions', q: 'Add staff and set permissions',
     a: `<ol class="kb-steps">
           <li>Open <b>Team</b> → add a staff member (name, email, permission).</li>
           <li>They sign in with their email — no password the first time — and set one on first login.</li>
@@ -266,13 +268,18 @@ const emptyEl = document.getElementById('kb-empty');
 const countEl = document.getElementById('kb-count');
 const searchEl = document.getElementById('kb-search');
 
+function slugify(s) {
+  return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 60);
+}
+function artId(a) { return a.id || slugify(a.q); }
+
 function render(filter) {
   const f = (filter || '').trim().toLowerCase();
   const matched = KB.filter(a => !f || (a.q + ' ' + a.a + ' ' + a.cat).toLowerCase().includes(f));
   const cats = [...new Set(matched.map(a => a.cat))];
   listEl.innerHTML = cats.map(cat => {
     const arts = matched.filter(a => a.cat === cat).map(a => `
-      <details class="kb-art"${f ? ' open' : ''}>
+      <details class="kb-art" id="${artId(a)}"${f ? ' open' : ''}>
         <summary>${hl(a.q, f)}</summary>
         <div class="kb-body">${a.a}</div>
       </details>`).join('');
@@ -284,6 +291,21 @@ function render(filter) {
     : `${KB.length} articles across ${new Set(KB.map(a => a.cat)).size} sections`;
 }
 
+// Deep-link support: /help#<article-id> opens and scrolls to that article, and
+// briefly highlights it. Used by the per-page "?" help buttons.
+function openHash() {
+  const id = decodeURIComponent((location.hash || '').replace(/^#/, ''));
+  if (!id) return;
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.open = true;
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  el.classList.remove('kb-flash');
+  void el.offsetWidth; // restart the animation if re-triggered
+  el.classList.add('kb-flash');
+}
+window.addEventListener('hashchange', () => { render(''); searchEl.value = ''; openHash(); });
+
 function hl(text, f) {
   const safe = esc(text);
   if (!f) return safe;
@@ -294,5 +316,6 @@ function hl(text, f) {
 
 searchEl.addEventListener('input', () => render(searchEl.value));
 render('');
+openHash();
 </script>
 <%- include('partials/foot') %>

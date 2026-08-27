@@ -28,4 +28,12 @@
   <form method="post" action="/logout"><button type="submit">Log out</button></form>
 </nav>
 <div id="ctxbar"></div>
+<%
+  // Contextual help: map each page to the most relevant Help article, deep-linked.
+  const HELP_MAP = { connections: 'connect-zoom', routing: 'routing', sources: 'push-single',
+    schedules: 'schedules', runs: 'runs', logs: 'runs', billing: 'billing', team: 'team',
+    settings: 'getting-started' };
+  const helpId = HELP_MAP[page];
+%>
+<% if (helpId) { %><a class="help-fab" href="/help#<%= helpId %>" title="Help for this page" aria-label="Help for this page">?</a><% } %>
 <main>

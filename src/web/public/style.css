@@ -132,3 +132,14 @@ button.copy.copied { color: var(--ok); border-color: var(--ok); }
 }
 .pw-eye:hover { opacity: .85; }
 .pw-eye.on { opacity: 1; }
+
+/* Contextual per-page help button (head.ejs HELP_MAP) */
+.help-fab {
+  position: fixed; right: 18px; bottom: 18px; z-index: 40;
+  width: 40px; height: 40px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--accent); color: #fff; font-weight: 800; font-size: 20px;
+  text-decoration: none; box-shadow: 0 4px 14px rgba(0,0,0,.35);
+  opacity: .9; transition: opacity .12s, transform .12s;
+}
+.help-fab:hover { opacity: 1; transform: translateY(-2px); text-decoration: none; }
