@@ -1,0 +1,97 @@
+<%- include('partials/head') %>
+<h1>Knowledge Base</h1>
+<p class="muted">Concepts, policies and reference answers about AVideoRouter. Looking for step-by-step
+  setup instead? See the <a href="/help">Help</a> center.</p>
+
+<div class="card">
+  <div class="field">
+    <label>Search the knowledge base</label>
+    <input id="kb-search" type="search" placeholder="Search e.g. billing, wallet, retention, roles, privacy…" autocomplete="off">
+  </div>
+  <p class="muted" id="kb-count" style="margin:.4rem 0 0"></p>
+</div>
+
+<div id="kb-list"></div>
+<p class="muted" id="kb-empty" style="display:none">No articles match your search.</p>
+
+<style>
+  .kb-cat{margin:1.2rem 0 .3rem;font-size:1.05rem}
+  .kb-art{border:1px solid var(--line);border-radius:8px;margin:.45rem 0;overflow:hidden}
+  .kb-art>summary{cursor:pointer;padding:.75rem .9rem;font-weight:600;list-style:none}
+  .kb-art>summary::-webkit-details-marker{display:none}
+  .kb-art>summary::before{content:'▸';color:var(--accent);margin-right:.55rem;display:inline-block;transition:transform .12s}
+  .kb-art[open]>summary::before{transform:rotate(90deg)}
+  .kb-art .kb-body{padding:.2rem .9rem 1rem 1.8rem}
+  .kb-art .kb-body p{margin:.5rem 0}
+  .kb-art .kb-body ul{margin:.5rem 0;padding-left:1.2rem}
+  mark{background:var(--accent);color:#000;border-radius:2px;padding:0 1px}
+</style>
+
+<script>
+// Content-driven KB. Keep entries accurate to shipped behaviour; edit this array to
+// add articles (no backend / migration involved).
+const KB = [
+  { cat: 'Getting started', q: 'What is the Knowledge Base vs the Help center?',
+    a: `<p>The <b>Help</b> center holds step-by-step setup walkthroughs for each feature.
+        This <b>Knowledge Base</b> holds reference answers — concepts, policies, billing and
+        account questions you look up once rather than follow start to finish.</p>` },
+  { cat: 'Getting started', q: 'What does AVideoRouter do?',
+    a: `<p>It automatically moves your Zoom / Fathom recordings to YouTube and/or your LMS on a
+        schedule you control — downloading, uploading, logging the result, and optionally deleting
+        the Zoom original afterwards.</p>` },
+
+  { cat: 'Billing & wallet', q: 'How does pay-as-you-go billing work?',
+    a: `<p>Each workspace has a wallet. Uploads draw from the wallet balance; your first upload is
+        free. Top up from <b>Billing</b>. In-flight transfers finish even if the balance dips below
+        zero, so a running batch is never cut off midway.</p>` },
+  { cat: 'Billing & wallet', q: 'Can I add a GSTIN to my invoices?',
+    a: `<p>Yes — add your GSTIN in <b>Settings</b> (and in the top-up dialog). It is passed to the
+        payment gateway and appears on the receipt.</p>` },
+
+  { cat: 'Accounts & roles', q: 'What roles exist, and who can see what?',
+    a: `<p>A workspace has one <b>owner</b> plus optional <b>staff</b> (view or edit). Owners manage
+        team, billing and connections; staff cannot. The <b>super admin</b> operates the platform
+        across all workspaces and never counts against a workspace.</p>` },
+  { cat: 'Accounts & roles', q: 'Where do I see my last login?',
+    a: `<p>Every successful sign-in is recorded. The owner sees each team member's last login on the
+        <b>Team</b> page. Your own most recent login is stored against your account each time you log in.</p>` },
+
+  { cat: 'Privacy & tracking', q: 'What visitor data is collected, and whose?',
+    a: `<p>Only <b>anonymous public-page</b> traffic (landing, KB, legal, embeds) is logged for ad
+        attribution and traffic analytics — UTM tags, referrer, device, and coarse location.
+        <b>Logged-in app activity is never tracked.</b> Raw hit logs are pruned after 180 days.</p>` },
+  { cat: 'Privacy & tracking', q: 'Where can the super admin see traffic analytics?',
+    a: `<p>Under the <b>Visitors</b> tab (human ad attribution) and the <b>Traffic</b> tab (every hit
+        including bots, plus the wake log). Both are visible to the super admin only.</p>` },
+
+  { cat: 'Troubleshooting', q: "A transfer didn't run — where do I look?",
+    a: `<p>Open <b>Runs</b> for live status and <b>Logs</b> for the detailed history and error reason.
+        Most stalls come from an expired connection — reconnect it under <b>Connections</b>.</p>` },
+];
+
+const el = (id) => document.getElementById(id);
+function highlight(text, q) {
+  if (!q) return text;
+  try { return text.replace(new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'ig'), '<mark>$1</mark>'); }
+  catch { return text; }
+}
+function render(q) {
+  q = (q || '').trim();
+  const ql = q.toLowerCase();
+  const match = KB.filter((a) => !ql || (a.q + ' ' + a.a + ' ' + a.cat).toLowerCase().includes(ql));
+  const cats = [...new Set(match.map((a) => a.cat))];
+  el('kb-list').innerHTML = cats.map((cat) => {
+    const arts = match.filter((a) => a.cat === cat).map((a) => `
+      <details class="kb-art" ${ql ? 'open' : ''}>
+        <summary>${highlight(esc(a.q), q)}</summary>
+        <div class="kb-body">${ql ? highlight(a.a, q) : a.a}</div>
+      </details>`).join('');
+    return `<h2 class="kb-cat">${esc(cat)}</h2>${arts}`;
+  }).join('');
+  el('kb-empty').style.display = match.length ? 'none' : '';
+  el('kb-count').textContent = ql ? `${match.length} article${match.length === 1 ? '' : 's'} match "${q}"` : `${KB.length} articles`;
+}
+el('kb-search').addEventListener('input', (e) => render(e.target.value));
+render('');
+</script>
+<%- include('partials/foot') %>

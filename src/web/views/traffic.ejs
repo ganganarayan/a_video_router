@@ -1,0 +1,101 @@
+<%- include('partials/head') %>
+<div class="row" style="align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px">
+  <div>
+    <h1 style="margin-bottom:2px">Traffic — every hit, humans &amp; bots</h1>
+    <p class="muted" style="margin:0" id="subtitle">Every public page, counted server-side — includes crawlers the beacon can't see.</p>
+  </div>
+  <div class="seg" id="range">
+    <button data-r="7">7d</button><button data-r="30" class="on">30d</button>
+    <button data-r="90">90d</button><button data-r="180">180d</button>
+  </div>
+</div>
+
+<div class="stat-row">
+  <div class="card stat"><div class="lbl">Total hits</div><div class="num" id="c-total">—</div></div>
+  <div class="card stat"><div class="lbl">Human</div><div class="num ok" id="c-human">—</div></div>
+  <div class="card stat"><div class="lbl">Bot</div><div class="num muted" id="c-bot">—</div></div>
+</div>
+
+<div class="card table-wrap">
+  <h2>Hits per link</h2>
+  <p class="muted" style="margin-top:0">Grouped: landing first, then Knowledge Base, then legal &amp; embeds, then everything else (scanner probes, unknown paths).</p>
+  <table id="t-links">
+    <thead><tr><th>Link</th><th class="r">Total</th><th class="r">Human</th><th class="r">Bot</th><th>Last hit</th></tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<div class="card table-wrap">
+  <h2>Wake log <span class="muted" style="font-weight:400; font-size:13px">— the first request after each cold start woke the app</span></h2>
+  <table id="t-wakes">
+    <thead><tr><th>When</th><th>Waker path</th><th>Who</th><th>Country</th><th>IP</th></tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<style>
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg button{background:var(--panel);color:var(--muted);border:0;padding:7px 14px;cursor:pointer;font:inherit}
+  .seg button.on{background:var(--accent);color:#fff}
+  .stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin:16px 0}
+  .stat .lbl{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+  .stat .num{font-size:2rem;font-weight:800;margin-top:4px}
+  #t-links td.r,#t-links th.r{text-align:right}
+  #t-links .grp td{background:var(--panel2);color:var(--muted);font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+  #t-links td.path{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px}
+  #t-links td.tot{font-weight:700;color:var(--accent)} #t-links td.hum{color:var(--ok,#2ecc71)}
+  #t-wakes td{font-size:12.5px}
+  .pill{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:700}
+  .pill.bot{background:rgba(147,161,189,.18);color:var(--muted)} .pill.human{background:rgba(46,204,113,.15);color:var(--ok,#2ecc71)}
+</style>
+
+<script>
+let RANGE = 30;
+const SECTIONS = [['landing','Landing page'],['kb','Knowledge Base'],['legal','Legal'],['embed','Embeds'],['other','Everything else']];
+
+async function load() {
+  try {
+    const d = await api('/analytics/traffic?range=' + RANGE);
+    const t = d.totals || {};
+    document.getElementById('c-total').textContent = t.total ?? 0;
+    document.getElementById('c-human').textContent = t.human ?? 0;
+    document.getElementById('c-bot').textContent = t.bot ?? 0;
+
+    const tb = document.querySelector('#t-links tbody');
+    const links = d.links || [];
+    let html = '';
+    for (const [key, label] of SECTIONS) {
+      const grp = links.filter((l) => (l.section || 'other') === key);
+      if (!grp.length) continue;
+      html += `<tr class="grp"><td colspan="5">${label} · ${grp.length} link${grp.length > 1 ? 's' : ''}</td></tr>`;
+      html += grp.map((l) => `<tr>
+        <td class="path">${esc(l.path)}</td>
+        <td class="r tot">${l.total}</td>
+        <td class="r hum">${l.human}</td>
+        <td class="r">${l.bot}</td>
+        <td>${fmtDate(l.last_hit)}</td>
+      </tr>`).join('');
+    }
+    tb.innerHTML = html || '<tr><td colspan="5" class="muted">No hits in this window</td></tr>';
+
+    const wb = document.querySelector('#t-wakes tbody');
+    const wakes = d.wakes || [];
+    wb.innerHTML = wakes.length ? wakes.map((w) => `<tr>
+      <td>${fmtDate(w.ts)}</td>
+      <td class="path">${esc(w.waker_path || '—')}</td>
+      <td><span class="pill ${w.is_bot ? 'bot' : 'human'}">${w.is_bot ? (w.bot_kind || 'bot') : 'human'}</span> ${esc((w.ua_raw || '').slice(0, 60))}</td>
+      <td>${esc(w.country || '—')}</td>
+      <td>${esc(w.ip || '—')}</td>
+    </tr>`).join('') : '<tr><td colspan="5" class="muted">No wake events recorded yet</td></tr>';
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+document.getElementById('range').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  RANGE = Number(b.dataset.r);
+  document.querySelectorAll('#range button').forEach((x) => x.classList.toggle('on', x === b));
+  load();
+});
+document.addEventListener('DOMContentLoaded', load);
+</script>
+<%- include('partials/foot') %>

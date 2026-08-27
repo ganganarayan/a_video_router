@@ -76,6 +76,88 @@ apiRouter.post('/impersonate/stop', requireSuperAdmin, wrap(async (_req, res) =>
   res.json({ ok: true });
 }));
 
+// ---------- super-admin analytics: Visitors + Traffic (global) ----------
+
+// Only a fixed set of windows is allowed, so interpolating it into the interval
+// literal below is safe (never user text).
+function rangeDays(req) {
+  const n = Number(req.query.range);
+  return [7, 30, 90, 180].includes(n) ? n : 30;
+}
+// Marketing/public sections that count as real visitor traffic (excludes 'other':
+// scanner probes and unknown paths).
+const MARKETING = `section IN ('landing','kb','legal','embed')`;
+
+// Feature A — Visitors: human ad-attribution across public/marketing pages only.
+apiRouter.get('/analytics/visitors', requireSuperAdmin, wrap(async (req, res) => {
+  const days = rangeDays(req);
+  const since = `ts >= now() - interval '${days} days'`;
+  const base = `FROM page_hits WHERE ${since} AND ${MARKETING}`;
+  const human = `${base} AND is_bot = false`;
+
+  const [cards, utm, camp, country, device] = await Promise.all([
+    query(`SELECT
+        count(*) FILTER (WHERE is_bot = false)::int AS human_views,
+        count(DISTINCT visitor_id) FILTER (WHERE is_bot = false)::int AS unique_humans,
+        count(*) FILTER (WHERE is_bot = true)::int  AS bot_views,
+        count(*) FILTER (WHERE is_bot = false AND fbclid IS NOT NULL)::int AS from_fb
+      ${base}`),
+    query(`SELECT COALESCE(NULLIF(utm_source,''),'(none)') AS k, count(*)::int AS n
+      ${human} GROUP BY 1 ORDER BY n DESC LIMIT 12`),
+    query(`SELECT COALESCE(NULLIF(utm_campaign,''),'(none)') AS k, count(*)::int AS n
+      ${human} GROUP BY 1 ORDER BY n DESC LIMIT 12`),
+    query(`SELECT COALESCE(country,'(unknown)') AS k, count(*)::int AS n
+      ${human} GROUP BY 1 ORDER BY n DESC LIMIT 15`),
+    query(`SELECT COALESCE(device_type,'?') AS k, count(*)::int AS n
+      ${human} GROUP BY 1 ORDER BY n DESC`),
+  ]);
+  res.json({
+    days,
+    cards: cards.rows[0],
+    byUtmSource: utm.rows,
+    byCampaign: camp.rows,
+    byCountry: country.rows,
+    byDevice: device.rows,
+  });
+}));
+
+// Recent human visitors with full attribution (the detailed per-visit log).
+apiRouter.get('/analytics/visitors/recent', requireSuperAdmin, wrap(async (req, res) => {
+  const days = rangeDays(req);
+  const { rows } = await query(
+    `SELECT first_seen, last_seen, hits, landing_path, referrer,
+            utm_source, utm_medium, utm_campaign, utm_term, utm_content,
+            fbclid, gclid, fbc, fbp, ip, browser, os, device_type, country, city,
+            screen, tz, human_confirmed
+       FROM visitors
+      WHERE last_seen >= now() - interval '${days} days'
+      ORDER BY last_seen DESC LIMIT 200`,
+  );
+  res.json({ visitors: rows });
+}));
+
+// Feature B — Traffic: every server-side hit (humans + bots), grouped per link, + wake log.
+apiRouter.get('/analytics/traffic', requireSuperAdmin, wrap(async (req, res) => {
+  const days = rangeDays(req);
+  const since = `ts >= now() - interval '${days} days'`;
+  const [totals, links, wakes] = await Promise.all([
+    query(`SELECT count(*)::int AS total,
+             count(*) FILTER (WHERE is_bot = false)::int AS human,
+             count(*) FILTER (WHERE is_bot = true)::int  AS bot
+           FROM page_hits WHERE ${since}`),
+    query(`SELECT path, min(section) AS section,
+             count(*)::int AS total,
+             count(*) FILTER (WHERE is_bot = false)::int AS human,
+             count(*) FILTER (WHERE is_bot = true)::int  AS bot,
+             max(ts) AS last_hit
+           FROM page_hits WHERE ${since}
+           GROUP BY path ORDER BY total DESC LIMIT 500`),
+    query(`SELECT ts, waker_path, ip, ua_raw, is_bot, bot_kind, country
+           FROM wake_events WHERE ${since} ORDER BY ts DESC LIMIT 100`),
+  ]);
+  res.json({ days, totals: totals.rows[0], links: links.rows, wakes: wakes.rows });
+}));
+
 // ---------- super-admin billing controls ----------
 
 // Platform billing config + whether Razorpay is wired (never returns secrets).

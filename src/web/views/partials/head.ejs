@@ -6,11 +6,14 @@
   <title>VideoRouter — <%= title %></title>
   <link rel="stylesheet" href="/public/style.css">
   <script src="/public/app.js"></script>
+  <script src="/public/eye.js"></script>
 </head>
 <body>
 <nav>
   <span class="brand"><span style="color:var(--accent)">A</span>Video<span style="color:var(--accent)">Router</span></span>
   <a class="tab <%= page === 'admin' ? 'active' : '' %>" id="nav-admin" href="/admin" style="display:none">Admin</a>
+  <a class="tab <%= page === 'visitors' ? 'active' : '' %>" id="nav-visitors" href="/visitors" style="display:none">Visitors</a>
+  <a class="tab <%= page === 'traffic' ? 'active' : '' %>" id="nav-traffic" href="/traffic" style="display:none">Traffic</a>
   <a class="tab <%= page === 'runs' ? 'active' : '' %>" href="/runs">Runs</a>
   <a class="tab <%= page === 'sources' ? 'active' : '' %>" href="/sources">Sources</a>
   <a class="tab <%= page === 'logs' ? 'active' : '' %>" href="/logs">Logs</a>
@@ -21,6 +24,7 @@
   <a class="tab <%= page === 'billing' ? 'active' : '' %>" id="nav-billing" href="/billing">Billing</a>
   <a class="tab <%= page === 'settings' ? 'active' : '' %>" href="/settings">Settings</a>
   <a class="tab <%= page === 'help' ? 'active' : '' %>" href="/help">Help</a>
+  <a class="tab <%= page === 'knowledge-base' ? 'active' : '' %>" id="nav-kb" href="/knowledge-base">Knowledge Base</a>
   <form method="post" action="/logout"><button type="submit">Log out</button></form>
 </nav>
 <div id="ctxbar"></div>

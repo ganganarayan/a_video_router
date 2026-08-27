@@ -121,3 +121,14 @@ button.copy.copied { color: var(--ok); border-color: var(--ok); }
 .pack .amt { text-align: right; white-space: nowrap; }
 .pack .amt .total { font-size: 16px; font-weight: 700; color: var(--text); }
 .pack .amt .brk { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+/* Password show/hide eye toggle (eye.js) */
+.pw-wrap { position: relative; display: inline-block; width: 100%; }
+.pw-wrap > input { width: 100%; padding-right: 40px; box-sizing: border-box; }
+.pw-eye {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  background: none; border: 0; cursor: pointer; padding: 2px 7px; margin: 0;
+  font-size: 15px; line-height: 1; opacity: .5; color: var(--muted);
+}
+.pw-eye:hover { opacity: .85; }
+.pw-eye.on { opacity: 1; }

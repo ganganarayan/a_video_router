@@ -14,6 +14,7 @@ function keyMatches(provided) {
 }
 
 const COOKIE = 'vr_session';
+export const SESSION_COOKIE_NAME = COOKIE; // used by the tracking middleware to skip logged-in users
 const SESSION_HOURS = 24 * 7;
 
 export function setSessionCookie(res, email) {
@@ -189,6 +190,22 @@ export async function authenticate(email, password) {
     return { ok: true, mustSetPassword: user.must_change_password, email: user.email };
   }
   return { ok: false };
+}
+
+// Record a successful login. One row per user, overwritten each time: the prior
+// last_login_at rolls into previous_login_at so the user can see their last login,
+// while last_login_at tracks the current one. Best-effort — never blocks sign-in.
+export async function recordLogin(email, ip) {
+  try {
+    await query(
+      `UPDATE users
+         SET previous_login_at = last_login_at,
+             last_login_at = now(),
+             last_login_ip = $2
+       WHERE email = $1`,
+      [String(email).toLowerCase(), ip || null],
+    );
+  } catch { /* login recording is best-effort */ }
 }
 
 // Set the current user's own password (clears the must-change flag).

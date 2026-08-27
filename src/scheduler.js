@@ -40,5 +40,23 @@ export async function reloadSchedules() {
   return tasks.size;
 }
 
-export const startScheduler = reloadSchedules;
+// Daily retention: prune raw page hits past the window (bot scanners would
+// otherwise grow the table unbounded). Aggregates/uniques are unaffected.
+const RETENTION_DAYS = 180;
+let retentionTask;
+function startRetention() {
+  if (retentionTask) return;
+  retentionTask = cron.schedule('17 3 * * *', async () => {
+    try {
+      const r = await query(`DELETE FROM page_hits WHERE ts < now() - interval '${RETENTION_DAYS} days'`);
+      if (r.rowCount) log(`retention: pruned ${r.rowCount} page_hits older than ${RETENTION_DAYS}d`);
+    } catch (err) { logError('retention prune failed:', err); }
+  }, { timezone: 'Asia/Kolkata' });
+}
+
+export async function startScheduler() {
+  const n = await reloadSchedules();
+  startRetention();
+  return n;
+}
 export const activeCount = () => tasks.size;

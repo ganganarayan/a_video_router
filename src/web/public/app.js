@@ -75,12 +75,20 @@ async function initCtx() {
     const bar = document.getElementById('ctxbar');
     const adminLink = document.getElementById('nav-admin');
     if (w.isSuperAdmin && adminLink) adminLink.style.display = '';
+    // Super-admin global analytics tabs (visible whether or not impersonating).
+    if (w.isSuperAdmin) {
+      ['nav-visitors', 'nav-traffic'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = '';
+      });
+    }
 
     // Super admin NOT impersonating: tenant pages are inaccessible — hide their tabs
     // and point to the Admin console.
     if (w.isSuperAdmin && !w.impersonating) {
+      const keep = ['nav-admin', 'nav-visitors', 'nav-traffic', 'nav-kb'];
       document.querySelectorAll('nav a.tab').forEach((a) => {
-        if (a.id !== 'nav-admin') a.style.display = 'none';
+        if (!keep.includes(a.id)) a.style.display = 'none';
       });
       if (bar) {
         bar.className = 'ctxbar staff';

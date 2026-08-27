@@ -6,7 +6,9 @@ import {
   requirePageAuth, requireSessionOnly, authenticate, setOwnPassword,
   setSessionCookie, clearSessionCookie, resetPassword, resetEnabled,
   resolveTenant, requireTenant, requireSuperAdmin, getOptionalUser,
+  recordLogin, SESSION_COOKIE_NAME,
 } from './auth.js';
+import { trackMiddleware, recordBeacon } from './track.js';
 import { apiRouter } from './routes/api.js';
 import { oauthRouter } from './routes/oauth.js';
 import { dbadminRouter } from './routes/dbadmin.js';
@@ -21,6 +23,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export function createServer() {
   const app = express();
+  // Behind Railway/Cloudflare — trust the proxy so req.ip and req.secure reflect
+  // the real client and X-Forwarded-* headers.
+  app.set('trust proxy', true);
   app.set('view engine', 'ejs');
   app.set('views', path.join(__dirname, 'views'));
   app.use('/public', express.static(path.join(__dirname, 'public')));
@@ -28,6 +33,9 @@ export function createServer() {
   app.use(express.json({ limit: '1mb', verify: (req, _res, buf) => { req.rawBody = buf; } }));
   app.use(express.urlencoded({ extended: false }));
   app.use(cookieParser());
+
+  // Visitor & traffic capture (anonymous public pages only; logged-in users skipped).
+  app.use(trackMiddleware(SESSION_COOKIE_NAME));
 
   app.get('/health', (_req, res) => res.json({ ok: true }));
 
@@ -40,6 +48,7 @@ export function createServer() {
     const result = await authenticate(email, password);
     if (result.ok) {
       setSessionCookie(res, result.email);
+      recordLogin(result.email, req.ip); // fire-and-forget; records last/previous login
       return res.redirect(result.mustSetPassword ? '/set-password' : '/');
     }
     res.status(401).render('login', { error: 'Invalid email or password.', resetEnabled: resetEnabled() });
@@ -92,9 +101,27 @@ export function createServer() {
     });
   }
 
+  // Public visitor beacon (no auth — anonymous public pages POST here). Confirms
+  // the visitor as human and attaches client-only details. Always 204s quickly.
+  app.post('/api/track', async (req, res) => {
+    try { await recordBeacon(req); } catch (err) { console.error('beacon:', err.message); }
+    res.status(204).end();
+  });
+
   // Super-admin console: all tenants + impersonation.
   app.get('/admin', requirePageAuth, resolveTenant, requireSuperAdmin,
     (req, res) => res.render('admin', { page: 'admin', title: 'Admin', user: req.user }));
+
+  // Super-admin analytics (global, no tenant context): Visitors + Traffic.
+  for (const [route, title] of Object.entries({ visitors: 'Visitors', traffic: 'Traffic' })) {
+    app.get(`/${route}`, requirePageAuth, resolveTenant, requireSuperAdmin,
+      (req, res) => res.render(route, { page: route, title, user: req.user }));
+  }
+
+  // Knowledge Base — any logged-in user (tenant users AND the super admin, who has
+  // no tenant context), so no requireTenant. Separate from the Help center.
+  app.get('/knowledge-base', requirePageAuth, resolveTenant,
+    (req, res) => res.render('knowledge', { page: 'knowledge-base', title: 'Knowledge Base', user: req.user }));
 
   const pages = { connections: 'Connections', routing: 'Routing', runs: 'Runs', sources: 'Sources', logs: 'Logs', schedules: 'Schedules', team: 'Team', billing: 'Billing', settings: 'Settings', help: 'Help' };
   for (const [route, title] of Object.entries(pages)) {

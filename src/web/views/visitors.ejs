@@ -1,0 +1,112 @@
+<%- include('partials/head') %>
+<div class="row" style="align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px">
+  <div>
+    <h1 style="margin-bottom:2px">Visitors — ad &amp; landing traffic</h1>
+    <p class="muted" style="margin:0">Real human visits to your public pages (landing, KB, legal, embeds), with
+      full ad attribution. Logged-in app activity is never tracked.</p>
+  </div>
+  <div class="seg" id="range">
+    <button data-r="7">7d</button><button data-r="30" class="on">30d</button>
+    <button data-r="90">90d</button><button data-r="180">180d</button>
+  </div>
+</div>
+
+<div class="stat-row">
+  <div class="card stat"><div class="lbl">Human views</div><div class="num ok" id="c-human">—</div></div>
+  <div class="card stat"><div class="lbl">Unique humans</div><div class="num" id="c-unique">—</div></div>
+  <div class="card stat"><div class="lbl">Bot views</div><div class="num muted" id="c-bot">—</div></div>
+  <div class="card stat"><div class="lbl">From Facebook (fbclid)</div><div class="num" id="c-fb">—</div></div>
+</div>
+
+<div class="grid2">
+  <div class="card"><h2>By UTM source</h2><table class="mini"><tbody id="t-utm"></tbody></table></div>
+  <div class="card"><h2>By campaign</h2><table class="mini"><tbody id="t-camp"></tbody></table></div>
+  <div class="card"><h2>By country</h2><table class="mini"><tbody id="t-country"></tbody></table></div>
+  <div class="card"><h2>By device</h2><table class="mini"><tbody id="t-device"></tbody></table></div>
+</div>
+
+<div class="card table-wrap">
+  <h2>Recent visitors <span class="muted" style="font-weight:400; font-size:13px">— first-touch attribution per unique visitor</span></h2>
+  <table id="t-recent">
+    <thead><tr>
+      <th>Last seen</th><th>Hits</th><th>Landing</th><th>Source / Medium</th><th>Campaign</th>
+      <th>fbclid</th><th>Country</th><th>City</th><th>Device</th><th>Referrer</th><th>IP</th>
+    </tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<style>
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg button{background:var(--panel);color:var(--muted);border:0;padding:7px 14px;cursor:pointer;font:inherit}
+  .seg button.on{background:var(--accent);color:#fff}
+  .stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin:16px 0}
+  .stat .lbl{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+  .stat .num{font-size:2rem;font-weight:800;margin-top:4px}
+  .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-bottom:16px}
+  table.mini{width:100%}
+  table.mini td{padding:6px 4px;border-bottom:1px solid var(--line)}
+  table.mini td.k{color:var(--text)} table.mini td.n{text-align:right;font-weight:700;color:var(--accent);white-space:nowrap}
+  table.mini td.pct{text-align:right;color:var(--muted);width:52px}
+  #t-recent td{font-size:12.5px;white-space:nowrap}
+</style>
+
+<script>
+let RANGE = 30;
+
+function rows(el, data, total) {
+  if (!data.length) { el.innerHTML = '<tr><td class="muted">No data</td></tr>'; return; }
+  el.innerHTML = data.map((d) => {
+    const pct = total ? Math.round((d.n / total) * 100) : 0;
+    return `<tr><td class="k">${esc(d.k)}</td><td class="n">${d.n}</td><td class="pct">${pct}%</td></tr>`;
+  }).join('');
+}
+
+async function loadVisitors() {
+  try {
+    const d = await api('/analytics/visitors?range=' + RANGE);
+    const c = d.cards || {};
+    document.getElementById('c-human').textContent = c.human_views ?? 0;
+    document.getElementById('c-unique').textContent = c.unique_humans ?? 0;
+    document.getElementById('c-bot').textContent = c.bot_views ?? 0;
+    document.getElementById('c-fb').textContent = c.from_fb ?? 0;
+    const tot = c.human_views || 0;
+    rows(document.getElementById('t-utm'), d.byUtmSource, tot);
+    rows(document.getElementById('t-camp'), d.byCampaign, tot);
+    rows(document.getElementById('t-country'), d.byCountry, tot);
+    rows(document.getElementById('t-device'), d.byDevice, tot);
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+async function loadRecent() {
+  try {
+    const { visitors } = await api('/analytics/visitors/recent?range=' + RANGE);
+    const tb = document.querySelector('#t-recent tbody');
+    if (!visitors.length) { tb.innerHTML = '<tr><td colspan="11" class="muted">No visitors yet</td></tr>'; return; }
+    tb.innerHTML = visitors.map((v) => `<tr>
+      <td>${fmtDate(v.last_seen)}</td>
+      <td>${v.hits}</td>
+      <td>${esc(v.landing_path || '—')}</td>
+      <td>${esc(v.utm_source || '—')}${v.utm_medium ? ' / ' + esc(v.utm_medium) : ''}</td>
+      <td>${esc(v.utm_campaign || '—')}</td>
+      <td>${v.fbclid ? '✔' : '—'}</td>
+      <td>${esc(v.country || '—')}</td>
+      <td>${esc(v.city || '—')}</td>
+      <td>${esc((v.device_type || '') + ' ' + (v.browser || ''))}</td>
+      <td>${esc(v.referrer || '—')}</td>
+      <td>${esc(v.ip || '—')}</td>
+    </tr>`).join('');
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+function load() { loadVisitors(); loadRecent(); }
+
+document.getElementById('range').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  RANGE = Number(b.dataset.r);
+  document.querySelectorAll('#range button').forEach((x) => x.classList.toggle('on', x === b));
+  load();
+});
+document.addEventListener('DOMContentLoaded', load);
+</script>
+<%- include('partials/foot') %>
