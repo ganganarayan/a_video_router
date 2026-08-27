@@ -12,6 +12,10 @@ import { oauthRouter } from './routes/oauth.js';
 import { dbadminRouter } from './routes/dbadmin.js';
 import * as billing from '../billing.js';
 import { getConfigValue } from '../db.js';
+import { LEGAL, LEGAL_ORDER, LAST_UPDATED } from './content/legal.js';
+
+const LEGAL_LABELS = { privacy: 'Privacy', terms: 'Terms', refund: 'Refund', shipping: 'Shipping', contact: 'Contact us' };
+const LEGAL_LINKS = LEGAL_ORDER.map((slug) => ({ href: `/${slug}`, label: LEGAL_LABELS[slug] }));
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -78,6 +82,15 @@ export function createServer() {
       res.render('landing', { videoUrl });
     } catch (err) { next(err); }
   });
+
+  // Public policy pages (privacy / terms / refund / shipping / contact), linked in the
+  // footer and required by the payment gateway. No auth — visible to visitors and users alike.
+  for (const slug of LEGAL_ORDER) {
+    app.get(`/${slug}`, (_req, res) => {
+      const doc = LEGAL[slug];
+      res.render('legal', { title: doc.title, bodyHtml: doc.html, lastUpdated: LAST_UPDATED, links: LEGAL_LINKS });
+    });
+  }
 
   // Super-admin console: all tenants + impersonation.
   app.get('/admin', requirePageAuth, resolveTenant, requireSuperAdmin,

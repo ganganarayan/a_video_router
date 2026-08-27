@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title><%= title %> — AVideoRouter</title>
+  <meta name="description" content="<%= title %> for AVideoRouter by Divine Leads.">
+  <style>
+    :root{ --bg:#0f1420; --panel:#1a2233; --line:#2e3d5c; --text:#e8edf7; --muted:#93a1bd; --accent:#4f8cff; }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font:16px/1.65 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;}
+    a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+    .wrap{max-width:820px;margin:0 auto;padding:0 20px}
+    header.top{border-bottom:1px solid var(--line);padding:16px 0}
+    header.top .wrap{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    .brand{font-weight:800;font-size:1.15rem}
+    .brand .a{color:var(--accent)}
+    main{padding:32px 0 12px}
+    h1{font-size:1.9rem;margin:.2rem 0 .3rem}
+    h2{font-size:1.15rem;margin:1.4rem 0 .3rem;color:var(--text)}
+    ul{padding-left:1.2rem} li{margin:.3rem 0}
+    .updated{color:var(--muted);font-size:.9rem;margin-bottom:1rem}
+    .kb-note{border-left:3px solid var(--accent);background:rgba(79,140,255,.08);padding:.6rem .8rem;border-radius:0 6px 6px 0;margin:1rem 0}
+    .contact-card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:.4rem 1rem;margin:1rem 0}
+    .contact-card .ic{margin-right:.4rem}
+    footer{border-top:1px solid var(--line);margin-top:28px;padding:20px 0;color:var(--muted);font-size:.9rem}
+    footer .links{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:8px}
+  </style>
+</head>
+<body>
+  <header class="top"><div class="wrap">
+    <a class="brand" href="/"><span class="a">A</span>Video<span class="a">Router</span></a>
+    <a href="/">← Back to home</a>
+  </div></header>
+
+  <main><div class="wrap">
+    <h1><%= title %></h1>
+    <p class="updated">Last updated: <%= lastUpdated %></p>
+    <%- bodyHtml %>
+  </div></main>
+
+  <footer><div class="wrap">
+    <div class="links">
+      <% links.forEach(function(l){ %><a href="<%= l.href %>"><%= l.label %></a><% }); %>
+    </div>
+    <div>© <%= new Date().getFullYear() %> AVideoRouter · an app by Divine Leads</div>
+  </div></footer>
+</body>
+</html>
