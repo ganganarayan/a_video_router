@@ -154,6 +154,40 @@ export function createServer() {
       `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`);
   });
 
+  // Google Search Console site-ownership verification (served at the site root).
+  app.get('/google348efcdf34bc741b.html', (_req, res) =>
+    res.type('text/html').send('google-site-verification: google348efcdf34bc741b.html\n'));
+
+  // llms.txt — a concise, LLM-friendly map of the site's key pages (emerging
+  // convention that AI answer engines look for). Built from the live host.
+  app.get('/llms.txt', (req, res) => {
+    const base = baseUrl(req);
+    const lines = [
+      '# AVideoRouter',
+      '',
+      '> AVideoRouter automatically moves Zoom and Fathom recordings to YouTube and your LMS —',
+      '> downloading, uploading, organizing into courses, and optionally deleting the Zoom original —',
+      '> on a schedule, hands-free. Subscription-free, pay-as-you-go (₹50 per unit of transfer, up to 1 GB).',
+      '',
+      '## Start here',
+      `- [Home](${base}/): what it does, pricing, and how it works`,
+      `- [FAQ](${base}/faq): common questions before signing up`,
+      `- [Knowledge Base](${base}/knowledge-base): the pain points it solves and how`,
+      '',
+      '## Knowledge Base topics',
+      ...KB_TOPICS.map((t) => `- [${t.title}](${base}/knowledge-base/${t.slug}): ${t.teaser}`),
+      '',
+      '## Policies',
+      `- [Privacy](${base}/privacy)`,
+      `- [Terms](${base}/terms)`,
+      `- [Refund](${base}/refund)`,
+      '',
+      'Contact: connect@divineleads.guru',
+      '',
+    ];
+    res.type('text/plain').send(lines.join('\n'));
+  });
+
   // Super-admin console: all tenants + impersonation.
   app.get('/admin', requirePageAuth, resolveTenant, requireSuperAdmin,
     (req, res) => res.render('admin', { page: 'admin', title: 'Admin', user: req.user }));
