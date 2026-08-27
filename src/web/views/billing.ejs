@@ -176,7 +176,7 @@ async function buy(videos) {
     order_id: order.orderId,
     amount: order.amount,
     currency: 'INR',
-    name: 'VideoRouter',
+    name: 'AVideoRouter',
     description: videos + ' video credits (' + fmtRs(order.breakdown.base) + ')',
     handler: async (resp) => {
       try {
