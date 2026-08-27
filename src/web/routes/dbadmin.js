@@ -18,21 +18,40 @@ function keyOk(provided) {
 export const dbadminRouter = express.Router();
 
 // GET /dbadmin/export?key=...  → JSON dump of every public table.
+// Streamed table-by-table so peak memory is one table (its rows + its JSON
+// chunk), never the whole database plus a full-DB JSON string at once — keeps
+// backups from spiking RAM on the container as the data grows. Output shape is
+// unchanged: { takenAt, counts:{table:n}, tables:{table:[rows]} }.
 dbadminRouter.get('/export', async (req, res) => {
   if (!keyOk(req.query.key)) return res.status(403).json({ error: 'bad or missing key' });
   try {
     const { rows: tbls } = await query(
       "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename",
     );
-    const dump = { takenAt: new Date().toISOString(), counts: {}, tables: {} };
+    // Cheap COUNT(*) pass first (no row data held) so `counts` can lead the file
+    // exactly as before, while table rows are fetched and released one at a time.
+    const counts = {};
     for (const { tablename } of tbls) {
-      const { rows } = await query(`SELECT * FROM "${tablename}"`);
-      dump.tables[tablename] = rows;
-      dump.counts[tablename] = rows.length;
+      const { rows } = await query(`SELECT count(*)::int AS n FROM "${tablename}"`);
+      counts[tablename] = rows[0].n;
     }
+
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="videorouter-backup-${Date.now()}.json"`);
-    res.json(dump);
+    res.write(`{"takenAt":${JSON.stringify(new Date().toISOString())},`);
+    res.write(`"counts":${JSON.stringify(counts)},"tables":{`);
+    for (let i = 0; i < tbls.length; i++) {
+      const { tablename } = tbls[i];
+      const { rows } = await query(`SELECT * FROM "${tablename}"`);
+      res.write(`${i ? ',' : ''}${JSON.stringify(tablename)}:${JSON.stringify(rows)}`);
+      // rows drops out of scope on the next loop turn — only one table is ever resident.
+    }
+    res.end('}}');
   } catch (err) {
+    // If headers already went out mid-stream we can't send a clean 500; just cut
+    // the connection so the client sees a truncated (invalid) file rather than a
+    // silently-complete one.
+    if (res.headersSent) return res.destroy(err);
     res.status(500).json({ error: err.message });
   }
 });
