@@ -135,6 +135,20 @@ export async function downloadRecording(account, downloadUrl, destPath, onProgre
   return fs.statSync(destPath).size;
 }
 
+// Open an authenticated read stream for a recording file (for streaming straight to
+// the browser — the free "download to local computer" feature). Caller pipes res.body.
+export async function openRecordingStream(account, downloadUrl) {
+  const token = await getAccessToken(account);
+  const res = await fetch(`${downloadUrl}?access_token=${token}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    redirect: 'follow',
+  });
+  if (!res.ok || !res.body) {
+    throw new Error(`Zoom download failed (${res.status})`);
+  }
+  return res;
+}
+
 // Permanent delete or trash of ALL recording files of the meeting. Reclaims Zoom storage.
 export async function deleteMeetingRecordings(account, meetingUuid, mode) {
   if (mode !== 'trash' && mode !== 'delete') throw new Error(`invalid zoom delete mode: ${mode}`);

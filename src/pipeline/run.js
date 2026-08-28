@@ -387,6 +387,20 @@ async function lmsSweep(ctx, details) {
 // LMS course, bypassing routing rules for this one recording. Throws on failure
 // so the queue can surface the message.
 
+// Local upload "download" step: the file already exists on disk (streamed in by
+// the browser to the cache dir), so just move it onto the pipeline's partial path.
+function moveLocalFile(src, dest, onProgress) {
+  const size = fs.statSync(src).size;
+  try {
+    fs.renameSync(src, dest);            // same cache dir → same device
+  } catch {
+    fs.copyFileSync(src, dest);          // cross-device fallback
+    try { fs.unlinkSync(src); } catch { /* best effort */ }
+  }
+  onProgress?.(size, size);
+  return size;
+}
+
 export async function manualPush(job) {
   const tid = job.tenantId;
   const key = recordingKey(tid, job.source, job.source_id);
@@ -419,6 +433,12 @@ export async function manualPush(job) {
         recorded_at: meeting.start_time || null,
         duration_minutes: meeting.duration ?? null,
       }));
+    } else if (job.source === 'local') {
+      ({ rec } = await ensureRow(tid, 'local', job.source_id, {
+        title: job.video_title || job.original_filename || 'Uploaded file',
+        recorded_at: new Date(),
+      }));
+      await updateRec(rec.id, { origin_provider: 'browser', original_filename: job.original_filename || null });
     } else {
       const account = ctx.fathomAccount;
       if (!account) throw new Error('Fathom is not connected.');
@@ -463,6 +483,15 @@ export async function manualPush(job) {
         await downloadUploadFinish(
           ctx, rec, rule,
           (dest, onProgress) => zoom.downloadRecording(ctx.zoomAccount, file.download_url, dest, onProgress),
+          counts, details, tracker,
+        );
+      } else if (job.source === 'local') {
+        if (!job.local_path || !fs.existsSync(job.local_path)) {
+          throw new Error('The uploaded file is no longer available — please upload it again.');
+        }
+        await downloadUploadFinish(
+          ctx, rec, rule,
+          (dest, onProgress) => moveLocalFile(job.local_path, dest, onProgress),
           counts, details, tracker,
         );
       } else {

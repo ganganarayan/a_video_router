@@ -10,6 +10,21 @@ Fathom cannot be deleted via API (storage is unlimited).</p>
   <span class="muted" id="loading"></span>
 </p>
 
+<div class="card" id="upload-card">
+  <h2>Upload a local file</h2>
+  <p class="muted" style="margin-top:0">Send a video from your computer straight to YouTube (and, optionally,
+    register it in your LMS course). Billed by size like any transfer. The daily scheduler and staff are Always-On;
+    a one-off upload is not.</p>
+  <div class="row" style="flex-wrap:wrap; align-items:flex-end; gap:10px">
+    <input type="file" id="up-file" accept="video/*">
+    <select id="up-channel" title="YouTube channel"></select>
+    <input id="up-title" placeholder="YouTube title (optional)" style="min-width:200px">
+    <select id="up-lms" title="LMS course (optional)"></select>
+    <button class="primary" id="up-go">Upload</button>
+  </div>
+  <div id="up-progress" class="muted" style="margin-top:8px"></div>
+</div>
+
 <div class="card" id="queue-card" style="display:none">
   <h2>Push queue</h2>
   <div class="table-wrap">
@@ -154,6 +169,16 @@ function bindRowActions(tbody) {
   tbody.querySelectorAll('[data-zoom-del]').forEach((btn) => {
     btn.onclick = () => deleteFromZoom(Number(btn.dataset.zoomDel), btn);
   });
+  tbody.querySelectorAll('[data-zoom-dl]').forEach((btn) => {
+    btn.onclick = () => {
+      const i = Number(btn.dataset.zoomDl);
+      const z = current.zoom[i];
+      const sel = tbody.querySelector(`[data-file="zoom:${i}"]`);
+      let url = '/api/sources/zoom/download?source_id=' + encodeURIComponent(z.source_id);
+      if (sel && sel.value) url += '&file_id=' + encodeURIComponent(sel.value);
+      window.location.href = url; // attachment header → browser downloads, no navigation
+    };
+  });
 }
 
 function renderZoom(s) {
@@ -179,6 +204,8 @@ function renderZoom(s) {
       <td>${ytCell(z)}</td>
       <td>${pushCell('zoom', i, z)}</td>
       <td>
+        <button data-zoom-dl="${i}" ${(!z.source_deleted && (z.files || []).length) ? '' : 'disabled'}
+          title="Download this recording to your computer (free)">Download</button>
         <button class="danger" data-zoom-del="${i}" ${z.can_delete ? '' : 'disabled'}
           title="${z.can_delete
             ? 'Deletes this recording from Zoom (frees storage). The YouTube copy stays.'
@@ -394,8 +421,57 @@ async function deleteFromZoom(index, btn) {
   }
 }
 
+// --- local file upload (feature: upload local files to YouTube / LMS) ---
+function fillUploadSelects() {
+  const ch = document.getElementById('up-channel');
+  ch.innerHTML = '<option value="">— YouTube channel —</option>'
+    + channels.map((c) => `<option value="${c.id}"${c.connected === false ? ' disabled' : ''}>${esc(c.label)}${c.connected === false ? ' (not connected)' : ''}</option>`).join('');
+  const lms = document.getElementById('up-lms');
+  lms.innerHTML = '<option value="">— LMS course (optional) —</option>'
+    + lmsOptions.map((o, k) => `<option value="${k}">${esc(o.label)}</option>`).join('');
+}
+
+document.getElementById('up-go').onclick = () => {
+  const fileEl = document.getElementById('up-file');
+  const file = fileEl.files[0];
+  if (!file) return toast('Choose a file first.', 'err');
+  const channelId = document.getElementById('up-channel').value;
+  if (!channelId) return toast('Pick a YouTube channel.', 'err');
+  const lmsIdx = document.getElementById('up-lms').value;
+  const lmsPick = lmsIdx !== '' ? lmsOptions[Number(lmsIdx)] : null;
+  const title = document.getElementById('up-title').value.trim();
+
+  const params = new URLSearchParams({ channel_id: channelId, filename: file.name });
+  if (title) params.set('title', title);
+  if (lmsPick) { params.set('lms_course_id', lmsPick.course_id); if (lmsPick.module_id) params.set('lms_module_id', lmsPick.module_id); }
+
+  const prog = document.getElementById('up-progress');
+  const btn = document.getElementById('up-go');
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', '/api/uploads?' + params.toString());
+  xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+  xhr.upload.onprogress = (e) => {
+    if (e.lengthComputable) prog.textContent = `Uploading ${(e.loaded / e.total * 100).toFixed(0)}% (${fmtBytes(e.loaded)} / ${fmtBytes(e.total)})…`;
+  };
+  xhr.onload = () => {
+    btn.disabled = false;
+    if (xhr.status >= 200 && xhr.status < 300) {
+      prog.innerHTML = '<span class="badge ok">Uploaded — now transferring to YouTube (see the push queue).</span>';
+      fileEl.value = ''; document.getElementById('up-title').value = '';
+      pollQueue();
+    } else {
+      let msg = 'Upload failed'; try { msg = JSON.parse(xhr.responseText).error || msg; } catch { /* non-JSON */ }
+      prog.innerHTML = `<span class="badge err">${esc(msg)}</span>`;
+    }
+  };
+  xhr.onerror = () => { btn.disabled = false; prog.innerHTML = '<span class="badge err">Network error during upload.</span>'; };
+  btn.disabled = true;
+  prog.textContent = 'Starting upload…';
+  xhr.send(file);
+};
+
 document.getElementById('refresh').onclick = load;
-loadMeta().then(load).catch(e => toast(e.message, 'err'));
+loadMeta().then(() => { fillUploadSelects(); return load(); }).catch(e => toast(e.message, 'err'));
 pollQueue();
 </script>
 <%- include('partials/foot') %>

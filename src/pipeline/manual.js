@@ -25,6 +25,8 @@ export function enqueuePush(payload) {
     source: payload.source,
     source_id: payload.source_id,
     file_id: payload.file_id || null,
+    local_path: payload.local_path || null,             // local-upload temp file
+    original_filename: payload.original_filename || null,
     title: payload.title || payload.source_id,
     video_title: payload.video_title || null,
     description: payload.description || null,

@@ -1,4 +1,7 @@
 import express from 'express';
+import fs from 'node:fs';
+import crypto from 'node:crypto';
+import { Readable } from 'node:stream';
 import cron from 'node-cron';
 import cronParser from 'cron-parser';
 import {
@@ -13,6 +16,7 @@ import {
 } from '../auth.js';
 import { runPipeline, isRunning } from '../../pipeline/run.js';
 import { enqueuePush, getJobs } from '../../pipeline/manual.js';
+import { ingestTempPath } from '../../pipeline/download.js';
 import { reloadSchedules, getSchedules } from '../../scheduler.js';
 import * as zoom from '../../providers/zoom.js';
 import * as fathom from '../../providers/fathom.js';
@@ -553,6 +557,87 @@ apiRouter.post('/push', wrap(async (req, res) => {
 
 apiRouter.get('/push-queue', wrap(async (req, res) => {
   res.json(getJobs(T(req)));
+}));
+
+// Upload a local file → YouTube (and optionally register it in the LMS by URL).
+// The raw request body IS the file (content-type bypasses the JSON/urlencoded
+// parsers), streamed straight to the cache dir — never buffered in memory. Then a
+// background push job uploads it to YouTube; the browser polls /push-queue.
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024 * 1024; // 10 GB safety cap
+apiRouter.post('/uploads', wrap(async (req, res) => {
+  const channelId = req.query.channel_id ? Number(req.query.channel_id) : null;
+  if (!channelId) return res.status(400).json({ error: 'Pick a YouTube channel to upload into.' });
+  const declared = Number(req.headers['content-length']) || 0;
+  if (declared > MAX_UPLOAD_BYTES) return res.status(413).json({ error: 'File too large (max 10 GB).' });
+  // Billing gate BEFORE accepting any bytes (an in-flight upload always finishes; this only gates entry).
+  const gate = await billing.canPush(T(req));
+  if (!gate.allowed) return res.status(402).json({ error: gate.reason, needTopup: true, balance: gate.balance });
+
+  const id = crypto.randomUUID();
+  const tempPath = ingestTempPath(id);
+  const ws = fs.createWriteStream(tempPath);
+  let bytes = 0;
+  try {
+    await new Promise((resolve, reject) => {
+      req.on('data', (c) => {
+        bytes += c.length;
+        if (bytes > MAX_UPLOAD_BYTES) { req.destroy(); ws.destroy(); reject(new Error('File exceeds the 10 GB limit.')); }
+      });
+      req.on('aborted', () => { ws.destroy(); reject(new Error('Upload aborted.')); });
+      req.on('error', reject);
+      ws.on('error', reject);
+      ws.on('finish', resolve);
+      req.pipe(ws);
+    });
+  } catch (err) {
+    fs.unlink(tempPath, () => {});
+    return res.status(400).json({ error: err.message });
+  }
+  if (bytes === 0) { fs.unlink(tempPath, () => {}); return res.status(400).json({ error: 'No file received.' }); }
+
+  const { job } = enqueuePush({
+    tenantId: T(req),
+    source: 'local',
+    source_id: id,
+    local_path: tempPath,
+    original_filename: String(req.query.filename || 'upload.mp4').slice(0, 200),
+    video_title: req.query.title ? String(req.query.title).slice(0, 200) : null,
+    channel_id: channelId,
+    lms_course_id: req.query.lms_course_id ? String(req.query.lms_course_id) : null,
+    lms_module_id: req.query.lms_module_id ? String(req.query.lms_module_id) : null,
+  });
+  res.json({ ok: true, jobId: job.id, bytes });
+}));
+
+// Download a Zoom recording straight to the user's computer (FREE — not metered).
+// Streams from Zoom through the app to the browser; nothing is buffered or stored.
+apiRouter.get('/sources/zoom/download', wrap(async (req, res) => {
+  const tid = T(req);
+  const sourceId = String(req.query.source_id || '');
+  const fileId = req.query.file_id ? String(req.query.file_id) : null;
+  if (!sourceId) return res.status(400).json({ error: 'source_id is required' });
+  const account = await zoom.getZoomAccount(tid);
+  if (!account) return res.status(400).json({ error: 'Zoom is not connected.' });
+
+  // Base recording scope (avoids the granular per-meeting 400).
+  const meeting = await zoom.findMeetingInWindow(account, sourceId);
+  if (!meeting) return res.status(404).json({ error: 'Recording not found on Zoom (it may have been deleted).' });
+  const file = fileId ? zoom.findFile(meeting, fileId) : zoom.pickRecordingFile(meeting);
+  if (!file || !file.download_url) return res.status(404).json({ error: 'No downloadable MP4 for this recording.' });
+
+  const safeName = String(meeting.topic || 'recording').replace(/[^\w.-]+/g, '_').slice(0, 80) || 'recording';
+  res.setHeader('Content-Type', 'video/mp4');
+  res.setHeader('Content-Disposition', `attachment; filename="${safeName}.mp4"`);
+  if (file.file_size) res.setHeader('Content-Length', String(file.file_size));
+
+  const zres = await zoom.openRecordingStream(account, file.download_url);
+  // Free download — audit only, never billed.
+  query(`INSERT INTO download_events (tenant_id, source, user_email, bytes) VALUES ($1, 'zoom', $2, $3)`,
+    [tid, req.user?.email || null, file.file_size || null]).catch(() => {});
+  const stream = Readable.fromWeb(zres.body);
+  stream.on('error', () => { if (!res.headersSent) res.status(502); res.destroy(); });
+  req.on('close', () => stream.destroy()); // client cancelled — stop pulling from Zoom
+  stream.pipe(res);
 }));
 
 apiRouter.post('/sources/zoom/delete', requireOwner, wrap(async (req, res) => {

@@ -22,6 +22,12 @@ export function partialFilePath(recId) {
   return path.join(cacheDir(), `rec_${recId}.partial.mp4`);
 }
 
+// Landing path for a browser/local upload (feature: upload local files). Lives in
+// the cache dir so it can be renamed onto the pipeline's partial path (same device).
+export function ingestTempPath(token) {
+  return path.join(cacheDir(), `upload_${String(token).replace(/[^\w-]/g, '')}.mp4`);
+}
+
 // A cached download is reusable only if the file exists and its size matches the
 // size recorded on the row from the prior successful download.
 export function isCachedComplete(recId, expectedBytes) {
