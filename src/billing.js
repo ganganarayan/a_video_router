@@ -3,7 +3,7 @@ import { encrypt, decrypt } from './lib/secrets.js';
 import { log } from './lib/logger.js';
 import {
   createOrder, verifyPaymentSignature, verifyWebhookSignature,
-  createSubscription, cancelSubscription, verifySubscriptionSignature,
+  createPlan, createSubscription, cancelSubscription, verifySubscriptionSignature,
 } from './providers/razorpay.js';
 
 // ---------- config (global platform-level, in app_config) ----------
@@ -287,10 +287,13 @@ export async function handleWebhook(rawBody, signature) {
     return handleSubscriptionEvent(evt);
   }
   const pe = evt?.payload?.payment?.entity;
-  // A subscription's recurring charges also arrive as payment.captured but carry a
-  // subscription_id and no order_id — those are handled via subscription.charged above.
-  if (evt.event === 'payment.captured' && pe?.order_id) {
-    return creditPaidOrder(pe.order_id, pe.id);
+  if (evt.event === 'payment.captured' && pe) {
+    // PAYG top-up: a captured payment against one of our orders.
+    if (pe.order_id) return creditPaidOrder(pe.order_id, pe.id);
+    // Always-On: a subscription charge arrives as payment.captured too, carrying a
+    // subscription_id (no order_id). Handling it here means activation/renewal works
+    // even if only the payment.captured webhook event is enabled.
+    if (pe.subscription_id) return extendAlwaysOn(pe.subscription_id);
   }
   return { ok: true, ignored: evt.event };
 }
@@ -343,13 +346,19 @@ export async function startSubscription(tenantId, extra = {}) {
   const cfg = await getBillingConfig();
   if (cfg.provider !== 'razorpay') throw new Error('Always-On requires the Razorpay gateway.');
   if (!cfg.razorpayKeyId || !cfg.razorpayKeySecret) throw new Error('Razorpay is not configured yet.');
-  if (!cfg.alwaysOnPlanId) throw new Error('The Always-On plan is not set up yet — ask the admin to configure it.');
+  const keys = { keyId: cfg.razorpayKeyId, keySecret: cfg.razorpayKeySecret };
+  // Auto-provision the Always-On plan once if the admin hasn't set one, then cache
+  // its id in config (Razorpay Subscriptions must be enabled on the account).
+  let planId = cfg.alwaysOnPlanId;
+  if (!planId) {
+    const plan = await createPlan(keys, { amountPaise: cfg.alwaysOnPricePaise, name: 'AVideoRouter Always-On' });
+    planId = plan.id;
+    await setConfigValue('always_on_plan_id', planId);
+    log(`billing: auto-created Always-On plan ${planId} (₹${cfg.alwaysOnPricePaise / 100}/mo)`);
+  }
   const notes = { tenant_id: String(tenantId) };
   if (extra.email) notes.email = extra.email;
-  const sub = await createSubscription(
-    { keyId: cfg.razorpayKeyId, keySecret: cfg.razorpayKeySecret },
-    { planId: cfg.alwaysOnPlanId, notes },
-  );
+  const sub = await createSubscription(keys, { planId, notes });
   await query(
     `UPDATE wallets SET rzp_subscription_id = $1, subscription_status = 'created', updated_at = now()
      WHERE tenant_id = $2`,
@@ -388,19 +397,26 @@ export async function cancelAlwaysOn(tenantId) {
   return { ok: true, until: w?.always_on_until || null };
 }
 
+// Activate/renew Always-On for the wallet holding this subscription (+35d grace).
+async function extendAlwaysOn(subId) {
+  const { rowCount } = await query(
+    `UPDATE wallets SET subscription_status = 'active',
+       always_on_until = now() + interval '35 days', updated_at = now()
+     WHERE rzp_subscription_id = $1`,
+    [subId],
+  );
+  return { ok: true, extended: rowCount };
+}
+
 // Razorpay subscription.* webhook events → keep always_on_until in step.
 async function handleSubscriptionEvent(evt) {
   const subId = evt?.payload?.subscription?.entity?.id;
   if (!subId) return { ok: true, ignored: evt.event };
   if (['subscription.charged', 'subscription.activated', 'subscription.authenticated', 'subscription.resumed']
     .includes(evt.event)) {
-    await query(
-      `UPDATE wallets SET subscription_status = 'active',
-         always_on_until = now() + interval '35 days', updated_at = now()
-       WHERE rzp_subscription_id = $1`,
-      [subId],
-    );
-  } else if (['subscription.cancelled', 'subscription.halted', 'subscription.completed', 'subscription.paused']
+    return extendAlwaysOn(subId);
+  }
+  if (['subscription.cancelled', 'subscription.halted', 'subscription.completed', 'subscription.paused']
     .includes(evt.event)) {
     // Leave always_on_until as-is (access runs to the paid-through date); just record status.
     await query(

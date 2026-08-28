@@ -966,7 +966,7 @@ apiRouter.get('/billing', wrap(async (req, res) => {
     alwaysOnUntil: w?.always_on_until || null,
     subscriptionStatus: w?.subscription_status || null,
     alwaysOnPricePaise: c.alwaysOnPricePaise,
-    alwaysOnAvailable: Boolean(c.alwaysOnPlanId) && paymentsEnabled,
+    alwaysOnAvailable: paymentsEnabled, // the ₹999 plan auto-provisions on first subscribe
     provider: c.provider,
     paymentsEnabled,
     razorpayConfigured: razorpayReady,

@@ -46,6 +46,16 @@ export function verifyPaymentSignature(keySecret, orderId, paymentId, signature)
 
 // ---------- subscriptions (Always-On recurring tier) ----------
 
+// Create a recurring Plan (once) — lets the app auto-provision the Always-On plan
+// instead of requiring the admin to create one in the dashboard and paste its id.
+export function createPlan(keys, { amountPaise, name, period = 'monthly', interval = 1 }) {
+  return razorpayRequest(keys.keyId, keys.keySecret, 'POST', '/plans', {
+    period,
+    interval,
+    item: { name, amount: amountPaise, currency: 'INR' },
+  });
+}
+
 // Create a recurring subscription against a dashboard-created plan. total_count is
 // the max number of billing cycles (120 months ~= open-ended monthly); the customer
 // authorises a mandate at Checkout, then Razorpay auto-charges each cycle.
