@@ -105,6 +105,9 @@
     .price-row .price .amt{text-align:left}
     .price small{color:var(--muted)}
     .price .ptitle{margin:0 0 4px;font-size:19px}
+    .price li.excl::before{content:"✗";color:#e0674f}
+    .kb-btn{background:#f2b705;color:#14181f;border-color:#f2b705;font-weight:700}
+    .kb-btn:hover{background:#ffc21f;border-color:#ffc21f}
 
     .faq{max-width:760px;margin:0 auto}
     .faq details{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 20px;margin-bottom:12px}
@@ -225,8 +228,10 @@
               <span class="muted">(₹<%= Math.round(p.ratePerUnitPaise / 100) %>/unit<%= p.bonusPaise > 0 ? ' — bigger pack, lower rate' : '' %>)</span></li>
             <% }); %>
             <li>1 unit = 1&nbsp;GB, rounded up — a 2.5&nbsp;GB file is 3 units</li>
+            <li>Bigger packs beyond 50 units at the lowest ₹40/unit rate</li>
             <li>GST invoice on request — just add your GSTIN</li>
-            <li><b>No staff, no scheduler</b> — those are Always-On</li>
+            <li class="excl">No staff seats</li>
+            <li class="excl">No scheduler</li>
           </ul>
           <div><a class="btn primary big" href="/login">Start free</a></div>
         </div>
@@ -241,7 +246,7 @@
             <li>Transfers stay pay-as-you-go on top</li>
             <li>Cancel anytime → back to Pay As You Go</li>
           </ul>
-          <div><a class="btn big" href="/login">Get Always-On</a></div>
+          <div><a class="btn primary big" href="/login">Get Always-On</a></div>
         </div>
       </div>
     </div>
@@ -276,8 +281,8 @@
       <p class="lead">From Zoom to YouTube <b>and into your course</b> — automatically, even at 4&nbsp;GB.
         No subscription to start. GST invoice. Done before your coffee.</p>
       <a class="btn primary big" href="/login">Start free — first upload's on us</a>
-      <p style="margin-top:16px"><a href="/knowledge-base" style="color:var(--accent);font-weight:600">Browse the Knowledge Base →</a>
-        <span style="color:var(--muted)"> — see exactly how VideoRouter removes the busywork after every live session.</span></p>
+      <div style="margin-top:18px"><a class="btn kb-btn big" href="/knowledge-base">Browse the Knowledge Base</a></div>
+      <p class="muted" style="margin-top:10px">See exactly how VideoRouter removes the busywork after every live session.</p>
     </div>
   </section>
 
