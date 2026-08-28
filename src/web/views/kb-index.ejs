@@ -20,6 +20,7 @@ const itemList = {
   <script type="application/ld+json"><%- JSON.stringify(itemList) %></script>
   <style>
     :root{ --bg:#0f1420; --panel:#1a2233; --panel2:#223048; --line:#2e3d5c; --text:#e8edf7; --muted:#93a1bd; --accent:#4f8cff; }
+    :root[data-theme="light"]{ --bg:#f6f8fc; --panel:#ffffff; --panel2:#eef2f8; --line:#d6deea; --text:#151a22; --muted:#5b6b84; --accent:#2f68e0; }
     *{box-sizing:border-box}
     body{margin:0;background:var(--bg);color:var(--text);font:16px/1.65 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
     a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
@@ -41,11 +42,12 @@ const itemList = {
     footer{border-top:1px solid var(--line);margin-top:34px;padding:20px 0;color:var(--muted);font-size:.9rem;text-align:center}
     footer .links{display:flex;flex-wrap:wrap;gap:14px;justify-content:center;margin-bottom:8px}
   </style>
+  <script src="/public/theme.js"></script>
 </head>
 <body>
   <header class="top"><div class="wrap">
     <a class="brand" href="/"><span class="a">A</span>Video<span class="a">Router</span></a>
-    <span><a href="/">Home</a> · <a href="/faq">FAQ</a> · <a class="signup" href="/">Free sign up</a></span>
+    <span><span data-theme-toggle style="margin-right:10px"></span><a href="/">Home</a> · <a href="/faq">FAQ</a> · <a class="signup" href="/">Free sign up</a></span>
   </div></header>
 
   <main><div class="wrap">

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>VideoRouter — <%= title %></title>
   <link rel="stylesheet" href="/public/style.css">
+  <script src="/public/theme.js"></script>
   <script src="/public/app.js"></script>
   <script src="/public/eye.js"></script>
 </head>
@@ -25,6 +26,7 @@
   <a class="tab <%= page === 'settings' ? 'active' : '' %>" href="/settings">Settings</a>
   <a class="tab <%= page === 'help' ? 'active' : '' %>" href="/help">Help</a>
   <a class="tab <%= page === 'knowledge-base' ? 'active' : '' %>" id="nav-kb" href="/knowledge-base">Knowledge Base</a>
+  <span data-theme-toggle style="margin-left:8px"></span>
   <form method="post" action="/logout"><button type="submit">Log out</button></form>
 </nav>
 <div id="ctxbar"></div>

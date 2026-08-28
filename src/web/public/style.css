@@ -4,6 +4,11 @@
   --text: #e8edf7; --muted: #93a1bd; --accent: #4f8cff; --ok: #2ecc71;
   --warn: #f1c40f; --err: #e74c3c;
 }
+:root[data-theme="light"] {
+  --bg: #f6f8fc; --panel: #ffffff; --panel2: #eef2f8; --line: #d6deea;
+  --text: #151a22; --muted: #5b6b84; --accent: #2f68e0; --ok: #1e9e56;
+  --warn: #b9820a; --err: #d64535;
+}
 body {
   margin: 0; background: var(--bg); color: var(--text);
   font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
