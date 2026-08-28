@@ -83,6 +83,36 @@ export const KB_TOPICS = [
         single-click trigger, and the entire transfer-and-publish cycle happens hands-free.</p>`,
   },
   {
+    slug: 'download-zoom-recordings-to-your-computer',
+    title: 'Get a local copy of any Zoom recording — one click',
+    teaser: 'Need the raw file to edit, archive or re-share? Download it straight to your computer, free.',
+    metaDescription: 'Download any Zoom cloud recording straight to your computer in one click from AVideoRouter — no signing into Zoom, and it is free.',
+    keywords: ['download zoom recording to computer', 'save zoom recording locally', 'get zoom mp4 file', 'export zoom cloud recording', 'zoom recording backup'],
+    painHeading: 'The pain: getting the raw file out of Zoom',
+    pain: `<p>Sometimes you just need the video file itself — to edit a clip, keep an archive, or hand it to
+        someone. But pulling it out of Zoom means logging in, hunting through the cloud recordings and waiting
+        on a fiddly download every time.</p>`,
+    solutionHeading: 'How AVideoRouter solves it',
+    solution: `<p>Every recording in your dashboard has a <b>Download</b> button that streams the file straight
+        to your computer — no signing into Zoom, nothing to hunt for. It is <b>free</b> (not metered), so grab a
+        local copy whenever you need one.</p>`,
+  },
+  {
+    slug: 'upload-local-video-files-to-youtube-and-lms',
+    title: 'Publish any video file — not just Zoom and Fathom',
+    teaser: 'Got a pre-recorded or edited video on your computer? Send it straight to YouTube and your LMS course.',
+    metaDescription: 'Upload a local video file to YouTube and your LMS course through AVideoRouter — the same automated route as a Zoom recording, streamed even for large files.',
+    keywords: ['upload local video to youtube and lms', 'publish pre-recorded video to course', 'upload edited video to lms', 'bulk upload local files to youtube', 'add local video to online course'],
+    painHeading: 'The pain: videos that did not come from Zoom or Fathom',
+    pain: `<p>Not every video is a live-session recording. An edited cut, a pre-recorded lesson, a file a
+        colleague sent you — those still have to be uploaded to YouTube and filed into the right course by hand,
+        the very busywork you were trying to escape.</p>`,
+    solutionHeading: 'How AVideoRouter solves it',
+    solution: `<p>Upload a file straight from your computer in the dashboard. It streams to <b>YouTube</b>
+        (large 2–4&nbsp;GB files included) and registers in your <b>LMS course</b> — the same automated,
+        rule-driven route as a Zoom recording, billed by size. One place for every video, wherever it came from.</p>`,
+  },
+  {
     slug: 'pay-as-you-go-video-automation-pricing',
     title: 'No rigid subscriptions — pay only for what you transfer',
     teaser: 'Subscription-free, pay-as-you-go at ₹50 per unit (up to 1 GB), with GST invoices and free team access.',
