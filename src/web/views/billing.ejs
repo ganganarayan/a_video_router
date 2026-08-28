@@ -158,7 +158,7 @@ function renderAlwaysOn() {
     canBtn.style.display = cancelled ? 'none' : '';
     note.textContent = cancelled ? 'Cancelled — access runs until the date above.' : '';
   } else {
-    status.innerHTML = '<span class="badge warn">Not active</span> — the scheduler and staff seats are locked.';
+    status.innerHTML = '<span class="badge warn">Not active</span> — the daily scheduler is locked (staff also unlock with a ₹1,000+ top-up).';
     canBtn.style.display = 'none';
     if (!CFG.alwaysOnAvailable) { subBtn.disabled = true; subBtn.style.display = ''; note.innerHTML = '<span class="badge warn">Subscriptions not enabled yet</span>'; }
     else { subBtn.disabled = false; subBtn.style.display = ''; note.textContent = ''; }

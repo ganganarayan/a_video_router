@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { config } from '../config.js';
 import { query } from '../db.js';
-import { hasAlwaysOn } from '../billing.js';
+import { canUseStaff } from '../billing.js';
 
 const RESET_KEY = process.env.PASSWORD_RESET_KEY || '';
 export const resetEnabled = () => Boolean(RESET_KEY);
@@ -125,9 +125,9 @@ function toReqUser(u) {
 // Staff seats are an Always-On feature: a staff user whose workspace is not on
 // Always-On (subscription or comped/unlimited) is locked out until the owner
 // subscribes. Owners are never gated here (they can log in and subscribe).
-const STAFF_LOCK_MSG = 'Staff access needs an Always-On subscription. Ask the workspace owner to subscribe on the Billing page.';
+const STAFF_LOCK_MSG = 'Staff access needs Always-On or a ₹1,000+ top-up. Ask the workspace owner to enable it on the Billing page.';
 async function staffLocked(user) {
-  return user.isStaff && !(await hasAlwaysOn(user.tenantId).catch(() => false));
+  return user.isStaff && !(await canUseStaff(user.tenantId).catch(() => false));
 }
 
 export async function requirePageAuth(req, res, next) {

@@ -341,6 +341,22 @@ export async function hasAlwaysOn(tenantId) {
   return isAlwaysOn(await getWallet(tenantId));
 }
 
+// Staff seats unlock EITHER with Always-On (or unlimited) OR once the tenant has
+// topped up at least ₹1,000 cumulatively — so a pay-as-you-go workspace can add a
+// team without a subscription. (The scheduler stays Always-On-only.)
+export const STAFF_TOPUP_THRESHOLD_PAISE = 100000; // ₹1,000
+
+export async function canUseStaff(tenantId) {
+  const w = await getWallet(tenantId);
+  if (isAlwaysOn(w)) return true;
+  const { rows } = await query(
+    `SELECT COALESCE(SUM(amount_paise), 0)::bigint AS total
+       FROM wallet_txns WHERE tenant_id = $1 AND type = 'topup'`,
+    [tenantId],
+  );
+  return Number(rows[0].total) >= STAFF_TOPUP_THRESHOLD_PAISE;
+}
+
 // Start a subscription: create it at Razorpay, store the id, return what Checkout needs.
 export async function startSubscription(tenantId, extra = {}) {
   const cfg = await getBillingConfig();

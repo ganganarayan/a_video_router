@@ -257,7 +257,16 @@ const T = (req) => req.tenantId;
 const requireAlwaysOn = wrap(async (req, res, next) => {
   if (await billing.hasAlwaysOn(T(req))) return next();
   res.status(402).json({
-    error: 'This needs Always-On. Subscribe on the Billing page to unlock the daily scheduler and staff seats.',
+    error: 'This needs Always-On. Subscribe on the Billing page to unlock the daily scheduler.',
+    needsAlwaysOn: true,
+  });
+});
+
+// Staff seats: Always-On OR a ₹1,000+ top-up.
+const requireStaffAccess = wrap(async (req, res, next) => {
+  if (await billing.canUseStaff(T(req))) return next();
+  res.status(402).json({
+    error: 'Adding staff needs Always-On or a ₹1,000+ top-up. Enable it on the Billing page.',
     needsAlwaysOn: true,
   });
 });
@@ -909,7 +918,7 @@ apiRouter.get('/staff', requireOwner, wrap(async (req, res) => {
   res.json(await listTenantUsers(T(req)));
 }));
 
-apiRouter.post('/staff', requireOwner, requireAlwaysOn, wrap(async (req, res) => {
+apiRouter.post('/staff', requireOwner, requireStaffAccess, wrap(async (req, res) => {
   const result = await createStaff(T(req), {
     email: req.body.email, name: req.body.name, permission: req.body.permission,
   });
