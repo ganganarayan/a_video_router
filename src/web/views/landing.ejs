@@ -31,7 +31,7 @@
           "@type": "Offer",
           "price": "50",
           "priceCurrency": "INR",
-          "description": "Pay as you go — ₹50 per unit of transfer (up to 1 GB per file). First upload free. No subscription."
+          "description": "Pay as you go — ₹50 per unit of transfer (1 unit = 1 GB, rounded up). First upload free. Optional Always-On subscription."
         }
       }
     ]
@@ -104,6 +104,7 @@
     .price-row .price{margin:0;flex:1 1 340px;max-width:420px;text-align:left}
     .price-row .price .amt{text-align:left}
     .price small{color:var(--muted)}
+    .price .ptitle{margin:0 0 4px;font-size:19px}
 
     .faq{max-width:760px;margin:0 auto}
     .faq details{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 20px;margin-bottom:12px}
@@ -124,7 +125,7 @@
   <div class="wrap">
     <!-- HERO -->
     <div class="hero">
-      <h1>Your Zoom &amp; Fathom recordings — auto-published to YouTube <span class="hl">and into your course</span></h1>
+      <h1>Your Zoom &amp; Fathom recordings — auto-published to YouTube <span class="hl">and into your Course LMS</span></h1>
       <p class="sub">Most tools stop at YouTube. AVideoRouter also files every recording into the right
         LMS course and module, then clears it off Zoom. Connect once, set your rules, and it runs —
         on a schedule or one click.</p>
@@ -215,26 +216,30 @@
       <p class="lead">Start pay-as-you-go. Go Always-On when you're running regular batches.</p>
       <div class="price-row">
         <div class="price">
+          <h3 class="ptitle">Pay As You Go</h3>
           <div class="amt">From ₹50 <small>/ unit</small></div>
-          <p class="muted" style="margin:.3rem 0 6px">Pay as you go · first upload free</p>
+          <p class="muted" style="margin:.3rem 0 6px">First upload free</p>
           <ul>
             <% packs.forEach(function (p) { %>
             <li><b><%= p.units %> units</b> — ₹<%= (p.base / 100).toLocaleString('en-IN') %>
               <span class="muted">(₹<%= Math.round(p.ratePerUnitPaise / 100) %>/unit<%= p.bonusPaise > 0 ? ' — bigger pack, lower rate' : '' %>)</span></li>
             <% }); %>
-            <li>1 unit = up to 1&nbsp;GB per file (over 1&nbsp;GB = 2 units)</li>
+            <li>1 unit = 1&nbsp;GB, rounded up — a 2.5&nbsp;GB file is 3 units</li>
             <li>GST invoice on request — just add your GSTIN</li>
+            <li><b>No staff, no scheduler</b> — those are Always-On</li>
           </ul>
           <div><a class="btn primary big" href="/login">Start free</a></div>
         </div>
         <div class="price">
+          <h3 class="ptitle">Always-On</h3>
+          <div class="muted" style="font-size:13px; margin-bottom:2px">Monthly subscription</div>
           <div class="amt">₹<%= (alwaysOnPricePaise / 100).toLocaleString('en-IN') %> <small>/ month</small></div>
-          <p class="muted" style="margin:.3rem 0 6px">Always-On · for regular batches</p>
+          <p class="muted" style="margin:.3rem 0 6px">For regular batches</p>
           <ul>
             <li>Unlocks the daily scheduler</li>
             <li>Unlimited staff seats (view / edit)</li>
             <li>Transfers stay pay-as-you-go on top</li>
-            <li>Cancel anytime — access runs to period end</li>
+            <li>Cancel anytime → back to Pay As You Go</li>
           </ul>
           <div><a class="btn big" href="/login">Get Always-On</a></div>
         </div>
@@ -259,7 +264,7 @@
         <details><summary>Can my team help run it?</summary>
           <p>Yes, with an Always-On subscription — add staff with view or edit permissions. It's designed to be simple enough for anyone to operate.</p></details>
         <details><summary>How is it priced?</summary>
-          <p>Pay as you go from ₹50 per unit of transfer (one unit = up to 1&nbsp;GB per file; larger files count as two units), dropping to ₹45 and ₹40 on bigger packs. Your first upload is free. Add your GSTIN for a GST invoice. Optional Always-On (₹999/month) unlocks the daily scheduler and unlimited staff seats; transfers stay pay-as-you-go on top.</p></details>
+          <p>Pay as you go from ₹50 per unit of transfer (one unit = 1&nbsp;GB, rounded up — a 2.5&nbsp;GB file is 3 units), dropping to ₹45 and ₹40 on bigger packs. Your first upload is free. Add your GSTIN for a GST invoice. Optional Always-On (₹999/month) unlocks the daily scheduler and unlimited staff seats; transfers stay pay-as-you-go on top.</p></details>
       </div>
     </div>
   </section>

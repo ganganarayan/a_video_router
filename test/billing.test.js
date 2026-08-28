@@ -21,12 +21,15 @@ test('top-up breakdown rounds to whole paise', () => {
   assert.equal(bd.total, 70000 + bd.gst + bd.fee);
 });
 
-test('units: <=1 GiB is 1 unit, over 1 GiB is 2 units', () => {
+test('units: 1 GB per unit, rounded up, uncapped', () => {
   const GiB = 1073741824;
-  assert.equal(computeUnits(GiB, GiB), 1);        // exactly 1 GiB = 1 unit (not over)
+  assert.equal(computeUnits(GiB, GiB), 1);         // exactly 1 GiB = 1 unit
   assert.equal(computeUnits(GiB - 1, GiB), 1);
-  assert.equal(computeUnits(GiB + 1, GiB), 2);
-  assert.equal(computeUnits(5 * GiB, GiB), 2);    // capped at 2 units
+  assert.equal(computeUnits(GiB + 1, GiB), 2);     // just over 1 GB = 2
+  assert.equal(computeUnits(2 * GiB, GiB), 2);
+  assert.equal(computeUnits(2 * GiB + 1, GiB), 3); // just over 2 GB = 3
+  assert.equal(computeUnits(4 * GiB, GiB), 4);     // uncapped
+  assert.equal(computeUnits(0, GiB), 1);           // minimum 1
 });
 
 test('pack rate: descending by unit count', () => {

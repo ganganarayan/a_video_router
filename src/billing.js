@@ -70,8 +70,10 @@ export async function history(tenantId, limit = 100) {
   return rows;
 }
 
+// Units = file size in GB, rounded up (1 GB per unit), minimum 1. Uncapped:
+// a 2.5 GB file is 3 units, a 4 GB file is 4 units.
 export function computeUnits(sizeBytes, unitBytes) {
-  return Number(sizeBytes) > Number(unitBytes) ? 2 : 1;
+  return Math.max(1, Math.ceil(Number(sizeBytes) / Number(unitBytes)));
 }
 
 // ---------- pre-push gate ----------
