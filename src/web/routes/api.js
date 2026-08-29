@@ -1079,6 +1079,10 @@ apiRouter.post('/billing/topup', requireOwner, wrap(async (req, res) => {
 apiRouter.post('/billing/confirm', requireOwner, wrap(async (req, res) => {
   try {
     const r = await billing.confirmCheckout(req.body.order_id, req.body.payment_id, req.body.signature);
+    if (r.ok && !r.already) {
+      const { rows } = await query('SELECT total_paise FROM payments WHERE provider_order_id = $1', [req.body.order_id]);
+      meta.firePurchase(req, { email: req.user?.email, valuePaise: rows[0]?.total_paise }).catch(() => {});
+    }
     res.json({ ok: true, ...r });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -1097,6 +1101,10 @@ apiRouter.post('/billing/subscription/confirm', requireOwner, wrap(async (req, r
   try {
     const r = await billing.confirmSubscription(
       T(req), req.body.subscription_id, req.body.payment_id, req.body.signature);
+    if (r.ok) {
+      const c = await billing.getBillingConfig();
+      meta.firePurchase(req, { email: req.user?.email, valuePaise: c.alwaysOnPricePaise }).catch(() => {});
+    }
     res.json({ ok: true, ...r });
   } catch (err) { res.status(400).json({ error: err.message }); }
 }));

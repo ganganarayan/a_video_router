@@ -191,6 +191,22 @@ export async function fireSignupConversions(req, { email, name, eventId, sourceU
   await sendCapiEvent({ eventName: 'Lead', eventId: `lead-${base}`, eventTimeMs: Date.now(), eventSourceUrl: sourceUrl, user });
 }
 
+// Fire a Purchase conversion (CAPI) for a wallet top-up or an Always-On subscription.
+// The billing page is authed (no pixel), so this is CAPI-only — still attributed via
+// the visitor's _fbc/_fbp cookies + hashed email.
+export async function firePurchase(req, { email, valuePaise, eventId }) {
+  const ctx = metaContextFromReq(req);
+  const value = Math.round(Number(valuePaise || 0)) / 100;
+  await sendCapiEvent({
+    eventName: 'Purchase',
+    eventId: eventId || crypto.randomUUID(),
+    eventTimeMs: Date.now(),
+    eventSourceUrl: `${req.protocol}://${req.get('host')}/billing`,
+    user: { email, ...ctx },
+    customData: { value, currency: 'INR' },
+  }, { valuePaise });
+}
+
 // Diagnostic: send a real test event and RETURN Meta's actual response (Test Events tab).
 export async function testCapi(testEventCode) {
   const cfg = await loadConfig();
