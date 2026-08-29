@@ -32,12 +32,14 @@
 
 <div class="card" id="landing-card">
   <h2>Landing page video</h2>
-  <p class="muted">Embed URL shown below the hero on your public landing page
-  (<span class="mono">/</span>). Paste a VidaPulse (or any) embed link — the page reads it live,
-  so you can swap it anytime without touching code. Leave blank to hide the video.</p>
+  <p class="muted">Video shown below the hero on your public landing page
+  (<span class="mono">/</span>). Paste <b>either</b> a VidaPulse (or any) embed <b>URL</b>
+  (<span class="mono">https://…/embed/…</span>) <b>or</b> a full embed <b>code</b> (the whole
+  <span class="mono">&lt;div&gt;…&lt;iframe&gt;…</span> block). The page reads it live, so you can
+  swap it anytime without touching code. Leave blank to hide the video.</p>
   <div class="row" style="align-items:flex-end">
-    <div class="field" style="flex:1 1 420px"><label>Video embed URL</label>
-      <input id="landing-video" placeholder="https://…/embed/…"></div>
+    <div class="field" style="flex:1 1 420px"><label>Video embed URL or code</label>
+      <textarea id="landing-video" rows="3" placeholder="https://…/embed/…  — or paste the full embed code" style="width:100%"></textarea></div>
     <button class="primary" id="landing-save">Save</button>
     <a id="landing-preview" href="/" target="_blank">Open landing ↗</a>
   </div>

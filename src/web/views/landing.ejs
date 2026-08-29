@@ -128,7 +128,7 @@
 <body>
   <header><div class="wrap">
     <div class="brand"><span>A</span>Video<span>Router</span></div>
-    <span style="display:flex;align-items:center;gap:12px"><span data-theme-toggle></span><a class="btn" href="/login">Log in</a></span>
+    <span style="display:flex;align-items:center;gap:12px"><span data-theme-toggle></span><a class="btn primary" href="/register">Sign up free</a><a class="btn" href="/login">Log in</a></span>
   </div></header>
 
   <div class="wrap">
@@ -145,12 +145,16 @@
       <div class="tiny">Start free · Pay as you go · GST invoice provided</div>
     </div>
 
-    <!-- HERO VIDEO (URL pulled live from settings) -->
+    <!-- HERO VIDEO (pulled live from settings — accepts a full embed snippet OR a bare URL) -->
     <% if (videoUrl) { %>
-    <div class="video"><div class="video-frame">
-      <iframe src="<%= videoUrl %>" title="VideoRouter demo" loading="lazy"
-        allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen></iframe>
-    </div></div>
+      <% if (/^\s*</.test(videoUrl)) { %>
+        <div class="video"><%- videoUrl %></div>
+      <% } else { %>
+        <div class="video"><div class="video-frame">
+          <iframe src="<%= videoUrl %>" title="AVideoRouter demo" loading="lazy"
+            allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen></iframe>
+        </div></div>
+      <% } %>
     <% } %>
 
     <!-- SPEED / JAW-DROP -->
