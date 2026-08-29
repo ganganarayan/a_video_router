@@ -162,6 +162,35 @@ export async function sendCapiEvent(input, meta = {}) {
   }
 }
 
+// Build the CAPI user-data request context (ip/ua/fbp/fbc) from an Express request.
+// Raises match quality + attributes the server event to the ad click via fbc.
+export function metaContextFromReq(req) {
+  const c = req.cookies || {};
+  let fbc = c._fbc || null;
+  const fbclid = req.query?.fbclid || null;
+  if (!fbc && fbclid) fbc = fbcFromFbclid(String(fbclid));
+  const xff = req.headers['x-forwarded-for'];
+  const ip = xff ? String(xff).split(',')[0].trim() : (req.ip || null);
+  return {
+    clientIpAddress: ip || null,
+    clientUserAgent: req.headers['user-agent'] || null,
+    fbp: c._fbp || null,
+    fbc,
+  };
+}
+
+// Fire the signup conversions server-side (CAPI): CompleteRegistration + Lead.
+// eventId is the dedup key shared with the browser pixel (email signup passes it;
+// Google OAuth has no pixel at the callback, so CAPI alone carries the conversion).
+export async function fireSignupConversions(req, { email, name, eventId, sourceUrl }) {
+  const ctx = metaContextFromReq(req);
+  const [firstName, ...rest] = String(name || '').trim().split(/\s+/);
+  const user = { email, firstName: firstName || null, lastName: rest.join(' ') || null, ...ctx };
+  const base = eventId || crypto.randomUUID();
+  await sendCapiEvent({ eventName: 'CompleteRegistration', eventId: base, eventTimeMs: Date.now(), eventSourceUrl: sourceUrl, user });
+  await sendCapiEvent({ eventName: 'Lead', eventId: `lead-${base}`, eventTimeMs: Date.now(), eventSourceUrl: sourceUrl, user });
+}
+
 // Diagnostic: send a real test event and RETURN Meta's actual response (Test Events tab).
 export async function testCapi(testEventCode) {
   const cfg = await loadConfig();

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AVideoRouter — Create your workspace</title>
+  <meta name="description" content="Create your AVideoRouter workspace — your first upload is free. Auto-publish Zoom & Fathom recordings to YouTube and your LMS course.">
+  <link rel="stylesheet" href="/public/style.css">
+  <script src="/public/theme.js"></script>
+  <script src="/public/eye.js"></script>
+  <%- typeof pixelHead !== 'undefined' ? pixelHead : '' %>
+</head>
+<body>
+<main>
+  <div class="card login-box">
+    <h1><span style="color:var(--accent)">A</span>Video<span style="color:var(--accent)">Router</span></h1>
+    <p class="muted">Create your workspace — your first upload is on us.</p>
+    <% if (error) { %><p class="badge err"><%= error %></p><% } %>
+
+    <% if (googleEnabled) { %>
+      <p><a class="btn" style="display:block;text-align:center" href="/oauth/google/start">Sign up with Google</a></p>
+      <p class="muted" style="text-align:center;margin:10px 0">— or with email —</p>
+    <% } %>
+
+    <form method="post" action="/register" id="reg-form">
+      <input type="hidden" name="event_id" value="<%= eventId %>">
+      <label>Your name</label>
+      <input name="name" value="<%= values.name || '' %>" autocomplete="name">
+      <label>Work email</label>
+      <input type="email" name="email" value="<%= values.email || '' %>" required autocomplete="email" autofocus>
+      <label>Workspace name</label>
+      <input name="workspace" value="<%= values.workspace || '' %>" placeholder="e.g. Sunrise Coaching">
+      <label>Password</label>
+      <input type="password" name="password" required minlength="8" autocomplete="new-password">
+      <p><button class="primary" type="submit">Create workspace — start free</button></p>
+    </form>
+    <p class="muted">Already have an account? <a href="/login">Log in</a></p>
+  </div>
+</main>
+<script>
+// Fire the browser pixel conversion with the SAME event_id the server sends via
+// CAPI, so Meta deduplicates the two into one attributed conversion.
+(function () {
+  var f = document.getElementById('reg-form');
+  if (!f) return;
+  f.addEventListener('submit', function () {
+    try {
+      if (window.fbq) {
+        var id = f.querySelector('[name=event_id]').value;
+        fbq('track', 'CompleteRegistration', {}, { eventID: id });
+        fbq('track', 'Lead', {}, { eventID: 'lead-' + id });
+      }
+    } catch (e) { /* pixel is best-effort */ }
+  });
+})();
+</script>
+</body>
+</html>

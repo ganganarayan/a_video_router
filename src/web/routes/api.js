@@ -226,6 +226,19 @@ apiRouter.post('/admin/meta/test', requireSuperAdmin, wrap(async (req, res) => {
   res.json(await meta.testCapi(req.body.test_event_code));
 }));
 
+// Google Sign-In OAuth client (for self-serve signup). Secret stored encrypted.
+apiRouter.get('/admin/google', requireSuperAdmin, wrap(async (_req, res) => {
+  res.json({
+    clientId: (await getConfigValue('google_client_id')) || '',
+    hasSecret: Boolean(await getConfigValue('google_client_secret')),
+  });
+}));
+apiRouter.post('/admin/google', requireSuperAdmin, wrap(async (req, res) => {
+  if (req.body.client_id !== undefined) await setConfigValue('google_client_id', String(req.body.client_id).trim());
+  if (req.body.client_secret) await setConfigValue('google_client_secret', encrypt(String(req.body.client_secret).trim()));
+  res.json({ ok: true });
+}));
+
 // Conversions panel (super admin): CAPI config status + recent server events + counts.
 apiRouter.get('/analytics/conversions', requireSuperAdmin, wrap(async (req, res) => {
   const days = [7, 30, 90, 180].includes(Number(req.query.range)) ? Number(req.query.range) : 30;

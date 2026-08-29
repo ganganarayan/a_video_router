@@ -6,8 +6,9 @@ import {
   requirePageAuth, requireSessionOnly, authenticate, setOwnPassword,
   setSessionCookie, clearSessionCookie, resetPassword, resetEnabled,
   resolveTenant, requireTenant, requireSuperAdmin, getOptionalUser,
-  recordLogin, SESSION_COOKIE_NAME,
+  recordLogin, SESSION_COOKIE_NAME, createTenantOwner, hashPassword,
 } from './auth.js';
+import crypto from 'node:crypto';
 import { trackMiddleware, recordBeacon } from './track.js';
 import * as meta from '../lib/meta.js';
 import { apiRouter } from './routes/api.js';
@@ -78,6 +79,33 @@ export function createServer() {
       return res.status(400).render('set-password', { error: result.error, email: req.user.email });
     }
     res.redirect('/runs');
+  });
+
+  // Public self-serve signup — creates a new workspace (tenant + owner + wallet),
+  // logs in, and fires the Lead / CompleteRegistration conversions (pixel + CAPI).
+  app.get('/register', async (req, res, next) => {
+    try {
+      const user = await getOptionalUser(req);
+      if (user) return res.redirect(user.isSuperAdmin ? '/admin' : '/runs');
+      const googleEnabled = Boolean(await getConfigValue('google_client_id'));
+      res.render('register', { error: req.query.err ? String(req.query.err).slice(0, 200) : null, values: {}, googleEnabled, eventId: crypto.randomUUID() });
+    } catch (err) { next(err); }
+  });
+  app.post('/register', async (req, res, next) => {
+    try {
+      const { email, name, workspace, password, event_id } = req.body;
+      const googleEnabled = Boolean(await getConfigValue('google_client_id'));
+      const rerender = (error) => res.status(400).render('register',
+        { error, values: { email, name, workspace }, googleEnabled, eventId: event_id || crypto.randomUUID() });
+      if (!password || String(password).length < 8) return rerender('Choose a password of at least 8 characters.');
+      const result = await createTenantOwner({ email, name, workspaceName: workspace, passwordHash: await hashPassword(password) });
+      if (!result.ok) return rerender(result.error);
+      setSessionCookie(res, result.email);
+      recordLogin(result.email, req.ip);
+      meta.fireSignupConversions(req, { email: result.email, name, eventId: event_id,
+        sourceUrl: `${req.protocol}://${req.get('host')}/register` }).catch(() => {});
+      res.redirect('/runs');
+    } catch (err) { next(err); }
   });
 
   app.get('/reset', (_req, res) => res.render('reset', { error: null, ok: null, enabled: resetEnabled() }));

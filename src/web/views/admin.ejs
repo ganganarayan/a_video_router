@@ -59,6 +59,19 @@
   <pre id="meta-test-out" class="muted" style="white-space:pre-wrap; margin-top:8px; display:none"></pre>
 </div>
 
+<div class="card" id="google-card">
+  <h2>Google Sign-In</h2>
+  <p class="muted">Lets visitors sign up / log in with Google on the public signup page. Create an OAuth client
+  in Google Cloud (APIs &amp; Services → Credentials → OAuth client ID → Web application) and add this redirect
+  URI: <span class="mono" id="google-redirect">…/oauth/google/callback</span></p>
+  <div id="google-status" class="muted" style="margin-bottom:8px"></div>
+  <div class="row" style="align-items:flex-end; flex-wrap:wrap">
+    <div class="field"><label>Client ID</label><input id="google-cid" placeholder="....apps.googleusercontent.com" style="min-width:280px"></div>
+    <div class="field"><label>Client secret</label><input id="google-secret" type="password" placeholder="leave blank to keep"></div>
+    <button class="primary" id="google-save">Save</button>
+  </div>
+</div>
+
 <div class="card table-wrap">
   <table id="tenants-table">
     <thead><tr>
@@ -154,6 +167,27 @@ document.getElementById('meta-test').onclick = async () => {
   } catch (e) { out.textContent = e.message; }
 };
 
+async function loadGoogle() {
+  document.getElementById('google-redirect').textContent = location.origin + '/oauth/google/callback';
+  try {
+    const g = await api('/admin/google');
+    document.getElementById('google-cid').value = g.clientId || '';
+    document.getElementById('google-status').innerHTML = (g.clientId && g.hasSecret)
+      ? '<span class="badge ok">Google sign-in enabled</span>'
+      : '<span class="badge warn">not configured</span>';
+  } catch (e) { document.getElementById('google-status').textContent = e.message; }
+}
+document.getElementById('google-save').onclick = async () => {
+  try {
+    await api('/admin/google', { method: 'POST', body: {
+      client_id: document.getElementById('google-cid').value.trim(),
+      client_secret: document.getElementById('google-secret').value.trim(),
+    } });
+    document.getElementById('google-secret').value = '';
+    toast('Google settings saved.'); loadGoogle();
+  } catch (e) { toast(e.message, 'err'); }
+};
+
 document.getElementById('ao-plan-save').onclick = async () => {
   try {
     const rs = Number(document.getElementById('ao-price-rs').value);
@@ -238,6 +272,7 @@ async function impersonate(id) {
 loadConfig();
 loadLanding();
 loadMeta();
+loadGoogle();
 load().catch(e => toast(e.message, 'err'));
 </script>
 <%- include('partials/foot') %>

@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { config } from '../config.js';
-import { query } from '../db.js';
+import { query, pool } from '../db.js';
 import { canUseStaff } from '../billing.js';
 
 const RESET_KEY = process.env.PASSWORD_RESET_KEY || '';
@@ -277,6 +277,72 @@ async function staffRow(tenantId, id) {
 }
 
 // Create a staff user (passwordless first login + forced set-password, like the seeds).
+// --- self-serve signup: create a tenant + owner + wallet atomically ---
+
+function slugify(s) {
+  return String(s || '').toLowerCase().normalize('NFKD')
+    .replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 40) || 'workspace';
+}
+
+async function uniqueSlug(base) {
+  const root = base === 'admin' ? 'workspace' : base;
+  for (let i = 0; i < 60; i++) {
+    const candidate = i === 0 ? root : `${root}-${i + 1}`;
+    const { rowCount } = await query('SELECT 1 FROM tenants WHERE slug = $1', [candidate]);
+    if (!rowCount) return candidate;
+  }
+  return `${root}-${Date.now().toString(36)}`;
+}
+
+// Create a brand-new workspace for a self-serve signup. passwordHash is null for
+// Google-OAuth accounts (they sign in via Google). Returns the new tenant + email.
+export async function createTenantOwner({ email, name, workspaceName, passwordHash = null }) {
+  const emailLc = String(email || '').toLowerCase().trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailLc)) return { ok: false, error: 'A valid email is required.' };
+  if (await getUserByEmail(emailLc)) return { ok: false, error: 'An account with that email already exists — please log in.' };
+  const displayName = String(name || '').trim() || emailLc.split('@')[0];
+  const wsName = String(workspaceName || '').trim() || displayName;
+  const slug = await uniqueSlug(slugify(wsName || emailLc.split('@')[0]));
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query('INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id', [slug, wsName]);
+    const tenantId = rows[0].id;
+    await client.query(
+      `INSERT INTO users (tenant_id, email, name, role, password_hash, must_change_password)
+       VALUES ($1, $2, $3, 'admin', $4, false)`,
+      [tenantId, emailLc, displayName, passwordHash],
+    );
+    await client.query('INSERT INTO wallets (tenant_id) VALUES ($1) ON CONFLICT (tenant_id) DO NOTHING', [tenantId]);
+    await client.query('COMMIT');
+    return { ok: true, tenantId, slug, email: emailLc };
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    if (err.code === '23505') return { ok: false, error: 'An account with that email already exists — please log in.' };
+    return { ok: false, error: 'Could not create the workspace. Please try again.' };
+  } finally {
+    client.release();
+  }
+}
+
+// Owner-side sign-up for a hashed password (kept next to createTenantOwner).
+export async function hashPassword(pw) { return bcrypt.hash(String(pw), 10); }
+
+// Google sign-in: find the user by email; create a new workspace if none exists.
+// Returns { ok, email, created } — `created` true only for a brand-new signup.
+export async function signInWithGoogle({ email, name }) {
+  const emailLc = String(email || '').toLowerCase().trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailLc)) return { ok: false, error: 'Google did not return a valid email.' };
+  const existing = await getUserByEmail(emailLc);
+  if (existing) {
+    if (existing.deleted_at) return { ok: false, error: 'This account is disabled.' };
+    return { ok: true, email: emailLc, created: false };
+  }
+  const created = await createTenantOwner({ email: emailLc, name, workspaceName: name });
+  if (!created.ok) return created;
+  return { ok: true, email: emailLc, created: true, tenantId: created.tenantId };
+}
+
 export async function createStaff(tenantId, { email, name, permission }) {
   const emailLc = String(email || '').toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailLc)) return { ok: false, error: 'A valid email is required.' };
