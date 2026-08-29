@@ -26,6 +26,7 @@ import { canDeleteZoomSource } from '../../pipeline/states.js';
 import { config } from '../../config.js';
 import { log, logError } from '../../lib/logger.js';
 import * as billing from '../../billing.js';
+import * as meta from '../../lib/meta.js';
 
 export const apiRouter = express.Router();
 apiRouter.use(requireApiAuth, resolveTenant);
@@ -198,6 +199,52 @@ apiRouter.post('/admin/billing/provider', requireSuperAdmin, wrap(async (req, re
     await billing.setPaymentProvider(req.body.provider);
     res.json({ ok: true });
   } catch (err) { res.status(400).json({ error: err.message }); }
+}));
+
+// Meta Pixel + CAPI (platform-level ad tracking) config.
+apiRouter.get('/admin/meta', requireSuperAdmin, wrap(async (_req, res) => {
+  const m = await meta.getMetaConfig();
+  res.json({
+    pixelId: m.pixelId,
+    hasToken: Boolean(m.capiToken),
+    testEventCode: m.testEventCode,
+    configured: await meta.isCapiConfigured(),
+  });
+}));
+
+apiRouter.post('/admin/meta', requireSuperAdmin, wrap(async (req, res) => {
+  await meta.setMetaConfig({
+    pixelId: req.body.pixel_id,
+    capiToken: req.body.capi_token,          // blank keeps the stored token
+    testEventCode: req.body.test_event_code,
+  });
+  res.json({ ok: true });
+}));
+
+// Send a real test event and surface Meta's actual response (Events Manager → Test Events).
+apiRouter.post('/admin/meta/test', requireSuperAdmin, wrap(async (req, res) => {
+  res.json(await meta.testCapi(req.body.test_event_code));
+}));
+
+// Conversions panel (super admin): CAPI config status + recent server events + counts.
+apiRouter.get('/analytics/conversions', requireSuperAdmin, wrap(async (req, res) => {
+  const days = [7, 30, 90, 180].includes(Number(req.query.range)) ? Number(req.query.range) : 30;
+  const since = `ts >= now() - interval '${days} days'`;
+  const [cfg, counts, recent] = await Promise.all([
+    meta.getMetaConfig(),
+    query(`SELECT event_name, count(*)::int AS n, count(*) FILTER (WHERE ok)::int AS ok_n
+           FROM capi_events WHERE ${since} GROUP BY event_name ORDER BY n DESC`),
+    query(`SELECT ts, event_name, source, http_status, ok, value_paise, currency, error
+           FROM capi_events WHERE ${since} ORDER BY ts DESC LIMIT 100`),
+  ]);
+  res.json({
+    days,
+    pixelConfigured: Boolean(cfg.pixelId),
+    capiConfigured: await meta.isCapiConfigured(),
+    pixelId: cfg.pixelId,
+    byEvent: counts.rows,
+    recent: recent.rows,
+  });
 }));
 
 // Landing-page hero video (embed URL, e.g. a VidaPulse embed). Read live by the

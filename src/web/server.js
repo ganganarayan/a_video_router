@@ -9,6 +9,7 @@ import {
   recordLogin, SESSION_COOKIE_NAME,
 } from './auth.js';
 import { trackMiddleware, recordBeacon } from './track.js';
+import * as meta from '../lib/meta.js';
 import { apiRouter } from './routes/api.js';
 import { oauthRouter } from './routes/oauth.js';
 import { dbadminRouter } from './routes/dbadmin.js';
@@ -37,6 +38,18 @@ export function createServer() {
 
   // Visitor & traffic capture (anonymous public pages only; logged-in users skipped).
   app.use(trackMiddleware(SESSION_COOKIE_NAME));
+
+  // Meta Pixel <head> snippet for anonymous public pages (PageView + retargeting).
+  // res.locals.pixelHead is always defined ('' when off), so templates can use it safely.
+  app.use(async (req, res, next) => {
+    res.locals.pixelHead = '';
+    if (req.method === 'GET' && !req.cookies?.[SESSION_COOKIE_NAME]
+      && !req.path.startsWith('/api') && !req.path.startsWith('/public') && !req.path.startsWith('/oauth')
+      && !req.path.startsWith('/dbadmin')) {
+      try { res.locals.pixelHead = meta.pixelHeadHtml(await meta.getCachedPixelId()); } catch { /* best-effort */ }
+    }
+    next();
+  });
 
   app.get('/health', (_req, res) => res.json({ ok: true }));
 

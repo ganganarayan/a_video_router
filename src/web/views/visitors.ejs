@@ -25,6 +25,18 @@
   <div class="card"><h2>By device</h2><table class="mini"><tbody id="t-device"></tbody></table></div>
 </div>
 
+<div class="card">
+  <h2>Conversions (Meta) <span class="muted" style="font-weight:400; font-size:13px">— server-side events sent to Meta</span></h2>
+  <div id="conv-status" class="muted" style="margin-bottom:10px"></div>
+  <table class="mini" style="max-width:520px"><tbody id="conv-counts"></tbody></table>
+  <div class="table-wrap" style="margin-top:12px">
+    <table id="conv-recent">
+      <thead><tr><th>When</th><th>Event</th><th>Source</th><th>Status</th><th>Value</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
 <div class="card table-wrap">
   <h2>Recent visitors <span class="muted" style="font-weight:400; font-size:13px">— first-touch attribution per unique visitor</span></h2>
   <table id="t-recent">
@@ -99,7 +111,26 @@ async function loadRecent() {
   } catch (e) { toast(e.message, 'err'); }
 }
 
-function load() { loadVisitors(); loadRecent(); }
+async function loadConversions() {
+  try {
+    const d = await api('/analytics/conversions?range=' + RANGE);
+    document.getElementById('conv-status').innerHTML =
+      (d.pixelConfigured ? `<span class="badge ok">Pixel ${esc(d.pixelId)}</span>` : '<span class="badge warn">no pixel</span>')
+      + (d.capiConfigured ? ' <span class="badge ok">CAPI active</span>' : ' <span class="badge warn">CAPI inert</span>');
+    const cc = document.getElementById('conv-counts');
+    cc.innerHTML = (d.byEvent || []).length
+      ? d.byEvent.map((e) => `<tr><td class="k">${esc(e.event_name)}</td><td class="n">${e.ok_n}/${e.n} ok</td></tr>`).join('')
+      : '<tr><td class="muted">No server events yet</td></tr>';
+    const tb = document.querySelector('#conv-recent tbody');
+    tb.innerHTML = (d.recent || []).length ? d.recent.map((r) => `<tr>
+      <td>${fmtDate(r.ts)}</td><td>${esc(r.event_name)}</td><td>${esc(r.source || '')}</td>
+      <td>${r.ok ? '<span class="badge ok">ok</span>' : '<span class="badge warn">' + (r.http_status || 'err') + '</span>'}</td>
+      <td>${r.value_paise != null ? '₹' + (Number(r.value_paise) / 100).toLocaleString('en-IN') : '—'}</td>
+    </tr>`).join('') : '<tr><td colspan="5" class="muted">No events logged yet</td></tr>';
+  } catch (e) { document.getElementById('conv-status').textContent = e.message; }
+}
+
+function load() { loadVisitors(); loadRecent(); loadConversions(); }
 
 document.getElementById('range').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;

@@ -43,6 +43,22 @@
   </div>
 </div>
 
+<div class="card" id="meta-card">
+  <h2>Meta Pixel &amp; Conversions API</h2>
+  <p class="muted">Ad tracking for the public marketing pages (landing / FAQ / KB). The Pixel fires
+  PageView in the browser; the Conversions API sends deduplicated server-side events (Lead,
+  CompleteRegistration, Purchase). Set the webhook-safe CAPI token from Events Manager → Settings.</p>
+  <div id="meta-status" class="muted" style="margin-bottom:8px"></div>
+  <div class="row" style="align-items:flex-end; flex-wrap:wrap">
+    <div class="field"><label>Pixel ID (= dataset ID)</label><input id="meta-pixel" placeholder="1234567890" style="min-width:200px"></div>
+    <div class="field"><label>CAPI access token</label><input id="meta-token" type="password" placeholder="leave blank to keep"></div>
+    <div class="field"><label>Test event code <span class="muted">(optional)</span></label><input id="meta-testcode" placeholder="TEST12345" style="width:150px"></div>
+    <button class="primary" id="meta-save">Save</button>
+    <button id="meta-test">Test CAPI</button>
+  </div>
+  <pre id="meta-test-out" class="muted" style="white-space:pre-wrap; margin-top:8px; display:none"></pre>
+</div>
+
 <div class="card table-wrap">
   <table id="tenants-table">
     <thead><tr>
@@ -105,6 +121,37 @@ document.getElementById('landing-save').onclick = async () => {
     await api('/admin/landing', { method: 'POST', body: { video_url: document.getElementById('landing-video').value } });
     toast('Landing video updated.');
   } catch (e) { toast(e.message, 'err'); }
+};
+
+async function loadMeta() {
+  try {
+    const m = await api('/admin/meta');
+    document.getElementById('meta-pixel').value = m.pixelId || '';
+    document.getElementById('meta-testcode').value = m.testEventCode || '';
+    document.getElementById('meta-status').innerHTML =
+      (m.pixelId ? '<span class="badge ok">Pixel set</span>' : '<span class="badge warn">no pixel</span>')
+      + (m.hasToken ? ' <span class="badge ok">CAPI token set</span>' : ' <span class="badge">no CAPI token</span>')
+      + (m.configured ? ' <span class="badge ok">CAPI will send</span>' : ' <span class="badge warn">CAPI inert</span>');
+  } catch (e) { document.getElementById('meta-status').textContent = e.message; }
+}
+document.getElementById('meta-save').onclick = async () => {
+  try {
+    await api('/admin/meta', { method: 'POST', body: {
+      pixel_id: document.getElementById('meta-pixel').value.trim(),
+      capi_token: document.getElementById('meta-token').value.trim(),
+      test_event_code: document.getElementById('meta-testcode').value.trim(),
+    } });
+    document.getElementById('meta-token').value = '';
+    toast('Meta settings saved.'); loadMeta();
+  } catch (e) { toast(e.message, 'err'); }
+};
+document.getElementById('meta-test').onclick = async () => {
+  const out = document.getElementById('meta-test-out');
+  out.style.display = ''; out.textContent = 'Sending test event to Meta…';
+  try {
+    const r = await api('/admin/meta/test', { method: 'POST', body: { test_event_code: document.getElementById('meta-testcode').value.trim() } });
+    out.textContent = (r.ok ? '✓ accepted' : '✗ failed') + ' (HTTP ' + (r.status || '-') + ')\n' + (r.response || r.error || '');
+  } catch (e) { out.textContent = e.message; }
 };
 
 document.getElementById('ao-plan-save').onclick = async () => {
@@ -190,6 +237,7 @@ async function impersonate(id) {
 
 loadConfig();
 loadLanding();
+loadMeta();
 load().catch(e => toast(e.message, 'err'));
 </script>
 <%- include('partials/foot') %>
