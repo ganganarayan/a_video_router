@@ -25,7 +25,10 @@ export async function getPlatformSmtp() {
   };
 }
 
-export async function sendPlatformMail(to, subject, text, html) {
+// Build a nodemailer transport from stored config + a From header. Shared by
+// send and verify so both use identical settings. Short timeouts turn an
+// unreachable host/port into a fast ETIMEDOUT instead of a long hang.
+async function buildTransport() {
   const from = (await getConfigValue('platform_email_from')) || '';
   const fromName = (await getConfigValue('platform_email_from_name')) || '';
   const pass = decrypt((await getConfigValue('platform_email_app_password')) || '') || '';
@@ -37,6 +40,7 @@ export async function sendPlatformMail(to, subject, text, html) {
   const security = (await getConfigValue('platform_email_secure')) || (port === 465 ? 'ssl' : 'starttls');
   if (!from || !pass) throw new Error('Platform email is not configured.');
   const fromHeader = fromName ? `"${fromName.replace(/"/g, '')}" <${from}>` : from;
+  const timeouts = { connectionTimeout: 12000, greetingTimeout: 12000, socketTimeout: 20000 };
   // Explicit SMTP host (e.g. Zoho: smtp.zoho.in / smtp.zoho.com) when set; otherwise Gmail.
   const transporter = host
     ? nodemailer.createTransport({
@@ -44,7 +48,36 @@ export async function sendPlatformMail(to, subject, text, html) {
       secure: security === 'ssl',
       requireTLS: security === 'starttls',
       auth: { user, pass },
+      ...timeouts,
     })
-    : nodemailer.createTransport({ service: 'gmail', auth: { user, pass } });
+    : nodemailer.createTransport({ service: 'gmail', auth: { user, pass }, ...timeouts });
+  return { transporter, fromHeader, host: host || 'gmail', port: host ? port : 465, security, user };
+}
+
+export async function sendPlatformMail(to, subject, text, html) {
+  const { transporter, fromHeader } = await buildTransport();
   await transporter.sendMail({ from: fromHeader, to, subject, text, html });
+}
+
+// Diagnostic: verify SMTP connectivity + auth, then send a test message to `to`.
+// Returns the settings used and any failure with its error code so the operator
+// can tell ETIMEDOUT (host/port unreachable) from EAUTH (bad credentials) apart.
+export async function testPlatformMail(to) {
+  const { transporter, fromHeader, host, port, security, user } = await buildTransport();
+  const used = { host, port, security, user };
+  try {
+    await transporter.verify();
+    await transporter.sendMail({
+      from: fromHeader, to,
+      subject: 'AVideoRouter — test email',
+      text: 'This is a test from AVideoRouter. Your platform email is working.',
+      html: '<p>This is a test from <b>AVideoRouter</b>. Your platform email is working.</p>',
+    });
+    return { ok: true, to, used };
+  } catch (e) {
+    const err = new Error(`${e.code || 'ERR'}: ${e.message}`);
+    err.used = used;
+    err.code = e.code;
+    throw err;
+  }
 }

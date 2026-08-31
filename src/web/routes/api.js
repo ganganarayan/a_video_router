@@ -288,11 +288,9 @@ apiRouter.post('/admin/email/test', requireSuperAdmin, wrap(async (_req, res) =>
   try {
     const to = (await getConfigValue('platform_email_from')) || '';
     if (!to) return res.status(400).json({ error: 'Set the From address first.' });
-    await mailer.sendPlatformMail(to, 'AVideoRouter — test email',
-      'This is a test from AVideoRouter. Your platform email is working.',
-      '<p>This is a test from <b>AVideoRouter</b>. Your platform email is working.</p>');
-    res.json({ ok: true, to });
-  } catch (e) { res.status(400).json({ error: e.message }); }
+    const r = await mailer.testPlatformMail(to);
+    res.json(r);
+  } catch (e) { res.status(400).json({ error: e.message, used: e.used }); }
 }));
 
 // Conversions panel (super admin): CAPI config status + recent server events + counts.
