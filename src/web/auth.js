@@ -91,7 +91,7 @@ export async function getUserByEmail(email) {
     `SELECT id, tenant_id, email, name, password_hash, role, staff_permission,
             must_change_password, deleted_at
      FROM users WHERE email = $1`,
-    [String(email || '').toLowerCase()],
+    [String(email || '').toLowerCase().trim()],
   );
   return rows[0] || null;
 }

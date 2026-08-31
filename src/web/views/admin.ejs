@@ -203,6 +203,16 @@ document.getElementById('google-save').onclick = async () => {
   } catch (e) { toast(e.message, 'err'); }
 };
 
+async function resetOwnerPw(id, email) {
+  const pw = prompt('Set a new password for ' + email + ' (min 8 characters):');
+  if (pw === null) return;
+  if (pw.length < 8) { toast('Password must be at least 8 characters.', 'err'); return; }
+  try {
+    await api('/admin/tenants/' + id + '/owner-password', { method: 'POST', body: { password: pw } });
+    toast('Password set for ' + email + ' — share it so they can log in.');
+  } catch (e) { toast(e.message, 'err'); }
+}
+
 async function loadEmail() {
   try {
     const e = await api('/admin/email');
@@ -264,7 +274,7 @@ async function load() {
       <td>${t.id}</td>
       <td class="mono">${esc(t.slug)}</td>
       <td>${esc(t.name)}</td>
-      <td class="mono">${esc(t.owner_email || '—')}</td>
+      <td class="mono">${esc(t.owner_email || '—')}${t.owner_email ? ` <button title="Set this owner's password" onclick="resetOwnerPw(${t.id}, '${esc(t.owner_email)}')">Reset pw</button>` : ''}</td>
       <td>${t.status === 'active' ? '<span class="badge ok">active</span>' : '<span class="badge err">suspended</span>'}</td>
       <td>${t.users}</td>
       <td>${t.channels}</td>

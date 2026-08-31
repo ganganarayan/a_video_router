@@ -12,7 +12,7 @@ import { encrypt } from '../../lib/secrets.js';
 import {
   requireApiAuth, resolveTenant, requireTenant, requireSuperAdmin, requireOwner,
   updateAccount, setSessionCookie, setImpersonation, clearImpersonation,
-  listTenantUsers, createStaff, updateStaff, resetStaffPassword, deleteStaff,
+  listTenantUsers, createStaff, updateStaff, resetStaffPassword, deleteStaff, hashPassword,
 } from '../auth.js';
 import { runPipeline, isRunning } from '../../pipeline/run.js';
 import { enqueuePush, getJobs } from '../../pipeline/manual.js';
@@ -81,6 +81,24 @@ apiRouter.post('/impersonate/:id', requireSuperAdmin, wrap(async (req, res) => {
 apiRouter.post('/impersonate/stop', requireSuperAdmin, wrap(async (_req, res) => {
   clearImpersonation(res);
   res.json({ ok: true });
+}));
+
+// Super-admin: directly set a tenant OWNER's password (recovery for a locked-out
+// self-serve owner). Targets the role=admin, non-staff user of the tenant.
+apiRouter.post('/admin/tenants/:id/owner-password', requireSuperAdmin, wrap(async (req, res) => {
+  const pw = String(req.body.password || '');
+  if (pw.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+  const { rows } = await query(
+    `SELECT email FROM users WHERE tenant_id = $1 AND staff_permission IS NULL AND deleted_at IS NULL
+     ORDER BY id LIMIT 1`,
+    [Number(req.params.id)],
+  );
+  if (!rows[0]) return res.status(404).json({ error: 'No owner found for this tenant.' });
+  await query(
+    'UPDATE users SET password_hash = $1, must_change_password = false, updated_at = now() WHERE email = $2',
+    [await hashPassword(pw), rows[0].email],
+  );
+  res.json({ ok: true, email: rows[0].email });
 }));
 
 // ---------- super-admin analytics: Visitors + Traffic (global) ----------
