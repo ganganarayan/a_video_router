@@ -83,12 +83,23 @@
   app password instead. Without this, "Forgot password" can't email a link.</p>
   <div id="email-status" class="muted" style="margin-bottom:8px"></div>
   <div class="row" style="align-items:flex-end; flex-wrap:wrap">
+    <div class="field"><label>From name <span class="muted">(optional)</span></label><input id="email-fromname" placeholder="AVideoRouter" style="min-width:150px"></div>
     <div class="field"><label>From address</label><input id="email-from" placeholder="connect@divineleads.guru" style="min-width:220px"></div>
     <div class="field"><label>SMTP host <span class="muted">(blank = Gmail)</span></label><input id="email-host" placeholder="smtp.zoho.in" style="min-width:150px"></div>
-    <div class="field"><label>Port</label><input id="email-port" type="number" placeholder="465" style="width:90px"></div>
-    <div class="field"><label>App password</label><input id="email-pass" type="password" autocomplete="new-password" placeholder="leave blank to keep"></div>
+    <div class="field"><label>Port</label><input id="email-port" type="number" placeholder="465" style="width:80px"></div>
+    <div class="field"><label>Security</label>
+      <select id="email-security">
+        <option value="">Auto (by port)</option>
+        <option value="ssl">SSL/TLS (465)</option>
+        <option value="starttls">STARTTLS (587)</option>
+        <option value="none">None</option>
+      </select></div>
+    <div class="field"><label>Username <span class="muted">(blank = From)</span></label><input id="email-username" autocomplete="off" placeholder="same as From address" style="min-width:180px"></div>
+    <div class="field"><label>Password / app password</label><input id="email-pass" type="password" autocomplete="new-password" placeholder="leave blank to keep"></div>
     <button class="primary" id="email-save">Save</button>
+    <button id="email-test">Send test</button>
   </div>
+  <pre id="email-test-out" class="muted" style="white-space:pre-wrap; margin-top:8px; display:none"></pre>
 </div>
 
 <div class="card table-wrap">
@@ -220,9 +231,12 @@ async function resetOwnerPw(id, email) {
 async function loadEmail() {
   try {
     const e = await api('/admin/email');
+    document.getElementById('email-fromname').value = e.fromName || '';
     document.getElementById('email-from').value = e.from || '';
     document.getElementById('email-host').value = e.host || '';
     document.getElementById('email-port').value = e.port || '';
+    document.getElementById('email-security').value = e.security || '';
+    document.getElementById('email-username').value = e.username || '';
     document.getElementById('email-status').innerHTML = (e.from && e.hasPassword)
       ? '<span class="badge ok">email configured</span>'
       : '<span class="badge warn">not configured — password resets can’t send</span>';
@@ -231,14 +245,25 @@ async function loadEmail() {
 document.getElementById('email-save').onclick = async () => {
   try {
     await api('/admin/email', { method: 'POST', body: {
+      from_name: document.getElementById('email-fromname').value.trim(),
       from: document.getElementById('email-from').value.trim(),
       host: document.getElementById('email-host').value.trim(),
       port: document.getElementById('email-port').value.trim(),
+      security: document.getElementById('email-security').value,
+      username: document.getElementById('email-username').value.trim(),
       app_password: document.getElementById('email-pass').value.trim(),
     } });
     document.getElementById('email-pass').value = '';
     toast('Email settings saved.'); loadEmail();
   } catch (e) { toast(e.message, 'err'); }
+};
+document.getElementById('email-test').onclick = async () => {
+  const out = document.getElementById('email-test-out');
+  out.style.display = ''; out.textContent = 'Sending test email…';
+  try {
+    const r = await api('/admin/email/test', { method: 'POST', body: {} });
+    out.textContent = '✓ Sent a test email to ' + r.to + '. Check that inbox.';
+  } catch (e) { out.textContent = '✗ ' + e.message; }
 };
 
 document.getElementById('ao-plan-save').onclick = async () => {

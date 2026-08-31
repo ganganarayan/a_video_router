@@ -17,21 +17,34 @@ export async function getPlatformEmailFrom() {
 
 export async function getPlatformSmtp() {
   return {
+    fromName: (await getConfigValue('platform_email_from_name')) || '',
     host: (await getConfigValue('platform_email_host')) || '',
-    port: Number(await getConfigValue('platform_email_port')) || 0,
+    port: Number(await getConfigValue('platform_email_port')) || '',
+    security: (await getConfigValue('platform_email_secure')) || '',
+    username: (await getConfigValue('platform_email_user')) || '',
   };
 }
 
 export async function sendPlatformMail(to, subject, text, html) {
   const from = (await getConfigValue('platform_email_from')) || '';
+  const fromName = (await getConfigValue('platform_email_from_name')) || '';
   const pass = decrypt((await getConfigValue('platform_email_app_password')) || '') || '';
   const host = (await getConfigValue('platform_email_host')) || '';
   const port = Number(await getConfigValue('platform_email_port')) || 465;
+  // Auth username defaults to the From address (many providers use the same value).
+  const user = (await getConfigValue('platform_email_user')) || from;
+  // Security: 'ssl' (implicit TLS, port 465), 'starttls' (upgrade, port 587), or 'none'.
+  const security = (await getConfigValue('platform_email_secure')) || (port === 465 ? 'ssl' : 'starttls');
   if (!from || !pass) throw new Error('Platform email is not configured.');
-  // Explicit SMTP host (e.g. Zoho: smtp.zoho.in / smtp.zoho.com) when set; otherwise
-  // fall back to Gmail. secure=true for 465 (SSL), STARTTLS for 587.
+  const fromHeader = fromName ? `"${fromName.replace(/"/g, '')}" <${from}>` : from;
+  // Explicit SMTP host (e.g. Zoho: smtp.zoho.in / smtp.zoho.com) when set; otherwise Gmail.
   const transporter = host
-    ? nodemailer.createTransport({ host, port, secure: port === 465, auth: { user: from, pass } })
-    : nodemailer.createTransport({ service: 'gmail', auth: { user: from, pass } });
-  await transporter.sendMail({ from, to, subject, text, html });
+    ? nodemailer.createTransport({
+      host, port,
+      secure: security === 'ssl',
+      requireTLS: security === 'starttls',
+      auth: { user, pass },
+    })
+    : nodemailer.createTransport({ service: 'gmail', auth: { user, pass } });
+  await transporter.sendMail({ from: fromHeader, to, subject, text, html });
 }

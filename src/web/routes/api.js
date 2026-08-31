@@ -27,6 +27,7 @@ import { config } from '../../config.js';
 import { log, logError } from '../../lib/logger.js';
 import * as billing from '../../billing.js';
 import * as meta from '../../lib/meta.js';
+import * as mailer from '../../lib/mailer.js';
 
 export const apiRouter = express.Router();
 apiRouter.use(requireApiAuth, resolveTenant);
@@ -263,17 +264,35 @@ apiRouter.post('/admin/google', requireSuperAdmin, wrap(async (req, res) => {
 apiRouter.get('/admin/email', requireSuperAdmin, wrap(async (_req, res) => {
   res.json({
     from: (await getConfigValue('platform_email_from')) || '',
+    fromName: (await getConfigValue('platform_email_from_name')) || '',
     host: (await getConfigValue('platform_email_host')) || '',
     port: Number(await getConfigValue('platform_email_port')) || '',
+    security: (await getConfigValue('platform_email_secure')) || '',
+    username: (await getConfigValue('platform_email_user')) || '',
     hasPassword: Boolean(await getConfigValue('platform_email_app_password')),
   });
 }));
 apiRouter.post('/admin/email', requireSuperAdmin, wrap(async (req, res) => {
-  if (req.body.from !== undefined) await setConfigValue('platform_email_from', String(req.body.from).trim());
-  if (req.body.host !== undefined) await setConfigValue('platform_email_host', String(req.body.host).trim());
-  if (req.body.port !== undefined) await setConfigValue('platform_email_port', String(req.body.port).trim());
+  const set = async (k, v) => { if (v !== undefined) await setConfigValue(k, String(v).trim()); };
+  await set('platform_email_from', req.body.from);
+  await set('platform_email_from_name', req.body.from_name);
+  await set('platform_email_host', req.body.host);
+  await set('platform_email_port', req.body.port);
+  await set('platform_email_secure', req.body.security);
+  await set('platform_email_user', req.body.username);
   if (req.body.app_password) await setConfigValue('platform_email_app_password', encrypt(String(req.body.app_password).trim()));
   res.json({ ok: true });
+}));
+// Send a test email to the From address so the operator can confirm SMTP works.
+apiRouter.post('/admin/email/test', requireSuperAdmin, wrap(async (_req, res) => {
+  try {
+    const to = (await getConfigValue('platform_email_from')) || '';
+    if (!to) return res.status(400).json({ error: 'Set the From address first.' });
+    await mailer.sendPlatformMail(to, 'AVideoRouter — test email',
+      'This is a test from AVideoRouter. Your platform email is working.',
+      '<p>This is a test from <b>AVideoRouter</b>. Your platform email is working.</p>');
+    res.json({ ok: true, to });
+  } catch (e) { res.status(400).json({ error: e.message }); }
 }));
 
 // Conversions panel (super admin): CAPI config status + recent server events + counts.
