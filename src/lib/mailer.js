@@ -7,8 +7,12 @@ import { getConfigValue } from '../db.js';
 import { decrypt } from './secrets.js';
 
 export async function platformEmailConfigured() {
-  return Boolean((await getConfigValue('platform_email_from'))
-    && (await getConfigValue('platform_email_app_password')));
+  const from = (await getConfigValue('platform_email_from')) || '';
+  if (!from) return false;
+  // Either the ZeptoMail HTTP token (preferred on hosts that block SMTP egress,
+  // e.g. Railway) or an SMTP/Gmail app password is enough to send.
+  return Boolean((await getConfigValue('platform_email_zepto_token'))
+    || (await getConfigValue('platform_email_app_password')));
 }
 
 export async function getPlatformEmailFrom() {
@@ -22,6 +26,58 @@ export async function getPlatformSmtp() {
     port: Number(await getConfigValue('platform_email_port')) || '',
     security: (await getConfigValue('platform_email_secure')) || '',
     username: (await getConfigValue('platform_email_user')) || '',
+    zeptoRegion: (await getConfigValue('platform_email_zepto_region')) || 'in',
+    hasZeptoToken: Boolean(await getConfigValue('platform_email_zepto_token')),
+  };
+}
+
+// ZeptoMail (Zoho) HTTP API sender. Works where SMTP egress is blocked (Railway)
+// because it POSTs over HTTPS/443. Auth uses the account "Send Mail Token"; the
+// region host is api.zeptomail.in (Zoho India) or api.zeptomail.com (global).
+async function sendViaZepto({ token, region, from, fromName, to, subject, text, html }) {
+  const url = `https://api.zeptomail.${region === 'com' ? 'com' : 'in'}/v1.1/email`;
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), 15000);
+  let resp;
+  try {
+    resp = await fetch(url, {
+      method: 'POST',
+      signal: ac.signal,
+      headers: {
+        Authorization: `Zoho-enczapikey ${token}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        from: fromName ? { address: from, name: fromName } : { address: from },
+        to: [{ email_address: { address: to } }],
+        subject,
+        ...(text ? { textbody: text } : {}),
+        ...(html ? { htmlbody: html } : {}),
+      }),
+    });
+  } catch (e) {
+    throw new Error(e.name === 'AbortError'
+      ? 'ETIMEDOUT: ZeptoMail API did not respond in 15s'
+      : `ZeptoMail request failed: ${e.message}`);
+  } finally { clearTimeout(timer); }
+  const bodyText = await resp.text();
+  if (!resp.ok) {
+    let detail = bodyText.slice(0, 300);
+    try {
+      const j = JSON.parse(bodyText);
+      detail = j?.error?.details?.[0]?.message || j?.error?.message || j?.message || detail;
+    } catch { /* keep raw text */ }
+    throw new Error(`HTTP ${resp.status}: ${detail}`);
+  }
+}
+
+async function loadEmailCfg() {
+  return {
+    from: (await getConfigValue('platform_email_from')) || '',
+    fromName: (await getConfigValue('platform_email_from_name')) || '',
+    zeptoToken: decrypt((await getConfigValue('platform_email_zepto_token')) || '') || '',
+    zeptoRegion: (await getConfigValue('platform_email_zepto_region')) || 'in',
   };
 }
 
@@ -57,24 +113,38 @@ async function buildTransport() {
 }
 
 export async function sendPlatformMail(to, subject, text, html) {
+  const { from, fromName, zeptoToken, zeptoRegion } = await loadEmailCfg();
+  if (!from) throw new Error('Platform email is not configured.');
+  // Prefer the ZeptoMail HTTP API when a token is set (SMTP is blocked on Railway).
+  if (zeptoToken) {
+    return sendViaZepto({ token: zeptoToken, region: zeptoRegion, from, fromName, to, subject, text, html });
+  }
   const { transporter, fromHeader } = await buildTransport();
   await transporter.sendMail({ from: fromHeader, to, subject, text, html });
 }
 
-// Diagnostic: verify SMTP connectivity + auth, then send a test message to `to`.
-// Returns the settings used and any failure with its error code so the operator
-// can tell ETIMEDOUT (host/port unreachable) from EAUTH (bad credentials) apart.
+const TEST_SUBJECT = 'AVideoRouter — test email';
+const TEST_TEXT = 'This is a test from AVideoRouter. Your platform email is working.';
+const TEST_HTML = '<p>This is a test from <b>AVideoRouter</b>. Your platform email is working.</p>';
+
+// Diagnostic: send a test message to `to`, echoing the method/settings used and,
+// on failure, the provider error. For SMTP it verifies connectivity+auth first so
+// ETIMEDOUT (host/port unreachable) reads apart from EAUTH (bad credentials).
 export async function testPlatformMail(to) {
+  const { from, fromName, zeptoToken, zeptoRegion } = await loadEmailCfg();
+  if (!from) throw new Error('Set the From address first.');
+  if (zeptoToken) {
+    const used = { provider: 'zeptomail', region: zeptoRegion === 'com' ? 'com' : 'in', from };
+    try {
+      await sendViaZepto({ token: zeptoToken, region: zeptoRegion, from, fromName, to, subject: TEST_SUBJECT, text: TEST_TEXT, html: TEST_HTML });
+      return { ok: true, to, used };
+    } catch (e) { const err = new Error(e.message); err.used = used; throw err; }
+  }
   const { transporter, fromHeader, host, port, security, user } = await buildTransport();
-  const used = { host, port, security, user };
+  const used = { provider: 'smtp', host, port, security, user };
   try {
     await transporter.verify();
-    await transporter.sendMail({
-      from: fromHeader, to,
-      subject: 'AVideoRouter — test email',
-      text: 'This is a test from AVideoRouter. Your platform email is working.',
-      html: '<p>This is a test from <b>AVideoRouter</b>. Your platform email is working.</p>',
-    });
+    await transporter.sendMail({ from: fromHeader, to, subject: TEST_SUBJECT, text: TEST_TEXT, html: TEST_HTML });
     return { ok: true, to, used };
   } catch (e) {
     const err = new Error(`${e.code || 'ERR'}: ${e.message}`);

@@ -76,15 +76,26 @@
 
 <div class="card" id="email-card">
   <h2>Platform email</h2>
-  <p class="muted">Account used to send self-serve <b>password reset</b> emails — any SMTP provider.
-  <b>Zoho</b> (e.g. connect@divineleads.guru): host <span class="mono">smtp.zoho.in</span> (India) or
-  <span class="mono">smtp.zoho.com</span>, port <span class="mono">465</span>, with an <b>app-specific
-  password</b> (Zoho → Settings → Security → App Passwords). Leave <b>SMTP host blank</b> to use a Gmail
-  app password instead. Without this, "Forgot password" can't email a link.</p>
+  <p class="muted">Account used to send self-serve <b>password reset</b> emails. Without this, "Forgot
+  password" can't email a link.</p>
+  <p class="muted" style="border-left:3px solid #4a7; padding-left:10px">⚡ <b>Recommended: ZeptoMail (Zoho's HTTP API).</b>
+  This host blocks outbound SMTP, so plain SMTP/Zoho times out. ZeptoMail sends over HTTPS and works here.
+  In <b>ZeptoMail</b> (zoho.com/zeptomail): add &amp; verify the domain <span class="mono">divineleads.guru</span>,
+  create a <b>Mail Agent</b>, copy its <b>Send Mail Token</b>, and paste it below. Set the From address to a
+  verified address (e.g. connect@divineleads.guru). Leave the token blank to fall back to SMTP/Gmail.</p>
   <div id="email-status" class="muted" style="margin-bottom:8px"></div>
   <div class="row" style="align-items:flex-end; flex-wrap:wrap">
     <div class="field"><label>From name <span class="muted">(optional)</span></label><input id="email-fromname" placeholder="AVideoRouter" style="min-width:150px"></div>
     <div class="field"><label>From address</label><input id="email-from" placeholder="connect@divineleads.guru" style="min-width:220px"></div>
+    <div class="field"><label>ZeptoMail token <span class="muted">(Send Mail Token)</span></label><input id="email-zepto-token" type="password" autocomplete="new-password" placeholder="leave blank to keep" style="min-width:220px"></div>
+    <div class="field"><label>ZeptoMail region</label>
+      <select id="email-zepto-region">
+        <option value="in">India (.in)</option>
+        <option value="com">Global (.com)</option>
+      </select></div>
+  </div>
+  <p class="muted" style="margin:4px 0">SMTP fallback (only used when no ZeptoMail token is set):</p>
+  <div class="row" style="align-items:flex-end; flex-wrap:wrap">
     <div class="field"><label>SMTP host <span class="muted">(blank = Gmail)</span></label><input id="email-host" placeholder="smtp.zoho.in" style="min-width:150px"></div>
     <div class="field"><label>Port</label><input id="email-port" type="number" placeholder="465" style="width:80px"></div>
     <div class="field"><label>Security</label>
@@ -237,8 +248,11 @@ async function loadEmail() {
     document.getElementById('email-port').value = e.port || '';
     document.getElementById('email-security').value = e.security || '';
     document.getElementById('email-username').value = e.username || '';
-    document.getElementById('email-status').innerHTML = (e.from && e.hasPassword)
-      ? '<span class="badge ok">email configured</span>'
+    document.getElementById('email-zepto-region').value = e.zeptoRegion || 'in';
+    const configured = e.from && (e.hasZeptoToken || e.hasPassword);
+    const method = e.hasZeptoToken ? 'ZeptoMail (HTTP)' : (e.hasPassword ? 'SMTP' : '');
+    document.getElementById('email-status').innerHTML = configured
+      ? '<span class="badge ok">email configured — ' + method + '</span>'
       : '<span class="badge warn">not configured — password resets can’t send</span>';
   } catch (er) { document.getElementById('email-status').textContent = er.message; }
 }
@@ -247,6 +261,8 @@ document.getElementById('email-save').onclick = async () => {
     await api('/admin/email', { method: 'POST', body: {
       from_name: document.getElementById('email-fromname').value.trim(),
       from: document.getElementById('email-from').value.trim(),
+      zepto_token: document.getElementById('email-zepto-token').value.trim(),
+      zepto_region: document.getElementById('email-zepto-region').value,
       host: document.getElementById('email-host').value.trim(),
       port: document.getElementById('email-port').value.trim(),
       security: document.getElementById('email-security').value,
@@ -254,6 +270,7 @@ document.getElementById('email-save').onclick = async () => {
       app_password: document.getElementById('email-pass').value.trim(),
     } });
     document.getElementById('email-pass').value = '';
+    document.getElementById('email-zepto-token').value = '';
     toast('Email settings saved.'); loadEmail();
   } catch (e) { toast(e.message, 'err'); }
 };
@@ -262,7 +279,8 @@ document.getElementById('email-test').onclick = async () => {
   out.style.display = ''; out.textContent = 'Sending test email…';
   try {
     const r = await api('/admin/email/test', { method: 'POST', body: {} });
-    out.textContent = '✓ Sent a test email to ' + r.to + '. Check that inbox.';
+    const via = r.used?.provider === 'zeptomail' ? ' via ZeptoMail' : (r.used?.provider === 'smtp' ? ' via SMTP' : '');
+    out.textContent = '✓ Sent a test email to ' + r.to + via + '. Check that inbox.';
   } catch (e) { out.textContent = '✗ ' + e.message; }
 };
 

@@ -270,6 +270,8 @@ apiRouter.get('/admin/email', requireSuperAdmin, wrap(async (_req, res) => {
     security: (await getConfigValue('platform_email_secure')) || '',
     username: (await getConfigValue('platform_email_user')) || '',
     hasPassword: Boolean(await getConfigValue('platform_email_app_password')),
+    zeptoRegion: (await getConfigValue('platform_email_zepto_region')) || 'in',
+    hasZeptoToken: Boolean(await getConfigValue('platform_email_zepto_token')),
   });
 }));
 apiRouter.post('/admin/email', requireSuperAdmin, wrap(async (req, res) => {
@@ -280,7 +282,9 @@ apiRouter.post('/admin/email', requireSuperAdmin, wrap(async (req, res) => {
   await set('platform_email_port', req.body.port);
   await set('platform_email_secure', req.body.security);
   await set('platform_email_user', req.body.username);
+  await set('platform_email_zepto_region', req.body.zepto_region);
   if (req.body.app_password) await setConfigValue('platform_email_app_password', encrypt(String(req.body.app_password).trim()));
+  if (req.body.zepto_token) await setConfigValue('platform_email_zepto_token', encrypt(String(req.body.zepto_token).trim()));
   res.json({ ok: true });
 }));
 // Send a test email to the From address so the operator can confirm SMTP works.
