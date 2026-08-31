@@ -17,8 +17,8 @@
   <div id="rzp-status" class="muted"></div>
   <div class="row" style="align-items:flex-end; flex-wrap:wrap">
     <div class="field"><label>Key ID</label><input id="rzp-keyid" placeholder="rzp_test_..." style="min-width:220px"></div>
-    <div class="field"><label>Key secret</label><input id="rzp-secret" type="password" placeholder="leave blank to keep"></div>
-    <div class="field"><label>Webhook secret</label><input id="rzp-webhook" type="password" placeholder="leave blank to keep"></div>
+    <div class="field"><label>Key secret</label><input id="rzp-secret" type="password" autocomplete="new-password" placeholder="leave blank to keep"></div>
+    <div class="field"><label>Webhook secret</label><input id="rzp-webhook" type="password" autocomplete="new-password" placeholder="leave blank to keep"></div>
     <button class="primary" id="rzp-save">Save keys</button>
   </div>
   <div class="row" style="align-items:flex-end; flex-wrap:wrap; margin-top:14px; border-top:1px solid var(--line); padding-top:14px">
@@ -53,7 +53,7 @@
   <div id="meta-status" class="muted" style="margin-bottom:8px"></div>
   <div class="row" style="align-items:flex-end; flex-wrap:wrap">
     <div class="field"><label>Pixel ID (= dataset ID)</label><input id="meta-pixel" placeholder="1234567890" style="min-width:200px"></div>
-    <div class="field"><label>CAPI access token</label><input id="meta-token" type="password" placeholder="leave blank to keep"></div>
+    <div class="field"><label>CAPI access token</label><input id="meta-token" type="password" autocomplete="new-password" placeholder="leave blank to keep"></div>
     <div class="field"><label>Test event code <span class="muted">(optional)</span></label><input id="meta-testcode" placeholder="TEST12345" style="width:150px"></div>
     <button class="primary" id="meta-save">Save</button>
     <button id="meta-test">Test CAPI</button>
@@ -69,20 +69,24 @@
   <div id="google-status" class="muted" style="margin-bottom:8px"></div>
   <div class="row" style="align-items:flex-end; flex-wrap:wrap">
     <div class="field"><label>Client ID</label><input id="google-cid" placeholder="....apps.googleusercontent.com" style="min-width:280px"></div>
-    <div class="field"><label>Client secret</label><input id="google-secret" type="password" placeholder="leave blank to keep"></div>
+    <div class="field"><label>Client secret</label><input id="google-secret" type="password" autocomplete="new-password" placeholder="leave blank to keep"></div>
     <button class="primary" id="google-save">Save</button>
   </div>
 </div>
 
 <div class="card" id="email-card">
   <h2>Platform email</h2>
-  <p class="muted">Gmail account used to send account emails — currently self-serve <b>password resets</b>.
-  Use a Gmail address with an <b>app password</b> (Google Account → Security → 2-Step Verification → App
-  passwords). Without this, "Forgot password" can't email a link.</p>
+  <p class="muted">Account used to send self-serve <b>password reset</b> emails — any SMTP provider.
+  <b>Zoho</b> (e.g. connect@divineleads.guru): host <span class="mono">smtp.zoho.in</span> (India) or
+  <span class="mono">smtp.zoho.com</span>, port <span class="mono">465</span>, with an <b>app-specific
+  password</b> (Zoho → Settings → Security → App Passwords). Leave <b>SMTP host blank</b> to use a Gmail
+  app password instead. Without this, "Forgot password" can't email a link.</p>
   <div id="email-status" class="muted" style="margin-bottom:8px"></div>
   <div class="row" style="align-items:flex-end; flex-wrap:wrap">
-    <div class="field"><label>From (Gmail address)</label><input id="email-from" placeholder="connect@divineleads.guru" style="min-width:240px"></div>
-    <div class="field"><label>App password</label><input id="email-pass" type="password" placeholder="leave blank to keep"></div>
+    <div class="field"><label>From address</label><input id="email-from" placeholder="connect@divineleads.guru" style="min-width:220px"></div>
+    <div class="field"><label>SMTP host <span class="muted">(blank = Gmail)</span></label><input id="email-host" placeholder="smtp.zoho.in" style="min-width:150px"></div>
+    <div class="field"><label>Port</label><input id="email-port" type="number" placeholder="465" style="width:90px"></div>
+    <div class="field"><label>App password</label><input id="email-pass" type="password" autocomplete="new-password" placeholder="leave blank to keep"></div>
     <button class="primary" id="email-save">Save</button>
   </div>
 </div>
@@ -217,6 +221,8 @@ async function loadEmail() {
   try {
     const e = await api('/admin/email');
     document.getElementById('email-from').value = e.from || '';
+    document.getElementById('email-host').value = e.host || '';
+    document.getElementById('email-port').value = e.port || '';
     document.getElementById('email-status').innerHTML = (e.from && e.hasPassword)
       ? '<span class="badge ok">email configured</span>'
       : '<span class="badge warn">not configured — password resets can’t send</span>';
@@ -226,6 +232,8 @@ document.getElementById('email-save').onclick = async () => {
   try {
     await api('/admin/email', { method: 'POST', body: {
       from: document.getElementById('email-from').value.trim(),
+      host: document.getElementById('email-host').value.trim(),
+      port: document.getElementById('email-port').value.trim(),
       app_password: document.getElementById('email-pass').value.trim(),
     } });
     document.getElementById('email-pass').value = '';

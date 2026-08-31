@@ -263,11 +263,15 @@ apiRouter.post('/admin/google', requireSuperAdmin, wrap(async (req, res) => {
 apiRouter.get('/admin/email', requireSuperAdmin, wrap(async (_req, res) => {
   res.json({
     from: (await getConfigValue('platform_email_from')) || '',
+    host: (await getConfigValue('platform_email_host')) || '',
+    port: Number(await getConfigValue('platform_email_port')) || '',
     hasPassword: Boolean(await getConfigValue('platform_email_app_password')),
   });
 }));
 apiRouter.post('/admin/email', requireSuperAdmin, wrap(async (req, res) => {
   if (req.body.from !== undefined) await setConfigValue('platform_email_from', String(req.body.from).trim());
+  if (req.body.host !== undefined) await setConfigValue('platform_email_host', String(req.body.host).trim());
+  if (req.body.port !== undefined) await setConfigValue('platform_email_port', String(req.body.port).trim());
   if (req.body.app_password) await setConfigValue('platform_email_app_password', encrypt(String(req.body.app_password).trim()));
   res.json({ ok: true });
 }));
