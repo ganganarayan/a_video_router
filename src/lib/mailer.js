@@ -40,7 +40,9 @@ async function buildTransport() {
   const security = (await getConfigValue('platform_email_secure')) || (port === 465 ? 'ssl' : 'starttls');
   if (!from || !pass) throw new Error('Platform email is not configured.');
   const fromHeader = fromName ? `"${fromName.replace(/"/g, '')}" <${from}>` : from;
-  const timeouts = { connectionTimeout: 12000, greetingTimeout: 12000, socketTimeout: 20000 };
+  // family:4 forces IPv4 at the socket in case DNS still hands back an IPv6 the
+  // container can't route (see the ipv4first note in index.js).
+  const timeouts = { connectionTimeout: 12000, greetingTimeout: 12000, socketTimeout: 20000, family: 4 };
   // Explicit SMTP host (e.g. Zoho: smtp.zoho.in / smtp.zoho.com) when set; otherwise Gmail.
   const transporter = host
     ? nodemailer.createTransport({

@@ -1,3 +1,10 @@
+import dns from 'node:dns';
+// Prefer IPv4 for all DNS lookups. Node 18+ defaults to 'verbatim' (DNS order),
+// which can hand back an IPv6 (AAAA) address first; container hosts (Railway)
+// often have no working IPv6 egress, so an SMTP connect to e.g. smtp.zoho.in
+// then hangs until ETIMEDOUT even though the host is reachable over IPv4.
+dns.setDefaultResultOrder('ipv4first');
+
 import { config } from './config.js';
 import { runMigrations, query } from './db.js';
 import { log, logError } from './lib/logger.js';
