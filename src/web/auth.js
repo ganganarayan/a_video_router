@@ -328,6 +328,47 @@ export async function createTenantOwner({ email, name, workspaceName, passwordHa
 // Owner-side sign-up for a hashed password (kept next to createTenantOwner).
 export async function hashPassword(pw) { return bcrypt.hash(String(pw), 10); }
 
+// --- self-serve password reset (email link) ---
+const resetTokenHash = (t) => crypto.createHash('sha256').update(String(t || '')).digest('hex');
+
+// Create a single-use reset token (1h). Returns { sent, token, email, name } — sent
+// is false when no such user (caller shows a generic message, no account enumeration).
+export async function createPasswordReset(email) {
+  const emailLc = String(email || '').toLowerCase().trim();
+  const user = await getUserByEmail(emailLc);
+  if (!user || user.deleted_at) return { ok: true, sent: false };
+  const token = crypto.randomBytes(32).toString('hex');
+  await query(
+    `INSERT INTO password_resets (email, token_hash, expires_at) VALUES ($1, $2, now() + interval '1 hour')`,
+    [emailLc, resetTokenHash(token)],
+  );
+  return { ok: true, sent: true, token, email: emailLc, name: user.name };
+}
+
+export async function resetTokenValid(token) {
+  const { rowCount } = await query(
+    `SELECT 1 FROM password_resets WHERE token_hash = $1 AND used_at IS NULL AND expires_at > now()`,
+    [resetTokenHash(token)],
+  );
+  return rowCount > 0;
+}
+
+// Consume a valid token and set the user's new password (single-use).
+export async function consumePasswordReset(token, newPassword) {
+  if (!newPassword || String(newPassword).length < 8) return { ok: false, error: 'Password must be at least 8 characters.' };
+  const { rows } = await query(
+    `SELECT * FROM password_resets WHERE token_hash = $1 AND used_at IS NULL AND expires_at > now()
+     ORDER BY id DESC LIMIT 1`,
+    [resetTokenHash(token)],
+  );
+  const row = rows[0];
+  if (!row) return { ok: false, error: 'This reset link is invalid or has expired — request a new one.' };
+  const hash = await bcrypt.hash(String(newPassword), 10);
+  await query('UPDATE users SET password_hash = $1, must_change_password = false, updated_at = now() WHERE email = $2', [hash, row.email]);
+  await query('UPDATE password_resets SET used_at = now() WHERE id = $1', [row.id]);
+  return { ok: true, email: row.email };
+}
+
 // Google sign-in: find the user by email; create a new workspace if none exists.
 // Returns { ok, email, created } — `created` true only for a brand-new signup.
 export async function signInWithGoogle({ email, name }) {

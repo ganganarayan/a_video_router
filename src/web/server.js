@@ -7,8 +7,10 @@ import {
   setSessionCookie, clearSessionCookie, resetPassword, resetEnabled,
   resolveTenant, requireTenant, requireSuperAdmin, getOptionalUser,
   recordLogin, SESSION_COOKIE_NAME, createTenantOwner, hashPassword,
+  createPasswordReset, resetTokenValid, consumePasswordReset,
 } from './auth.js';
 import crypto from 'node:crypto';
+import { sendPlatformMail } from '../lib/mailer.js';
 import { trackMiddleware, recordBeacon } from './track.js';
 import * as meta from '../lib/meta.js';
 import { apiRouter } from './routes/api.js';
@@ -57,7 +59,7 @@ export function createServer() {
   // Self-service DB backup/restore (gated by PASSWORD_RESET_KEY).
   app.use('/dbadmin', dbadminRouter);
 
-  app.get('/login', (_req, res) => res.render('login', { error: null, resetEnabled: resetEnabled() }));
+  app.get('/login', (req, res) => res.render('login', { error: null, resetEnabled: resetEnabled(), reset: req.query.reset }));
   app.post('/login', async (req, res) => {
     const { email, password } = req.body;
     const result = await authenticate(email, password);
@@ -105,6 +107,37 @@ export function createServer() {
       meta.fireSignupConversions(req, { email: result.email, name, eventId: event_id,
         sourceUrl: `${req.protocol}://${req.get('host')}/register` }).catch(() => {});
       res.redirect('/runs');
+    } catch (err) { next(err); }
+  });
+
+  // Self-serve forgot password — emails a single-use reset link (needs platform email configured).
+  app.get('/forgot', (_req, res) => res.render('forgot', { sent: false, error: null }));
+  app.post('/forgot', async (req, res, next) => {
+    try {
+      const r = await createPasswordReset(req.body.email);
+      if (r.sent) {
+        const link = `${req.protocol}://${req.get('host')}/reset-password?token=${r.token}`;
+        sendPlatformMail(r.email, 'Reset your AVideoRouter password',
+          `Hi ${r.name || ''},\n\nReset your AVideoRouter password with this link (valid 1 hour):\n${link}\n\nIf you didn't request this, you can ignore this email.`,
+          `<p>Hi ${r.name || ''},</p><p>Reset your AVideoRouter password with this link (valid for 1 hour):</p>`
+          + `<p><a href="${link}">${link}</a></p><p>If you didn't request this, you can ignore this email.</p>`)
+          .catch((e) => console.error('reset email failed:', e.message));
+      }
+      // Generic response either way — never reveal whether the email exists.
+      res.render('forgot', { sent: true, error: null });
+    } catch (err) { next(err); }
+  });
+  app.get('/reset-password', async (req, res, next) => {
+    try {
+      const valid = await resetTokenValid(req.query.token);
+      res.render('reset-password', { token: String(req.query.token || ''), valid, error: null });
+    } catch (err) { next(err); }
+  });
+  app.post('/reset-password', async (req, res, next) => {
+    try {
+      const r = await consumePasswordReset(req.body.token, req.body.password);
+      if (!r.ok) return res.status(400).render('reset-password', { token: String(req.body.token || ''), valid: true, error: r.error });
+      res.redirect('/login?reset=1');
     } catch (err) { next(err); }
   });
 

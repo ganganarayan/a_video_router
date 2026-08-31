@@ -74,6 +74,19 @@
   </div>
 </div>
 
+<div class="card" id="email-card">
+  <h2>Platform email</h2>
+  <p class="muted">Gmail account used to send account emails — currently self-serve <b>password resets</b>.
+  Use a Gmail address with an <b>app password</b> (Google Account → Security → 2-Step Verification → App
+  passwords). Without this, "Forgot password" can't email a link.</p>
+  <div id="email-status" class="muted" style="margin-bottom:8px"></div>
+  <div class="row" style="align-items:flex-end; flex-wrap:wrap">
+    <div class="field"><label>From (Gmail address)</label><input id="email-from" placeholder="connect@divineleads.guru" style="min-width:240px"></div>
+    <div class="field"><label>App password</label><input id="email-pass" type="password" placeholder="leave blank to keep"></div>
+    <button class="primary" id="email-save">Save</button>
+  </div>
+</div>
+
 <div class="card table-wrap">
   <table id="tenants-table">
     <thead><tr>
@@ -190,6 +203,26 @@ document.getElementById('google-save').onclick = async () => {
   } catch (e) { toast(e.message, 'err'); }
 };
 
+async function loadEmail() {
+  try {
+    const e = await api('/admin/email');
+    document.getElementById('email-from').value = e.from || '';
+    document.getElementById('email-status').innerHTML = (e.from && e.hasPassword)
+      ? '<span class="badge ok">email configured</span>'
+      : '<span class="badge warn">not configured — password resets can’t send</span>';
+  } catch (er) { document.getElementById('email-status').textContent = er.message; }
+}
+document.getElementById('email-save').onclick = async () => {
+  try {
+    await api('/admin/email', { method: 'POST', body: {
+      from: document.getElementById('email-from').value.trim(),
+      app_password: document.getElementById('email-pass').value.trim(),
+    } });
+    document.getElementById('email-pass').value = '';
+    toast('Email settings saved.'); loadEmail();
+  } catch (e) { toast(e.message, 'err'); }
+};
+
 document.getElementById('ao-plan-save').onclick = async () => {
   try {
     const rs = Number(document.getElementById('ao-price-rs').value);
@@ -276,6 +309,7 @@ loadConfig();
 loadLanding();
 loadMeta();
 loadGoogle();
+loadEmail();
 load().catch(e => toast(e.message, 'err'));
 </script>
 <%- include('partials/foot') %>

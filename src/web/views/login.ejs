@@ -13,6 +13,7 @@
   <div class="card login-box">
     <h1>VideoRouter</h1>
     <% if (error) { %><p class="badge err"><%= error %></p><% } %>
+    <% if (typeof reset !== 'undefined' && reset) { %><p class="badge ok">Password reset — log in with your new password.</p><% } %>
     <form method="post" action="/login">
       <label>Email</label>
       <input type="email" name="email" required autofocus>
@@ -21,7 +22,7 @@
       <p><button class="primary" type="submit">Log in</button></p>
     </form>
     <p class="muted" style="margin-top:14px">New here? <a href="/register">Create your workspace — first upload free</a></p>
-    <% if (resetEnabled) { %><p class="muted"><a href="/reset">Forgot password?</a></p><% } %>
+    <p class="muted"><a href="/forgot">Forgot password?</a></p>
   </div>
 </main>
 </body>

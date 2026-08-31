@@ -241,6 +241,19 @@ apiRouter.post('/admin/google', requireSuperAdmin, wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// Platform email (Gmail app password) — sends account emails like password resets.
+apiRouter.get('/admin/email', requireSuperAdmin, wrap(async (_req, res) => {
+  res.json({
+    from: (await getConfigValue('platform_email_from')) || '',
+    hasPassword: Boolean(await getConfigValue('platform_email_app_password')),
+  });
+}));
+apiRouter.post('/admin/email', requireSuperAdmin, wrap(async (req, res) => {
+  if (req.body.from !== undefined) await setConfigValue('platform_email_from', String(req.body.from).trim());
+  if (req.body.app_password) await setConfigValue('platform_email_app_password', encrypt(String(req.body.app_password).trim()));
+  res.json({ ok: true });
+}));
+
 // Conversions panel (super admin): CAPI config status + recent server events + counts.
 apiRouter.get('/analytics/conversions', requireSuperAdmin, wrap(async (req, res) => {
   const days = [7, 30, 90, 180].includes(Number(req.query.range)) ? Number(req.query.range) : 30;

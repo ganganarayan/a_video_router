@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AVideoRouter — Reset your password</title>
+  <link rel="stylesheet" href="/public/style.css">
+  <script src="/public/theme.js"></script>
+</head>
+<body>
+<main>
+  <div class="card login-box">
+    <h1><span style="color:var(--accent)">A</span>Video<span style="color:var(--accent)">Router</span></h1>
+    <h2 style="font-size:1.1rem;margin:.2rem 0 .6rem">Reset your password</h2>
+    <% if (sent) { %>
+      <p class="badge ok">If an account exists for that email, we've sent a reset link. Check your inbox (and spam) — the link is valid for 1 hour.</p>
+      <p class="muted" style="margin-top:14px"><a href="/login">Back to log in</a></p>
+    <% } else { %>
+      <p class="muted">Enter your account email and we'll send you a link to set a new password.</p>
+      <% if (error) { %><p class="badge err"><%= error %></p><% } %>
+      <form method="post" action="/forgot">
+        <label>Email</label>
+        <input type="email" name="email" required autofocus autocomplete="email">
+        <p><button class="primary" type="submit">Send reset link</button></p>
+      </form>
+      <p class="muted"><a href="/login">Back to log in</a></p>
+    <% } %>
+  </div>
+</main>
+</body>
+</html>
