@@ -59,6 +59,8 @@ apiRouter.get('/tenants', requireSuperAdmin, wrap(async (_req, res) => {
   const { rows } = await query(
     `SELECT t.id, t.slug, t.name, t.status, t.created_at,
             w.balance_paise, w.free_upload_used, w.unlimited,
+            (SELECT u.email FROM users u WHERE u.tenant_id = t.id AND u.staff_permission IS NULL
+               AND u.deleted_at IS NULL ORDER BY u.id LIMIT 1) AS owner_email,
             (SELECT count(*) FROM users u WHERE u.tenant_id = t.id AND u.deleted_at IS NULL)::int AS users,
             (SELECT count(*) FROM processed_recordings p WHERE p.tenant_id = t.id AND p.youtube_video_id IS NOT NULL)::int AS uploaded,
             (SELECT count(*) FROM youtube_channels c WHERE c.tenant_id = t.id AND c.refresh_token IS NOT NULL)::int AS channels

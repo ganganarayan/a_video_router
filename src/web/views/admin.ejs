@@ -77,7 +77,7 @@
 <div class="card table-wrap">
   <table id="tenants-table">
     <thead><tr>
-      <th>#</th><th>Slug</th><th>Name</th><th>Status</th><th>Users</th>
+      <th>#</th><th>Slug</th><th>Name</th><th>Owner email</th><th>Status</th><th>Users</th>
       <th>Channels</th><th>Uploaded</th><th>Wallet (₹)</th><th>Free upload</th>
       <th>Unmetered</th><th></th>
     </tr></thead>
@@ -231,6 +231,7 @@ async function load() {
       <td>${t.id}</td>
       <td class="mono">${esc(t.slug)}</td>
       <td>${esc(t.name)}</td>
+      <td class="mono">${esc(t.owner_email || '—')}</td>
       <td>${t.status === 'active' ? '<span class="badge ok">active</span>' : '<span class="badge err">suspended</span>'}</td>
       <td>${t.users}</td>
       <td>${t.channels}</td>
@@ -241,7 +242,7 @@ async function load() {
       <td><input type="checkbox" ${t.unlimited ? 'checked' : ''} onchange="setUnlimited(${t.id}, this.checked)"></td>
       <td><button class="primary" onclick="impersonate(${t.id})">Impersonate</button></td>
     </tr>
-  `).join('') || '<tr><td colspan="11" class="muted">No tenants yet.</td></tr>';
+  `).join('') || '<tr><td colspan="12" class="muted">No tenants yet.</td></tr>';
 }
 
 async function adjust(id, name) {
