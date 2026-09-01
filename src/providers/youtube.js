@@ -34,21 +34,26 @@ export async function getChannelById(id, tenantId) {
 export async function platformYoutubeCreds() {
   const clientId = (await getConfigValue('youtube_client_id')) || '';
   const clientSecret = decrypt((await getConfigValue('youtube_client_secret')) || '') || '';
-  if (!clientId || !clientSecret) {
-    throw new Error('YouTube uploads are not set up yet — the platform admin must add the YouTube OAuth app.');
-  }
-  return { clientId, clientSecret };
+  return clientId && clientSecret ? { clientId, clientSecret } : null;
 }
 
-// Build the OAuth client for ONE channel row. A channel that carries its own
-// oauth_client_id/secret (legacy "bring your own app" rows) keeps using them —
-// its refresh token is bound to that client_id. Otherwise we fall back to the
-// single platform-owned app, so new channels connect with one click.
+// Build the OAuth client for ONE channel row. The single platform-owned app is
+// AUTHORITATIVE when configured: every channel connects through that one app, so
+// there is exactly ONE OAuth client (and one redirect URI) to manage. Legacy
+// per-channel "bring your own client" creds are used only as a fallback when no
+// platform app is set. NOTE: a refresh token is bound to the client_id that
+// minted it, so a channel that was connected with a legacy client must be
+// reconnected once after the platform app takes over.
 export async function buildOAuthClient(channelRow) {
-  let clientId = channelRow.oauth_client_id;
-  let clientSecret = channelRow.oauth_client_secret ? decrypt(channelRow.oauth_client_secret) : null;
-  if (!clientId || !clientSecret) {
-    ({ clientId, clientSecret } = await platformYoutubeCreds());
+  const platform = await platformYoutubeCreds();
+  let clientId, clientSecret;
+  if (platform) {
+    ({ clientId, clientSecret } = platform);
+  } else if (channelRow.oauth_client_id && channelRow.oauth_client_secret) {
+    clientId = channelRow.oauth_client_id;
+    clientSecret = decrypt(channelRow.oauth_client_secret);
+  } else {
+    throw new Error('YouTube uploads are not set up yet — the platform admin must add the YouTube OAuth app.');
   }
   const client = new google.auth.OAuth2(clientId, clientSecret, redirectUri());
   if (channelRow.refresh_token) {
@@ -60,7 +65,7 @@ export async function buildOAuthClient(channelRow) {
 export async function getAuthUrl(channelRow, state) {
   return (await buildOAuthClient(channelRow)).generateAuthUrl({
     access_type: 'offline',
-    prompt: 'consent', // always issue a refresh token
+    prompt: 'select_account consent', // show the account chooser + always issue a refresh token
     scope: OAUTH_SCOPES,
     state,
   });
