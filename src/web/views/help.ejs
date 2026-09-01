@@ -113,55 +113,21 @@ const KB = [
           never in plain text or environment variables.</div>` },
 
   // ---------------- CONNECT YOUTUBE ----------------
-  { cat: 'Connect YouTube', q: 'Step 1 — Create a Google Cloud project & enable the YouTube API',
-    a: `${vid('yt-project', 'creating the Google Cloud project')}
-        <div class="kb-note">Use <b>one Google Cloud project per YouTube channel</b> — this keeps each
-          channel's upload quota separate. Sign in with the Google account that <b>owns the channel</b>.</div>
+  { cat: 'Connect YouTube', q: 'Connect a YouTube channel (one click)',
+    a: `${vid('yt-connect', 'connecting a YouTube channel')}
+        <div class="kb-note">No Google Cloud project, API keys, or redirect URIs to set up — AVideoRouter
+          handles all of that. You just sign in with the Google account that <b>owns the channel</b>
+          and approve access.</div>
         <ol class="kb-steps">
-          <li>Go to ${ext('https://console.cloud.google.com', 'console.cloud.google.com')} and sign in.</li>
-          <li>Top bar → project dropdown → ${ext('https://console.cloud.google.com/projectcreate', 'New Project')}. Name it (e.g. “AVR – Gita main”) → <b>Create</b>.</li>
-          <li>Make sure the new project is selected in the top bar.</li>
-          <li>Open ${ext('https://console.cloud.google.com/apis/library', 'APIs &amp; Services → Library')}, then open the ${ext('https://console.cloud.google.com/apis/library/youtube.googleapis.com', 'YouTube Data API v3')} page → <b>Enable</b>.</li>
-        </ol>
-        ${shot('yt-enable-api', 'YouTube Data API v3 page with the Enable button')}` },
-  { cat: 'Connect YouTube', q: 'Step 2 — Configure the OAuth consent screen (and PUBLISH it)',
-    a: `<ol class="kb-steps">
-          <li>Open ${ext('https://console.cloud.google.com/apis/credentials/consent', 'APIs &amp; Services → OAuth consent screen')} (direct link).</li>
-          <li>User type: <b>External</b> → <b>Create</b>.</li>
-          <li>Fill <b>App name</b>, <b>User support email</b>, and <b>Developer contact email</b> → Save
-              and continue through the remaining steps (you can leave scopes/test users default).</li>
-          <li><b>Important:</b> back on the ${ext('https://console.cloud.google.com/apis/credentials/consent', 'OAuth consent screen')}, set <b>Publishing status</b> to
-              <b>In production</b> (click <b>Publish app</b>).</li>
-        </ol>
-        ${shot('yt-consent-publish', 'OAuth consent screen showing Publishing status = In production')}
-        <div class="kb-note"><b>Why publish matters:</b> if the app is left in “Testing”, Google expires
-          the channel's refresh token about every <b>7 days</b> and you'll have to reconnect weekly.
-          Publishing to production stops that.</div>` },
-  { cat: 'Connect YouTube', q: 'Step 3 — Create the OAuth client & add the redirect URI',
-    a: `${vid('yt-oauth', 'creating the OAuth client ID')}
-        <ol class="kb-steps">
-          <li>Open ${ext('https://console.cloud.google.com/apis/credentials', 'APIs &amp; Services → Credentials')} (direct link).</li>
-          <li><b>Create Credentials → OAuth client ID</b>.</li>
-          <li>Application type: <b>Web application</b>. Give it a name.</li>
-          <li>Under <b>Authorized redirect URIs → Add URI</b>, paste the exact URI shown on the
-              AVideoRouter <b>Connections</b> page (under “YouTube channels”). It looks like
-              <span class="mono">https://your-domain/oauth/youtube/callback</span> — copy it precisely,
-              no trailing slash.</li>
-          <li><b>Create</b>, then copy the <b>Client ID</b> and <b>Client Secret</b>.</li>
-        </ol>
-        ${shot('yt-redirect-uri', 'OAuth client with the Authorized redirect URI added')}` },
-  { cat: 'Connect YouTube', q: 'Step 4 — Add the channel in AVideoRouter & authorise',
-    a: `<ol class="kb-steps">
-          <li>In AVideoRouter open <b>Connections → YouTube channels → Add channel</b>.</li>
-          <li>Enter a <b>Label</b>, paste the <b>OAuth Client ID</b> and <b>Client Secret</b>, then
-              click <b>Add &amp; connect</b>.</li>
+          <li>Open <b>Connections → YouTube channels → Add channel</b>.</li>
+          <li>Enter a <b>Label</b> (e.g. “Gita main”) and click <b>Add &amp; connect</b>.</li>
           <li>You're sent to Google — pick the channel's Google account and <b>Allow</b> the requested
               permissions (upload &amp; manage videos).</li>
           <li>You return to AVideoRouter and the channel shows <b>connected</b>. Repeat for more channels.</li>
         </ol>
         ${shot('yt-connected', 'Connections → YouTube channels table showing a connected channel')}
         <div class="kb-note">If a channel ever shows <b>needs reconnect</b>, its authorisation expired
-          or was revoked — click <b>Reconnect</b> (and make sure the consent screen is Published, Step 2).</div>` },
+          or was revoked — just click <b>Reconnect</b> and approve again.</div>` },
 
   // ---------------- CONNECT FATHOM ----------------
   { cat: 'Connect Fathom', q: 'Connect Fathom as a source',
@@ -259,9 +225,9 @@ const KB = [
         (fix on <b>Connections</b>), the wallet is empty (top up on <b>Billing</b>), the YouTube channel
         needs reconnecting, or the LMS isn't live yet (the row stays pending and back-fills automatically).</p>` },
   { cat: 'Troubleshooting', q: 'YouTube keeps asking me to reconnect every week',
-    a: `<p>Your Google OAuth consent screen is still in “Testing”, so Google expires the token every ~7 days.
-        Fix it once: open the ${ext('https://console.cloud.google.com/apis/credentials/consent', 'OAuth consent screen')}
-        and click <b>Publish app</b> (see Connect YouTube, Step 2), then <b>Reconnect</b> the channel.</p>` },
+    a: `<p>That means AVideoRouter's YouTube app hasn't finished Google's verification yet, so Google expires
+        connections about every ~7 days. This isn't something you can fix on your side — <b>contact the
+        administrator</b>. Once the app is verified, connections stay put and you won't be asked to reconnect.</p>` },
 ];
 
 const listEl = document.getElementById('kb-list');

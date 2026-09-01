@@ -74,6 +74,24 @@
   </div>
 </div>
 
+<div class="card" id="youtube-card">
+  <h2>YouTube uploads (platform OAuth)</h2>
+  <p class="muted">One Google OAuth app used by <b>every</b> tenant, so clients connect a channel with a single click —
+  no Google Cloud project of their own. In Google Cloud create an OAuth client (APIs &amp; Services → Credentials →
+  OAuth client ID → Web application), enable the <span class="mono">YouTube Data API v3</span>, add the
+  <span class="mono">youtube.upload</span> + <span class="mono">youtube</span> scopes on the consent screen, and add
+  this redirect URI: <span class="mono" id="youtube-redirect">…/oauth/youtube/callback</span></p>
+  <p class="muted">Note: the upload scope is <b>restricted</b> — publish &amp; verify this app (a security assessment
+  may be required) or connected channels are capped at test users and tokens expire weekly. All tenants share this
+  app's daily upload quota.</p>
+  <div id="youtube-status" class="muted" style="margin-bottom:8px"></div>
+  <div class="row" style="align-items:flex-end; flex-wrap:wrap">
+    <div class="field"><label>Client ID</label><input id="youtube-cid" placeholder="....apps.googleusercontent.com" style="min-width:280px"></div>
+    <div class="field"><label>Client secret</label><input id="youtube-secret" type="password" autocomplete="new-password" placeholder="leave blank to keep"></div>
+    <button class="primary" id="youtube-save">Save</button>
+  </div>
+</div>
+
 <div class="card" id="email-card">
   <h2>Platform email</h2>
   <p class="muted">Account used to send self-serve <b>password reset</b> emails. Without this, "Forgot
@@ -229,6 +247,27 @@ document.getElementById('google-save').onclick = async () => {
   } catch (e) { toast(e.message, 'err'); }
 };
 
+async function loadYoutube() {
+  document.getElementById('youtube-redirect').textContent = location.origin + '/oauth/youtube/callback';
+  try {
+    const y = await api('/admin/youtube');
+    document.getElementById('youtube-cid').value = y.clientId || '';
+    document.getElementById('youtube-status').innerHTML = (y.clientId && y.hasSecret)
+      ? '<span class="badge ok">YouTube one-click connect enabled</span>'
+      : '<span class="badge warn">not configured — clients cannot add channels</span>';
+  } catch (e) { document.getElementById('youtube-status').textContent = e.message; }
+}
+document.getElementById('youtube-save').onclick = async () => {
+  try {
+    await api('/admin/youtube', { method: 'POST', body: {
+      client_id: document.getElementById('youtube-cid').value.trim(),
+      client_secret: document.getElementById('youtube-secret').value.trim(),
+    } });
+    document.getElementById('youtube-secret').value = '';
+    toast('YouTube settings saved.'); loadYoutube();
+  } catch (e) { toast(e.message, 'err'); }
+};
+
 async function resetOwnerPw(id, email) {
   const pw = prompt('Set a new password for ' + email + ' (min 8 characters):');
   if (pw === null) return;
@@ -370,6 +409,7 @@ loadConfig();
 loadLanding();
 loadMeta();
 loadGoogle();
+loadYoutube();
 loadEmail();
 load().catch(e => toast(e.message, 'err'));
 </script>

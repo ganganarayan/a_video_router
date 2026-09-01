@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { Transform } from 'node:stream';
 import { google } from 'googleapis';
 import { config } from '../config.js';
-import { query } from '../db.js';
+import { query, getConfigValue } from '../db.js';
 import { encrypt, decrypt } from '../lib/secrets.js';
 import { log } from '../lib/logger.js';
 
@@ -28,22 +28,37 @@ export async function getChannelById(id, tenantId) {
   return rows[0] || null;
 }
 
-// The OAuth client is built strictly from ONE channel row — there is no global
-// token anywhere. The uploader always receives the routed channel's row.
-export function buildOAuthClient(channelRow) {
-  const client = new google.auth.OAuth2(
-    channelRow.oauth_client_id,
-    decrypt(channelRow.oauth_client_secret),
-    redirectUri(),
-  );
+// The platform-owned YouTube OAuth app. Set once by the super-admin (admin page)
+// so any client can connect a channel with one click — no Google Cloud project
+// of their own. Returns { clientId, clientSecret } or throws if not configured.
+export async function platformYoutubeCreds() {
+  const clientId = (await getConfigValue('youtube_client_id')) || '';
+  const clientSecret = decrypt((await getConfigValue('youtube_client_secret')) || '') || '';
+  if (!clientId || !clientSecret) {
+    throw new Error('YouTube uploads are not set up yet — the platform admin must add the YouTube OAuth app.');
+  }
+  return { clientId, clientSecret };
+}
+
+// Build the OAuth client for ONE channel row. A channel that carries its own
+// oauth_client_id/secret (legacy "bring your own app" rows) keeps using them —
+// its refresh token is bound to that client_id. Otherwise we fall back to the
+// single platform-owned app, so new channels connect with one click.
+export async function buildOAuthClient(channelRow) {
+  let clientId = channelRow.oauth_client_id;
+  let clientSecret = channelRow.oauth_client_secret ? decrypt(channelRow.oauth_client_secret) : null;
+  if (!clientId || !clientSecret) {
+    ({ clientId, clientSecret } = await platformYoutubeCreds());
+  }
+  const client = new google.auth.OAuth2(clientId, clientSecret, redirectUri());
   if (channelRow.refresh_token) {
     client.setCredentials({ refresh_token: decrypt(channelRow.refresh_token) });
   }
   return client;
 }
 
-export function getAuthUrl(channelRow, state) {
-  return buildOAuthClient(channelRow).generateAuthUrl({
+export async function getAuthUrl(channelRow, state) {
+  return (await buildOAuthClient(channelRow)).generateAuthUrl({
     access_type: 'offline',
     prompt: 'consent', // always issue a refresh token
     scope: OAUTH_SCOPES,
@@ -52,7 +67,7 @@ export function getAuthUrl(channelRow, state) {
 }
 
 export async function handleOAuthCallback(channelRow, code) {
-  const client = buildOAuthClient(channelRow);
+  const client = await buildOAuthClient(channelRow);
   const { tokens } = await client.getToken(code);
   if (!tokens.refresh_token) {
     throw new Error('Google did not return a refresh token. Remove prior access at myaccount.google.com/permissions and try again.');
@@ -113,7 +128,7 @@ function throwIfQuota(status, bodyText) {
 // BEFORE any source download. Throws TokenInvalidError on a dead/expired token so
 // the caller can fail fast without pulling a byte.
 export async function verifyChannelAuth(channelRow) {
-  const auth = buildOAuthClient(channelRow);
+  const auth = await buildOAuthClient(channelRow);
   try {
     const { token } = await auth.getAccessToken();
     if (!token) throw new TokenInvalidError('YouTube did not return an access token — reconnect this channel.');
@@ -174,7 +189,7 @@ async function queryResumeOffset(sessionUrl, token, size) {
 // True resumable upload: init a session, stream the file, and on transient
 // failure query the session for the confirmed offset and resume from there.
 export async function uploadVideo(channelRow, filePath, { title, description = '', privacy = 'unlisted', onProgress }) {
-  const auth = buildOAuthClient(channelRow);
+  const auth = await buildOAuthClient(channelRow);
   let token;
   try {
     ({ token } = await auth.getAccessToken()); // refreshes the access token from the stored refresh token
@@ -257,7 +272,7 @@ export async function uploadVideo(channelRow, filePath, { title, description = '
 
 // Find a playlist by exact title on the channel, create it (unlisted) if missing.
 export async function ensurePlaylist(channelRow, playlistName) {
-  const auth = buildOAuthClient(channelRow);
+  const auth = await buildOAuthClient(channelRow);
   const yt = google.youtube({ version: 'v3', auth });
   let pageToken;
   do {
@@ -276,7 +291,7 @@ export async function ensurePlaylist(channelRow, playlistName) {
 
 // Read a video's current title/description (for the edit-later UI).
 export async function getVideoSnippet(channelRow, videoId) {
-  const yt = google.youtube({ version: 'v3', auth: buildOAuthClient(channelRow) });
+  const yt = google.youtube({ version: 'v3', auth: await buildOAuthClient(channelRow) });
   const { data } = await yt.videos.list({ part: 'snippet', id: videoId });
   const s = data.items?.[0]?.snippet;
   if (!s) throw new Error('Video not found on this channel.');
@@ -286,7 +301,7 @@ export async function getVideoSnippet(channelRow, videoId) {
 // Update title/description. videos.update requires categoryId on the snippet,
 // so preserve the current one.
 export async function updateVideoSnippet(channelRow, videoId, { title, description }) {
-  const yt = google.youtube({ version: 'v3', auth: buildOAuthClient(channelRow) });
+  const yt = google.youtube({ version: 'v3', auth: await buildOAuthClient(channelRow) });
   const current = await getVideoSnippet(channelRow, videoId);
   await yt.videos.update({
     part: 'snippet',
@@ -302,7 +317,7 @@ export async function updateVideoSnippet(channelRow, videoId, { title, descripti
 }
 
 export async function addToPlaylist(channelRow, playlistId, videoId) {
-  const auth = buildOAuthClient(channelRow);
+  const auth = await buildOAuthClient(channelRow);
   const yt = google.youtube({ version: 'v3', auth });
   await yt.playlistItems.insert({
     part: 'snippet',

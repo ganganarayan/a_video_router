@@ -260,6 +260,21 @@ apiRouter.post('/admin/google', requireSuperAdmin, wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// Platform-owned YouTube OAuth app — one app for ALL tenants, so clients connect
+// a channel with a single click (no Google Cloud project of their own). Secret
+// stored encrypted.
+apiRouter.get('/admin/youtube', requireSuperAdmin, wrap(async (_req, res) => {
+  res.json({
+    clientId: (await getConfigValue('youtube_client_id')) || '',
+    hasSecret: Boolean(await getConfigValue('youtube_client_secret')),
+  });
+}));
+apiRouter.post('/admin/youtube', requireSuperAdmin, wrap(async (req, res) => {
+  if (req.body.client_id !== undefined) await setConfigValue('youtube_client_id', String(req.body.client_id).trim());
+  if (req.body.client_secret) await setConfigValue('youtube_client_secret', encrypt(String(req.body.client_secret).trim()));
+  res.json({ ok: true });
+}));
+
 // Platform email (Gmail app password) — sends account emails like password resets.
 apiRouter.get('/admin/email', requireSuperAdmin, wrap(async (_req, res) => {
   res.json({
@@ -809,6 +824,7 @@ apiRouter.get('/connections', wrap(async (req, res) => {
     fathom: f ? { ...f, has_key: true } : null,
     lms: l || null,
     channels,
+    youtubeReady: Boolean((await getConfigValue('youtube_client_id')) && (await getConfigValue('youtube_client_secret'))),
     oauthCallbackUrl: `${config.publicUrl}/oauth/youtube/callback`,
   });
 }));
@@ -887,14 +903,16 @@ apiRouter.post('/connections/lms/test', requireOwner, wrap(async (req, res) => {
 // ---------- YouTube channels ----------
 
 apiRouter.post('/channels', requireOwner, wrap(async (req, res) => {
-  const { label, oauth_client_id, oauth_client_secret } = req.body;
-  if (!label || !oauth_client_id || !oauth_client_secret) {
-    return res.status(400).json({ error: 'label, oauth_client_id and oauth_client_secret are required' });
+  const { label } = req.body;
+  if (!label || !label.trim()) return res.status(400).json({ error: 'A label is required.' });
+  // Channels connect through the single platform-owned YouTube OAuth app — refuse
+  // to create one the client could never connect.
+  if (!(await getConfigValue('youtube_client_id')) || !(await getConfigValue('youtube_client_secret'))) {
+    return res.status(400).json({ error: 'YouTube uploads are not set up on this platform yet — contact the administrator.' });
   }
   const { rows: [row] } = await query(
-    `INSERT INTO youtube_channels (tenant_id, label, oauth_client_id, oauth_client_secret)
-     VALUES ($1, $2, $3, $4) RETURNING id`,
-    [T(req), label.trim(), oauth_client_id.trim(), encrypt(oauth_client_secret.trim())],
+    `INSERT INTO youtube_channels (tenant_id, label) VALUES ($1, $2) RETURNING id`,
+    [T(req), label.trim()],
   );
   res.json({ ok: true, id: row.id, connectUrl: `/oauth/youtube/start/${row.id}` });
 }));

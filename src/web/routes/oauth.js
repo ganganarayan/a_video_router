@@ -95,7 +95,7 @@ oauthRouter.get('/youtube/start/:channelRowId', requirePageAuth, resolveTenant, 
     if (!channel) return res.status(404).send('Unknown channel');
     // state carries the channel row + tenant; expires quickly
     const state = jwt.sign({ ch: channel.id, t: req.tenantId }, config.jwtSecret, { expiresIn: '15m' });
-    res.redirect(getAuthUrl(channel, state));
+    res.redirect(await getAuthUrl(channel, state));
   } catch (err) {
     next(err);
   }

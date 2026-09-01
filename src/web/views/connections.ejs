@@ -39,20 +39,18 @@
 
 <div class="card">
   <h2>YouTube channels</h2>
-  <p class="muted">One Google Cloud project (own OAuth client) per channel for quota isolation.
-  Authorized redirect URI to add in each Google OAuth client:
-  <span class="mono" id="callback-url">…</span></p>
+  <p class="muted">Add a channel, click <b>Connect</b>, and sign in with the Google account that owns the YouTube
+  channel — that's it. No Google Cloud project or API keys needed.</p>
+  <div id="yt-not-ready" class="muted" style="display:none"></div>
   <div class="table-wrap">
     <table id="channels-table">
-      <thead><tr><th>Label</th><th>Channel</th><th>OAuth client</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Label</th><th>Channel</th><th>Status</th><th></th></tr></thead>
       <tbody></tbody>
     </table>
   </div>
   <h2 style="margin-top:16px">Add channel</h2>
   <div class="row">
     <div class="field"><label>Label</label><input id="ch-label" placeholder="Gita main"></div>
-    <div class="field"><label>OAuth Client ID</label><input id="ch-client-id"></div>
-    <div class="field"><label>OAuth Client Secret</label><input id="ch-client-secret" type="password" autocomplete="new-password"></div>
     <button class="primary" id="ch-add">Add & connect</button>
   </div>
 </div>
@@ -64,7 +62,10 @@ function connBadge(el, status) {
 
 async function load() {
   const c = await api('/connections');
-  document.getElementById('callback-url').textContent = c.oauthCallbackUrl;
+  const notReady = document.getElementById('yt-not-ready');
+  notReady.style.display = c.youtubeReady ? 'none' : 'block';
+  if (!c.youtubeReady) notReady.innerHTML = '<span class="badge err">YouTube uploads are not set up on this platform yet — contact the administrator.</span>';
+  document.getElementById('ch-add').disabled = !c.youtubeReady;
   if (c.zoom) {
     document.getElementById('zoom-account-id').value = c.zoom.account_id;
     document.getElementById('zoom-client-id').value = c.zoom.client_id;
@@ -78,7 +79,6 @@ async function load() {
     <tr>
       <td>${esc(ch.label)}</td>
       <td>${ch.channel_handle ? esc(ch.channel_handle) : (ch.channel_id ? esc(ch.channel_id) : '—')}</td>
-      <td class="mono">${esc((ch.oauth_client_id || '').slice(0, 24))}…</td>
       <td>${ch.status === 'reauth_required'
         ? '<span class="badge err">needs reconnect</span>'
         : (ch.connected ? statusBadge('connected') : statusBadge('disconnected'))}</td>
@@ -87,7 +87,7 @@ async function load() {
         <button class="danger" onclick="delChannel(${ch.id})">Delete</button>
       </td>
     </tr>
-  `).join('') || '<tr><td colspan="5" class="muted">No channels yet — add one below.</td></tr>';
+  `).join('') || '<tr><td colspan="4" class="muted">No channels yet — add one below.</td></tr>';
 }
 
 async function saveTest(kind, saveBody, statusEl) {
@@ -134,8 +134,6 @@ document.getElementById('ch-add').onclick = async () => {
   try {
     const r = await api('/channels', { method: 'POST', body: {
       label: document.getElementById('ch-label').value,
-      oauth_client_id: document.getElementById('ch-client-id').value,
-      oauth_client_secret: document.getElementById('ch-client-secret').value,
     }});
     location.href = r.connectUrl; // straight into the Google consent flow
   } catch (e) { toast(e.message, 'err'); }
