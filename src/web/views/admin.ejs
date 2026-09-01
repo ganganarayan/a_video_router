@@ -92,6 +92,21 @@
   </div>
 </div>
 
+<div class="card" id="zoom-card">
+  <h2>Zoom (platform OAuth)</h2>
+  <p class="muted">One Zoom OAuth app used by <b>every</b> tenant, so clients connect Zoom with a single consent —
+  no Server-to-Server app of their own. In the Zoom Marketplace build a <b>User-managed OAuth</b> app, add the
+  cloud-recording read/delete + user read scopes, and add this redirect URL: <span class="mono" id="zoom-redirect">…/oauth/zoom/callback</span></p>
+  <p class="muted">Note: to let clients outside your own Zoom account connect, the app must be <b>published</b> on the
+  Zoom Marketplace (Zoom review). Until then only users in your own Zoom account can connect.</p>
+  <div id="zoom-status" class="muted" style="margin-bottom:8px"></div>
+  <div class="row" style="align-items:flex-end; flex-wrap:wrap">
+    <div class="field"><label>Client ID</label><input id="zoom-cid" placeholder="Zoom OAuth Client ID" style="min-width:280px"></div>
+    <div class="field"><label>Client secret</label><input id="zoom-secret" type="password" autocomplete="new-password" placeholder="leave blank to keep"></div>
+    <button class="primary" id="zoom-save">Save</button>
+  </div>
+</div>
+
 <div class="card" id="email-card">
   <h2>Platform email</h2>
   <p class="muted">Account used to send self-serve <b>password reset</b> emails. Without this, "Forgot
@@ -268,6 +283,27 @@ document.getElementById('youtube-save').onclick = async () => {
   } catch (e) { toast(e.message, 'err'); }
 };
 
+async function loadZoom() {
+  document.getElementById('zoom-redirect').textContent = location.origin + '/oauth/zoom/callback';
+  try {
+    const z = await api('/admin/zoom');
+    document.getElementById('zoom-cid').value = z.clientId || '';
+    document.getElementById('zoom-status').innerHTML = (z.clientId && z.hasSecret)
+      ? '<span class="badge ok">Zoom one-click connect enabled</span>'
+      : '<span class="badge warn">not configured — clients cannot connect Zoom</span>';
+  } catch (e) { document.getElementById('zoom-status').textContent = e.message; }
+}
+document.getElementById('zoom-save').onclick = async () => {
+  try {
+    await api('/admin/zoom', { method: 'POST', body: {
+      client_id: document.getElementById('zoom-cid').value.trim(),
+      client_secret: document.getElementById('zoom-secret').value.trim(),
+    } });
+    document.getElementById('zoom-secret').value = '';
+    toast('Zoom settings saved.'); loadZoom();
+  } catch (e) { toast(e.message, 'err'); }
+};
+
 async function resetOwnerPw(id, email) {
   const pw = prompt('Set a new password for ' + email + ' (min 8 characters):');
   if (pw === null) return;
@@ -410,6 +446,7 @@ loadLanding();
 loadMeta();
 loadGoogle();
 loadYoutube();
+loadZoom();
 loadEmail();
 load().catch(e => toast(e.message, 'err'));
 </script>

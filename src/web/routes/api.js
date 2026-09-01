@@ -275,6 +275,20 @@ apiRouter.post('/admin/youtube', requireSuperAdmin, wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// Platform-owned Zoom OAuth app — one app for ALL tenants, so clients connect
+// Zoom with a single consent (no per-client Server-to-Server app). Secret encrypted.
+apiRouter.get('/admin/zoom', requireSuperAdmin, wrap(async (_req, res) => {
+  res.json({
+    clientId: (await getConfigValue('zoom_client_id')) || '',
+    hasSecret: Boolean(await getConfigValue('zoom_client_secret')),
+  });
+}));
+apiRouter.post('/admin/zoom', requireSuperAdmin, wrap(async (req, res) => {
+  if (req.body.client_id !== undefined) await setConfigValue('zoom_client_id', String(req.body.client_id).trim());
+  if (req.body.client_secret) await setConfigValue('zoom_client_secret', encrypt(String(req.body.client_secret).trim()));
+  res.json({ ok: true });
+}));
+
 // Platform email (Gmail app password) — sends account emails like password resets.
 apiRouter.get('/admin/email', requireSuperAdmin, wrap(async (_req, res) => {
   res.json({
@@ -812,7 +826,7 @@ apiRouter.post('/sources/zoom/delete', requireOwner, wrap(async (req, res) => {
 
 apiRouter.get('/connections', wrap(async (req, res) => {
   const tid = T(req);
-  const { rows: [z] } = await query('SELECT id, account_id, client_id, status, updated_at FROM zoom_account WHERE tenant_id = $1 ORDER BY id DESC LIMIT 1', [tid]);
+  const { rows: [z] } = await query("SELECT id, account_id, client_id, status, oauth_email, (refresh_token IS NOT NULL) AS is_oauth, updated_at FROM zoom_account WHERE tenant_id = $1 ORDER BY id DESC LIMIT 1", [tid]);
   const { rows: [f] } = await query('SELECT id, status, updated_at FROM fathom_account WHERE tenant_id = $1 ORDER BY id DESC LIMIT 1', [tid]);
   const { rows: [l] } = await query('SELECT id, base_url, status, updated_at FROM lms_account WHERE tenant_id = $1 ORDER BY id DESC LIMIT 1', [tid]);
   const channels = (await getChannels(tid)).map((c) => ({
@@ -825,6 +839,7 @@ apiRouter.get('/connections', wrap(async (req, res) => {
     lms: l || null,
     channels,
     youtubeReady: Boolean((await getConfigValue('youtube_client_id')) && (await getConfigValue('youtube_client_secret'))),
+    zoomReady: Boolean((await getConfigValue('zoom_client_id')) && (await getConfigValue('zoom_client_secret'))),
     oauthCallbackUrl: `${config.publicUrl}/oauth/youtube/callback`,
   });
 }));
@@ -853,6 +868,11 @@ apiRouter.post('/connections/zoom/test', requireOwner, wrap(async (req, res) => 
     await query(`UPDATE zoom_account SET status = 'error', updated_at = now() WHERE id = $1`, [account.id]);
     res.status(400).json({ error: err.message });
   }
+}));
+
+apiRouter.post('/connections/zoom/disconnect', requireOwner, wrap(async (req, res) => {
+  await query('DELETE FROM zoom_account WHERE tenant_id = $1', [T(req)]);
+  res.json({ ok: true });
 }));
 
 apiRouter.post('/connections/fathom', requireOwner, wrap(async (req, res) => {

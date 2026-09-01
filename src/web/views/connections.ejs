@@ -4,15 +4,15 @@
 
 <div class="grid">
   <div class="card">
-    <h2>Zoom (Server-to-Server OAuth) <span id="zoom-status"></span></h2>
-    <label>Account ID</label><input id="zoom-account-id">
-    <label>Client ID</label><input id="zoom-client-id">
-    <label>Client Secret</label><input id="zoom-client-secret" type="password" autocomplete="new-password" placeholder="enter to save/replace">
+    <h2>Zoom <span id="zoom-status"></span></h2>
+    <p class="muted">Click <b>Connect Zoom</b> and approve access to your cloud recordings — that's it. No Zoom app or API keys to create.</p>
+    <div id="zoom-not-ready" class="muted" style="display:none"></div>
+    <div id="zoom-connected" style="display:none"><p>Connected as <b id="zoom-email"></b></p></div>
     <p class="row">
-      <button class="primary" id="zoom-save">Save</button>
-      <button id="zoom-test">Test connection</button>
+      <a id="zoom-connect-link" href="/oauth/zoom/start"><button class="primary" id="zoom-connect">Connect Zoom</button></a>
+      <button id="zoom-test" style="display:none">Test connection</button>
+      <button class="danger" id="zoom-disconnect" style="display:none">Disconnect</button>
     </p>
-    <p class="muted">Needs scopes <span class="mono">cloud_recording:read</span> + <span class="mono">cloud_recording:write</span> + <span class="mono">user:read:user</span> (used to verify the account). Add all three to the Zoom app's scopes, then re-activate it.</p>
   </div>
 
   <div class="card">
@@ -66,10 +66,17 @@ async function load() {
   notReady.style.display = c.youtubeReady ? 'none' : 'block';
   if (!c.youtubeReady) notReady.innerHTML = '<span class="badge err">YouTube uploads are not set up on this platform yet — contact the administrator.</span>';
   document.getElementById('ch-add').disabled = !c.youtubeReady;
-  if (c.zoom) {
-    document.getElementById('zoom-account-id').value = c.zoom.account_id;
-    document.getElementById('zoom-client-id').value = c.zoom.client_id;
-  }
+
+  const zr = document.getElementById('zoom-not-ready');
+  zr.style.display = c.zoomReady ? 'none' : 'block';
+  if (!c.zoomReady) zr.innerHTML = '<span class="badge err">Zoom is not set up on this platform yet — contact the administrator.</span>';
+  document.getElementById('zoom-connect').disabled = !c.zoomReady;
+  const zConnected = !!(c.zoom && (c.zoom.is_oauth || c.zoom.status === 'connected'));
+  document.getElementById('zoom-connected').style.display = zConnected ? 'block' : 'none';
+  if (zConnected) document.getElementById('zoom-email').textContent = c.zoom.oauth_email || c.zoom.account_id || 'your Zoom account';
+  document.getElementById('zoom-connect').textContent = zConnected ? 'Reconnect' : 'Connect Zoom';
+  document.getElementById('zoom-test').style.display = zConnected ? '' : 'none';
+  document.getElementById('zoom-disconnect').style.display = zConnected ? '' : 'none';
   connBadge('zoom-status', c.zoom?.status);
   connBadge('fathom-status', c.fathom?.status);
   if (c.lms) document.getElementById('lms-base-url').value = c.lms.base_url;
@@ -99,17 +106,13 @@ async function saveTest(kind, saveBody, statusEl) {
   load();
 }
 
-document.getElementById('zoom-save').onclick = async () => {
-  try {
-    await api('/connections/zoom', { method: 'POST', body: {
-      account_id: document.getElementById('zoom-account-id').value,
-      client_id: document.getElementById('zoom-client-id').value,
-      client_secret: document.getElementById('zoom-client-secret').value,
-    }});
-    toast('Zoom credentials saved'); load();
-  } catch (e) { toast(e.message, 'err'); }
-};
 document.getElementById('zoom-test').onclick = () => saveTest('zoom', null);
+document.getElementById('zoom-disconnect').onclick = async () => {
+  if (!confirm('Disconnect Zoom? Recordings already routed are unaffected.')) return;
+  try { await api('/connections/zoom/disconnect', { method: 'POST' }); toast('Zoom disconnected'); }
+  catch (e) { toast(e.message, 'err'); }
+  load();
+};
 
 document.getElementById('fathom-save').onclick = async () => {
   try {
@@ -149,6 +152,8 @@ async function delChannel(id) {
 const params = new URLSearchParams(location.search);
 if (params.get('yt') === 'connected') toast('YouTube channel connected: ' + (params.get('title') || ''));
 if (params.get('yt') === 'error') toast('YouTube connect failed: ' + (params.get('message') || ''), 'err');
+if (params.get('zoom') === 'connected') toast('Zoom connected: ' + (params.get('email') || ''));
+if (params.get('zoom') === 'error') toast('Zoom connect failed: ' + (params.get('message') || ''), 'err');
 
 load();
 </script>

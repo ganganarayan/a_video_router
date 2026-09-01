@@ -6,6 +6,7 @@ import {
   signInWithGoogle, setSessionCookie, recordLogin,
 } from '../auth.js';
 import { getChannelById, getAuthUrl, handleOAuthCallback } from '../../providers/youtube.js';
+import { getZoomAuthUrl, handleZoomOAuthCallback } from '../../providers/zoom.js';
 import { getConfigValue } from '../../db.js';
 import { decrypt } from '../../lib/secrets.js';
 import * as meta from '../../lib/meta.js';
@@ -98,6 +99,31 @@ oauthRouter.get('/youtube/start/:channelRowId', requirePageAuth, resolveTenant, 
     res.redirect(await getAuthUrl(channel, state));
   } catch (err) {
     next(err);
+  }
+});
+
+// ---- Zoom (single platform OAuth app; client just consents) ----
+oauthRouter.get('/zoom/start', requirePageAuth, resolveTenant, requireTenant, async (req, res, next) => {
+  try {
+    const state = jwt.sign({ z: 1, t: req.tenantId }, config.jwtSecret, { expiresIn: '15m' });
+    res.redirect(await getZoomAuthUrl(state));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Zoom redirects here (register {PUBLIC_URL}/oauth/zoom/callback on the platform app).
+oauthRouter.get('/zoom/callback', async (req, res) => {
+  const { code, state, error } = req.query;
+  try {
+    if (error) throw new Error(`Zoom returned: ${error}`);
+    if (!code || !state) throw new Error('Missing code/state');
+    const { t } = jwt.verify(String(state), config.jwtSecret);
+    const result = await handleZoomOAuthCallback(t, String(code));
+    res.redirect(`/connections?zoom=connected&email=${encodeURIComponent(result.email || '')}`);
+  } catch (err) {
+    logError('zoom oauth callback:', err.message);
+    res.redirect(`/connections?zoom=error&message=${encodeURIComponent(err.message)}`);
   }
 });
 
