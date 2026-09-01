@@ -72,16 +72,19 @@ apiRouter.get('/tenants', requireSuperAdmin, wrap(async (_req, res) => {
   res.json(rows);
 }));
 
+// NOTE: register the static /impersonate/stop BEFORE the parameterized
+// /impersonate/:id — otherwise ':id' captures "stop" and exit-to-admin 404s
+// (Number('stop') === NaN) and never clears the impersonation cookie.
+apiRouter.post('/impersonate/stop', requireSuperAdmin, wrap(async (_req, res) => {
+  clearImpersonation(res);
+  res.json({ ok: true });
+}));
+
 apiRouter.post('/impersonate/:id', requireSuperAdmin, wrap(async (req, res) => {
   const t = await getTenantById(Number(req.params.id));
   if (!t) return res.status(404).json({ error: 'tenant not found' });
   setImpersonation(res, t.id);
   res.json({ ok: true, tenant: { id: t.id, slug: t.slug, name: t.name } });
-}));
-
-apiRouter.post('/impersonate/stop', requireSuperAdmin, wrap(async (_req, res) => {
-  clearImpersonation(res);
-  res.json({ ok: true });
 }));
 
 // Super-admin: directly set a tenant OWNER's password (recovery for a locked-out
