@@ -1,7 +1,7 @@
 <%- include('partials/head') %>
 <h1>Transfer logs</h1>
 <p class="muted">Every completed download → upload, with full transfer detail. Edit a video's
-YouTube title/description, or delete its Zoom source (enabled once it has a YouTube link and
+YouTube title/description/privacy, or delete its Zoom source (enabled once it has a YouTube link and
 hasn't been deleted yet).</p>
 
 <div class="card">
@@ -69,7 +69,7 @@ async function load() {
       <td>${destinationCell(r)}</td>
       <td>${sourceFileCell(r)}</td>
       <td class="row">
-        <button data-edit="${r.id}">Edit title/desc</button>
+        <button data-edit="${r.id}">Edit title/desc/privacy</button>
         ${deleteBtn(r)}
       </td>
     </tr>
@@ -77,6 +77,12 @@ async function load() {
       <div class="card" style="margin:0">
         <label>YouTube title</label><input id="et-${r.id}">
         <label>YouTube description</label><textarea id="ed-${r.id}" rows="4" style="width:100%"></textarea>
+        <label>Privacy</label>
+        <select id="ep-${r.id}" style="max-width:200px">
+          <option value="unlisted">Unlisted</option>
+          <option value="public">Public</option>
+          <option value="private">Private</option>
+        </select>
         <p class="row">
           <button class="primary" data-save="${r.id}">Update on YouTube</button>
           <button data-cancel="${r.id}">Cancel</button>
@@ -108,6 +114,7 @@ async function openEditor(id) {
     const d = await api('/recordings/' + id + '/youtube');
     document.getElementById('et-' + id).value = d.title || '';
     document.getElementById('ed-' + id).value = d.description || '';
+    document.getElementById('ep-' + id).value = d.privacy || 'unlisted';
     state.textContent = '';
   } catch (e) { state.textContent = e.message; }
 }
@@ -119,6 +126,7 @@ async function saveEditor(id) {
     await api('/recordings/' + id + '/youtube', { method: 'POST', body: {
       title: document.getElementById('et-' + id).value,
       description: document.getElementById('ed-' + id).value,
+      privacy: document.getElementById('ep-' + id).value,
     }});
     toast('YouTube video updated');
     document.getElementById('editrow-' + id).style.display = 'none';

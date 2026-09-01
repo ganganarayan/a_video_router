@@ -552,14 +552,18 @@ async function channelForRecording(id, tid) {
 apiRouter.get('/recordings/:id/youtube', wrap(async (req, res) => {
   const { rec, channel } = await channelForRecording(Number(req.params.id), T(req));
   const snippet = await getVideoSnippet(channel, rec.youtube_video_id);
-  res.json({ title: snippet.title, description: snippet.description, url: rec.youtube_url });
+  res.json({ title: snippet.title, description: snippet.description, privacy: snippet.privacyStatus, url: rec.youtube_url });
 }));
 
 apiRouter.post('/recordings/:id/youtube', requireOwner, wrap(async (req, res) => {
   const { rec, channel } = await channelForRecording(Number(req.params.id), T(req));
   const title = String(req.body.title || '').trim();
   if (!title) return res.status(400).json({ error: 'title cannot be empty' });
-  await updateVideoSnippet(channel, rec.youtube_video_id, { title, description: req.body.description || '' });
+  const privacy = req.body.privacy ? String(req.body.privacy) : undefined;
+  if (privacy && !['public', 'unlisted', 'private'].includes(privacy)) {
+    return res.status(400).json({ error: 'bad privacy (use public, unlisted or private)' });
+  }
+  await updateVideoSnippet(channel, rec.youtube_video_id, { title, description: req.body.description || '', privacy });
   await query('UPDATE processed_recordings SET title = $1 WHERE id = $2 AND tenant_id = $3', [title, rec.id, T(req)]);
   res.json({ ok: true });
 }));

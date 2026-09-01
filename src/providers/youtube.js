@@ -294,31 +294,40 @@ export async function ensurePlaylist(channelRow, playlistName) {
   return created.id;
 }
 
-// Read a video's current title/description (for the edit-later UI).
+// Read a video's current title/description/privacy (for the edit-later UI).
 export async function getVideoSnippet(channelRow, videoId) {
   const yt = google.youtube({ version: 'v3', auth: await buildOAuthClient(channelRow) });
-  const { data } = await yt.videos.list({ part: 'snippet', id: videoId });
-  const s = data.items?.[0]?.snippet;
+  const { data } = await yt.videos.list({ part: 'snippet,status', id: videoId });
+  const item = data.items?.[0];
+  const s = item?.snippet;
   if (!s) throw new Error('Video not found on this channel.');
-  return { title: s.title, description: s.description || '', categoryId: s.categoryId || '22' };
+  return {
+    title: s.title,
+    description: s.description || '',
+    categoryId: s.categoryId || '22',
+    privacyStatus: item.status?.privacyStatus || 'unlisted',
+  };
 }
 
-// Update title/description. videos.update requires categoryId on the snippet,
-// so preserve the current one.
-export async function updateVideoSnippet(channelRow, videoId, { title, description }) {
+// Update title/description and/or privacy. videos.update requires categoryId on
+// the snippet, so preserve the current one; privacy is only touched when passed.
+export async function updateVideoSnippet(channelRow, videoId, { title, description, privacy }) {
   const yt = google.youtube({ version: 'v3', auth: await buildOAuthClient(channelRow) });
   const current = await getVideoSnippet(channelRow, videoId);
-  await yt.videos.update({
-    part: 'snippet',
-    requestBody: {
-      id: videoId,
-      snippet: {
-        title: (title ?? current.title).slice(0, 100),
-        description: description ?? current.description,
-        categoryId: current.categoryId,
-      },
+  const requestBody = {
+    id: videoId,
+    snippet: {
+      title: (title ?? current.title).slice(0, 100),
+      description: description ?? current.description,
+      categoryId: current.categoryId,
     },
-  });
+  };
+  const parts = ['snippet'];
+  if (privacy) {
+    requestBody.status = { privacyStatus: privacy };
+    parts.push('status');
+  }
+  await yt.videos.update({ part: parts.join(','), requestBody });
 }
 
 export async function addToPlaylist(channelRow, playlistId, videoId) {
