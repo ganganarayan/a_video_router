@@ -304,7 +304,11 @@ function qSize(j) {
 }
 function qSpeed(j) {
   if (j.status !== 'processing' || !j.progress) return '—';
-  const arrow = j.progress.phase === 'upload' ? '↑' : (j.progress.phase === 'download' ? '↓' : '');
+  const phase = j.progress.phase;
+  // Local uploads have no download leg — the "download" phase is just a local
+  // file move, so its speed is meaningless. Only the ↑ upload leg is real.
+  if (j.source === 'local' && phase !== 'upload') return '<span class="muted">local file</span>';
+  const arrow = phase === 'upload' ? '↑' : (phase === 'download' ? '↓' : '');
   return `${arrow} ${fmtBps(j.progress.speedBps)}`;
 }
 function qElapsed(j) {
@@ -337,13 +341,18 @@ function qLog(j) {
   if (j.status === 'failed') return `<span class="badge err">failed</span> ${esc(j.message || '')}`;
   if (j.status === 'done') {
     const t = j.transfer;
+    // Local uploads never downloaded anything — show "local file" instead of a
+    // bogus average download speed.
+    const dn = j.source === 'local' ? 'local file' : `avg ↓ ${fmtBps(t?.avgDownloadBps)}`;
     const stats = t
-      ? `transfer: avg ↓ ${fmtBps(t.avgDownloadBps)} · ↑ ${fmtBps(t.avgUploadBps)} · ${fmtBytes(t.fileSizeBytes)} · ${fmtDuration(t.durationMs)} · ${fmtDate(t.finishedAt)}`
+      ? `transfer: ${dn} · ↑ ${fmtBps(t.avgUploadBps)} · ${fmtBytes(t.fileSizeBytes)} · ${fmtDuration(t.durationMs)} · ${fmtDate(t.finishedAt)}`
       : esc(j.message || '');
     return `${stats}${ytStatusNote(j.youtube_status)}${links ? '<br>' + links : ''}`;
   }
   const phase = j.progress?.phase;
-  const label = phase === 'upload' ? 'uploading to YouTube' : (phase === 'download' ? 'downloading' : (j.status || ''));
+  const label = phase === 'upload'
+    ? 'uploading to YouTube'
+    : (j.source === 'local' ? 'preparing local file' : (phase === 'download' ? 'downloading' : (j.status || '')));
   return `<span class="muted">${esc(label)}…</span>`;
 }
 function qAction(j) {
@@ -430,7 +439,7 @@ function fillUploadSelects() {
     + lmsOptions.map((o, k) => `<option value="${k}">${esc(o.label)}</option>`).join('');
 }
 
-document.getElementById('up-go').onclick = () => {
+document.getElementById('up-go').onclick = async () => {
   const fileEl = document.getElementById('up-file');
   const file = fileEl.files[0];
   if (!file) return toast('Choose a file first.', 'err');
@@ -440,12 +449,32 @@ document.getElementById('up-go').onclick = () => {
   const lmsPick = lmsIdx !== '' ? lmsOptions[Number(lmsIdx)] : null;
   const title = document.getElementById('up-title').value.trim();
 
+  const prog = document.getElementById('up-progress');
+  const btn = document.getElementById('up-go');
+
+  // Pre-flight the billing gate BEFORE streaming the file. Otherwise the server's
+  // 402 lands mid-upload, the connection resets, and the browser only reports a
+  // generic "network error" — never the real "top up to continue" reason.
+  btn.disabled = true;
+  prog.textContent = 'Checking your balance…';
+  try {
+    const gate = await api('/uploads/preflight');
+    if (!gate.allowed) {
+      btn.disabled = false;
+      prog.innerHTML = `<span class="badge err">${esc(gate.reason || 'Top up needed to upload.')}</span> `
+        + `<a href="/billing">Buy credits →</a>`;
+      return;
+    }
+  } catch (e) {
+    btn.disabled = false;
+    prog.innerHTML = `<span class="badge err">${esc(e.message || 'Could not check your balance.')}</span>`;
+    return;
+  }
+
   const params = new URLSearchParams({ channel_id: channelId, filename: file.name });
   if (title) params.set('title', title);
   if (lmsPick) { params.set('lms_course_id', lmsPick.course_id); if (lmsPick.module_id) params.set('lms_module_id', lmsPick.module_id); }
 
-  const prog = document.getElementById('up-progress');
-  const btn = document.getElementById('up-go');
   const xhr = new XMLHttpRequest();
   xhr.open('POST', '/api/uploads?' + params.toString());
   xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
@@ -458,13 +487,15 @@ document.getElementById('up-go').onclick = () => {
       prog.innerHTML = '<span class="badge ok">Uploaded — now transferring to YouTube (see the push queue).</span>';
       fileEl.value = ''; document.getElementById('up-title').value = '';
       pollQueue();
+    } else if (xhr.status === 402) {
+      let msg = 'Wallet empty — top up to upload.'; try { msg = JSON.parse(xhr.responseText).error || msg; } catch { /* non-JSON */ }
+      prog.innerHTML = `<span class="badge err">${esc(msg)}</span> <a href="/billing">Buy credits →</a>`;
     } else {
       let msg = 'Upload failed'; try { msg = JSON.parse(xhr.responseText).error || msg; } catch { /* non-JSON */ }
       prog.innerHTML = `<span class="badge err">${esc(msg)}</span>`;
     }
   };
   xhr.onerror = () => { btn.disabled = false; prog.innerHTML = '<span class="badge err">Network error during upload.</span>'; };
-  btn.disabled = true;
   prog.textContent = 'Starting upload…';
   xhr.send(file);
 };

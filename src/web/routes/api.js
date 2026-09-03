@@ -722,6 +722,14 @@ apiRouter.get('/push-queue', wrap(async (req, res) => {
   res.json(getJobs(T(req)));
 }));
 
+// Pre-flight the billing gate for the uploader: the browser calls this BEFORE
+// streaming a file so it can show the top-up prompt up front. Without it the
+// /uploads 402 lands mid-stream, the connection resets, and the browser only
+// sees a generic "network error" instead of the real "top up to continue".
+apiRouter.get('/uploads/preflight', wrap(async (req, res) => {
+  res.json(await billing.canPush(T(req)));
+}));
+
 // Upload a local file → YouTube (and optionally register it in the LMS by URL).
 // The raw request body IS the file (content-type bypasses the JSON/urlencoded
 // parsers), streamed straight to the cache dir — never buffered in memory. Then a
