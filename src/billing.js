@@ -13,6 +13,18 @@ export const PROVIDERS = ['razorpay', 'easebuzz', 'phonepe'];
 // storage exist now; their adapters land when those accounts activate.
 export const LIVE_PROVIDERS = ['razorpay'];
 
+// Defaults used when the DB config can't be read (e.g. a transient DB blip). The
+// public landing falls back to these so it never 500s a visitor over pricing.
+export function defaultBillingConfig() {
+  return {
+    provider: 'razorpay',
+    pricePerUnitPaise: 5000, unitBytes: 1073741824,
+    gstPercent: 18, gatewayPercent: 2.5, minTopupPaise: 50000,
+    alwaysOnPlanId: '', alwaysOnPricePaise: 99900,
+    razorpayKeyId: '', razorpayKeySecret: '', razorpayWebhookSecret: '',
+  };
+}
+
 export async function getBillingConfig() {
   const c = await getConfigMap();
   const provider = PROVIDERS.includes(c.payment_provider) ? c.payment_provider : 'razorpay';

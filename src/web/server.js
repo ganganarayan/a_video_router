@@ -160,12 +160,23 @@ export function createServer() {
   // app_config (landing_video_url) so it can be swapped without touching the page.
   app.get('/', async (req, res, next) => {
     try {
-      const user = await getOptionalUser(req);
+      // A DB blip must never take down the public marketing page. Treat a failed
+      // session lookup as anonymous, and fall back to default pricing config so
+      // the page always renders (visitors get the landing, never a 500).
+      let user = null;
+      try { user = await getOptionalUser(req); } catch { /* DB hiccup — show landing */ }
       if (user) return res.redirect(user.isSuperAdmin ? '/admin' : '/runs');
-      const videoUrl = (await getConfigValue('landing_video_url')) || '';
-      // Pricing is rendered from the live billing config so the landing and the
-      // in-app top-up modal always show the same numbers (one source of truth).
-      const cfg = await billing.getBillingConfig();
+      let videoUrl = '';
+      let cfg;
+      try {
+        videoUrl = (await getConfigValue('landing_video_url')) || '';
+        // Pricing is rendered from the live billing config so the landing and the
+        // in-app top-up modal always show the same numbers (one source of truth).
+        cfg = await billing.getBillingConfig();
+      } catch (e) {
+        console.error(new Date().toISOString(), 'WARN landing: config read failed, using defaults:', e.message);
+        cfg = billing.defaultBillingConfig();
+      }
       const packs = billing.PACK_PRESETS.map((u) => billing.packQuote(u, cfg));
       res.render('landing', { videoUrl, packs, alwaysOnPricePaise: cfg.alwaysOnPricePaise });
     } catch (err) { next(err); }
