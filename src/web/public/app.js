@@ -98,6 +98,14 @@ async function initCtx() {
       return;
     }
 
+    // Front-door gating: mark paid nav items with a $ and pop an upsell on click
+    // instead of navigating. (The server still enforces the gate on save.) Staff
+    // don't manage these, so only gate for owners / impersonating super admins.
+    if (!w.isStaff) {
+      gateNavItem('a.tab[href="/schedules"]', w.alwaysOn, 'scheduler');
+      gateNavItem('#nav-team', w.staffAccess, 'staff');
+    }
+
     if (!bar) return;
     if (w.impersonating) {
       bar.className = 'ctxbar on';
@@ -120,6 +128,48 @@ async function initCtx() {
   } catch { /* not authenticated or whoami unavailable */ }
 }
 document.addEventListener('DOMContentLoaded', initCtx);
+
+// Mark a paid nav tab with a $ and intercept its click to show an upsell modal.
+function gateNavItem(selector, eligible, feature) {
+  const a = document.querySelector(selector);
+  if (!a || eligible) return;
+  a.dataset.gated = feature;
+  if (!a.querySelector('.navlock')) {
+    const s = document.createElement('span');
+    s.className = 'navlock';
+    s.textContent = '$';
+    s.title = 'Paid feature';
+    a.appendChild(s);
+  }
+  a.addEventListener('click', (e) => {
+    if (a.dataset.gated) { e.preventDefault(); showUpsell(a.dataset.gated); }
+  });
+}
+
+// Lightweight upsell/payment prompt shown when a gated nav item is clicked.
+function showUpsell(feature) {
+  const msg = feature === 'scheduler'
+    ? 'The daily <b>scheduler</b> is an <b>Always-On</b> feature (₹999/month). Subscribe to run automatic transfers on a schedule.'
+    : 'Adding <b>staff</b> needs <b>Always-On</b> (₹999/month) or a <b>₹1,000+</b> top-up. Unlock it from the Billing page.';
+  let ov = document.getElementById('upsell-ov');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'upsell-ov';
+    ov.innerHTML = '<div class="upsell-box">'
+      + '<h3 style="margin:0 0 10px">Unlock this feature</h3>'
+      + '<div id="upsell-msg" class="muted"></div>'
+      + '<div style="margin-top:18px; display:flex; gap:8px; justify-content:flex-end">'
+      + '<button id="upsell-cancel">Not now</button>'
+      + '<button class="primary" id="upsell-go">Unlock on Billing</button>'
+      + '</div></div>';
+    document.body.appendChild(ov);
+    ov.addEventListener('click', (e) => { if (e.target === ov) ov.style.display = 'none'; });
+    ov.querySelector('#upsell-cancel').onclick = () => { ov.style.display = 'none'; };
+    ov.querySelector('#upsell-go').onclick = () => { location.href = '/billing'; };
+  }
+  ov.querySelector('#upsell-msg').innerHTML = msg;
+  ov.style.display = 'flex';
+}
 
 // Delegated handler so re-rendered tables keep working. Copies data-copy and
 // flashes "copied" on the clicked button for 2 seconds.

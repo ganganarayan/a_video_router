@@ -44,6 +44,11 @@ apiRouter.get('/whoami', wrap(async (req, res) => {
     const t = await getTenantById(req.tenantId);
     impersonating = t ? { id: t.id, slug: t.slug, name: t.name } : null;
   }
+  // Feature eligibility for front-door gating of the nav (scheduler = Always-On;
+  // staff = Always-On or a ₹1,000+ top-up). Only meaningful with a tenant context.
+  const wallet = req.tenantId ? await billing.getWallet(req.tenantId) : null;
+  const alwaysOn = billing.isAlwaysOn(wallet);
+  const staffAccess = req.tenantId ? await billing.canUseStaff(req.tenantId) : false;
   res.json({
     email: req.user.email,
     role: req.user.role,
@@ -52,6 +57,8 @@ apiRouter.get('/whoami', wrap(async (req, res) => {
     staffPermission: req.user.staffPermission,
     tenantId: req.tenantId,
     impersonating,
+    alwaysOn,       // scheduler eligibility
+    staffAccess,    // staff-seat eligibility
   });
 }));
 

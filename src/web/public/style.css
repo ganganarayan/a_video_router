@@ -100,6 +100,17 @@ button.copy.copied { color: var(--ok); border-color: var(--ok); }
 #toast.ok { border-color: var(--ok); }
 #toast.err { border-color: var(--err); }
 
+/* Paid-feature nav marker + upsell modal */
+.navlock { margin-left: 3px; color: var(--accent); font-weight: 700; }
+#upsell-ov {
+  position: fixed; inset: 0; background: rgba(0, 0, 0, .5);
+  display: none; align-items: center; justify-content: center; z-index: 100;
+}
+.upsell-box {
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 12px;
+  padding: 22px; max-width: 420px; width: calc(100% - 40px);
+}
+
 .login-box { max-width: 360px; margin: 12vh auto; }
 
 /* Pay-as-you-go top-up modal */
