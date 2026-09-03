@@ -72,6 +72,7 @@ function linkWithCopy(url, label) {
 async function initCtx() {
   try {
     const w = await api('/whoami');
+    window.__me = w; // stashed for the upsell Checkout (email prefill)
     const bar = document.getElementById('ctxbar');
     const adminLink = document.getElementById('nav-admin');
     if (w.isSuperAdmin && adminLink) adminLink.style.display = '';
@@ -146,29 +147,93 @@ function gateNavItem(selector, eligible, feature) {
   });
 }
 
-// Lightweight upsell/payment prompt shown when a gated nav item is clicked.
+// Lazily load Razorpay Checkout (only when an upsell is actually opened).
+function loadRazorpay() {
+  return new Promise((resolve, reject) => {
+    if (window.Razorpay) return resolve();
+    const s = document.createElement('script');
+    s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('Could not load the payment library.'));
+    document.head.appendChild(s);
+  });
+}
+
+// Open the Always-On subscription Checkout inline (unlocks scheduler + staff).
+// Reuses the same /billing/subscribe → confirm path as the Billing page.
+async function startAlwaysOnCheckout(btn) {
+  const prev = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Opening…';
+  try {
+    await loadRazorpay();
+    const sub = await api('/billing/subscribe', { method: 'POST' });
+    const rzp = new Razorpay({
+      key: sub.keyId,
+      subscription_id: sub.subscriptionId,
+      name: 'AVideoRouter',
+      description: 'Always-On subscription',
+      prefill: { email: (window.__me && window.__me.email) || '' },
+      handler: async (resp) => {
+        try {
+          await api('/billing/subscription/confirm', { method: 'POST', body: {
+            subscription_id: resp.razorpay_subscription_id,
+            payment_id: resp.razorpay_payment_id,
+            signature: resp.razorpay_signature,
+          } });
+          toast('Always-On active — scheduler and staff unlocked.');
+          const ov = document.getElementById('upsell-ov'); if (ov) ov.style.display = 'none';
+          setTimeout(() => location.reload(), 900);
+        } catch (e) { toast('Paid, but activation failed: ' + e.message + ' (it will reconcile via webhook).', 'err'); }
+      },
+      modal: { ondismiss: () => toast('Subscription not completed.', 'warn') },
+    });
+    rzp.on('payment.failed', (r) => toast('Payment failed: ' + (r.error?.description || 'unknown'), 'err'));
+    rzp.open();
+  } catch (e) {
+    toast(e.message || 'Could not start checkout.', 'err');
+  } finally {
+    btn.disabled = false; btn.textContent = prev;
+  }
+}
+
+// Payment prompt shown when a gated nav item is clicked — pops Razorpay Checkout
+// inline for the Always-On subscription (with a link to all billing options).
 function showUpsell(feature) {
   const msg = feature === 'scheduler'
-    ? 'The daily <b>scheduler</b> is an <b>Always-On</b> feature (₹999/month). Subscribe to run automatic transfers on a schedule.'
-    : 'Adding <b>staff</b> needs <b>Always-On</b> (₹999/month) or a <b>₹1,000+</b> top-up. Unlock it from the Billing page.';
+    ? 'The daily <b>scheduler</b> is an <b>Always-On</b> feature. Subscribe to run automatic transfers on a schedule.'
+    : 'Adding <b>staff</b> is an <b>Always-On</b> feature (or unlock it with a ₹1,000+ top-up). Subscribe to add your team.';
   let ov = document.getElementById('upsell-ov');
   if (!ov) {
     ov = document.createElement('div');
     ov.id = 'upsell-ov';
     ov.innerHTML = '<div class="upsell-box">'
-      + '<h3 style="margin:0 0 10px">Unlock this feature</h3>'
+      + '<h3 style="margin:0 0 10px">Unlock with Always-On</h3>'
       + '<div id="upsell-msg" class="muted"></div>'
-      + '<div style="margin-top:18px; display:flex; gap:8px; justify-content:flex-end">'
+      + '<div id="upsell-price" style="margin-top:8px; font-weight:600"></div>'
+      + '<div style="margin-top:18px; display:flex; gap:8px; justify-content:flex-end; align-items:center">'
+      + '<a href="/billing" style="margin-right:auto; font-size:13px">More billing options →</a>'
       + '<button id="upsell-cancel">Not now</button>'
-      + '<button class="primary" id="upsell-go">Unlock on Billing</button>'
+      + '<button class="primary" id="upsell-go">Subscribe &amp; pay</button>'
       + '</div></div>';
     document.body.appendChild(ov);
     ov.addEventListener('click', (e) => { if (e.target === ov) ov.style.display = 'none'; });
     ov.querySelector('#upsell-cancel').onclick = () => { ov.style.display = 'none'; };
-    ov.querySelector('#upsell-go').onclick = () => { location.href = '/billing'; };
+    ov.querySelector('#upsell-go').onclick = (e) => startAlwaysOnCheckout(e.currentTarget);
   }
   ov.querySelector('#upsell-msg').innerHTML = msg;
   ov.style.display = 'flex';
+  // Fill the live price + availability from billing config.
+  api('/billing').then((b) => {
+    const priceEl = ov.querySelector('#upsell-price');
+    const go = ov.querySelector('#upsell-go');
+    if (priceEl && b.alwaysOnPricePaise != null) {
+      priceEl.textContent = '₹' + (Number(b.alwaysOnPricePaise) / 100).toLocaleString('en-IN') + ' / month · cancel anytime';
+    }
+    if (go) {
+      if (!b.alwaysOnAvailable) { go.disabled = true; go.textContent = 'Payments not enabled'; }
+      else { go.disabled = false; go.textContent = 'Subscribe & pay'; }
+    }
+  }).catch(() => {});
 }
 
 // Delegated handler so re-rendered tables keep working. Copies data-copy and
