@@ -31,7 +31,7 @@
           "@type": "Offer",
           "price": "50",
           "priceCurrency": "INR",
-          "description": "Pay as you go — ₹50 per unit of transfer (1 unit = 1 GB, rounded up). First upload free. Optional Always-On subscription."
+          "description": "Pay as you go — ₹50 per GB of transfer (billed per GB, rounded up). First upload free. Optional Always-On subscription."
         }
       }
     ]
@@ -267,7 +267,7 @@
             <tr><th>Delete from Zoom in-app</th><td class="us"><span class="y">✓</span></td><td class="n">✗</td><td class="n">✗</td><td class="p">Build it</td><td class="p">Some</td></tr>
             <tr><th>Daily scheduler, hands-free</th><td class="us"><span class="y">✓</span></td><td class="p">Extra setup</td><td class="p">Extra setup</td><td class="p">Self-host</td><td class="p">Some</td></tr>
             <tr><th>No building, no maintenance</th><td class="us"><span class="y">✓</span></td><td class="p">Some setup</td><td class="n">Complex builds</td><td class="n">Self-host + upkeep</td><td><span class="y">✓</span></td></tr>
-            <tr><th>Price</th><td class="us"><span class="y">₹50/unit</span> · first free · no subscription</td><td class="n">From $19.99/mo</td><td class="n">From $9/mo</td><td class="p">Server + your time</td><td class="n">Monthly subscription</td></tr>
+            <tr><th>Price</th><td class="us"><span class="y">₹50/GB</span> · first free · no subscription</td><td class="n">From $19.99/mo</td><td class="n">From $9/mo</td><td class="p">Server + your time</td><td class="n">Monthly subscription</td></tr>
             <tr><th>Indian ₹ pricing + GST invoice</th><td class="us"><span class="y">✓</span></td><td class="n">✗</td><td class="n">✗</td><td class="n">✗</td><td class="p">Varies</td></tr>
           </tbody>
         </table>
@@ -284,15 +284,15 @@
       <div class="price-row">
         <div class="price">
           <h3 class="ptitle">Pay As You Go</h3>
-          <div class="amt">From ₹50 <small>/ unit</small></div>
+          <div class="amt">From ₹50 <small>/ GB</small></div>
           <p class="muted" style="margin:.3rem 0 6px">First upload free</p>
           <ul>
             <% packs.forEach(function (p) { %>
-            <li><b><%= p.units %> units</b> — ₹<%= (p.base / 100).toLocaleString('en-IN') %>
-              <span class="muted">(₹<%= Math.round(p.ratePerUnitPaise / 100) %>/unit<%= p.bonusPaise > 0 ? ' — bigger pack, lower rate' : '' %>)</span></li>
+            <li><b><%= p.units %> GB</b> — ₹<%= (p.base / 100).toLocaleString('en-IN') %>
+              <span class="muted">(₹<%= Math.round(p.ratePerUnitPaise / 100) %>/GB<%= p.bonusPaise > 0 ? ' — bigger pack, lower rate' : '' %>)</span></li>
             <% }); %>
-            <li>1 unit = 1&nbsp;GB, rounded up — a 2.5&nbsp;GB file is 3 units</li>
-            <li>Bigger packs beyond 50 units at the lowest ₹40/unit rate</li>
+            <li>Billed per GB, rounded up — a 2.5&nbsp;GB file is 3&nbsp;GB</li>
+            <li>Bigger packs beyond 50&nbsp;GB at the lowest ₹40/GB rate</li>
             <li>GST invoice on request — just add your GSTIN</li>
             <li>Add staff with a ₹1,000+ top-up</li>
             <li class="excl">No daily scheduler — that's Always-On</li>
@@ -333,7 +333,7 @@
         <details><summary>Can my team help run it?</summary>
           <p>Yes — add staff with view or edit permissions once you're on Always-On <b>or</b> have topped up ₹1,000+. It's designed to be simple enough for anyone to operate.</p></details>
         <details><summary>How is it priced?</summary>
-          <p>Pay as you go from ₹50 per unit of transfer (one unit = 1&nbsp;GB, rounded up — a 2.5&nbsp;GB file is 3 units), dropping to ₹45 and ₹40 on bigger packs. Your first upload is free. Add your GSTIN for a GST invoice. Optional Always-On (₹999/month) unlocks the daily scheduler and unlimited staff; staff also unlock with a ₹1,000+ top-up. Transfers stay pay-as-you-go on top.</p></details>
+          <p>Pay as you go from ₹50 per GB of transfer (billed per GB, rounded up — a 2.5&nbsp;GB file is 3&nbsp;GB), dropping to ₹45 and ₹40 on bigger packs. Your first upload is free. Add your GSTIN for a GST invoice. Optional Always-On (₹999/month) unlocks the daily scheduler and unlimited staff; staff also unlock with a ₹1,000+ top-up. Transfers stay pay-as-you-go on top.</p></details>
       </div>
     </div>
   </section>

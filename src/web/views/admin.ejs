@@ -202,7 +202,7 @@ async function loadConfig() {
       ? '<span class="badge ok">Razorpay connected</span>'
       : '<span class="badge warn">Razorpay not configured — tenants cannot top up</span>')
       + (c.hasWebhookSecret ? ' <span class="badge ok">webhook secret set</span>' : ' <span class="badge">no webhook secret</span>')
-      + ` &nbsp; Pricing: ${rupees(c.pricePerUnitPaise)}/unit · unit = ${(c.unitBytes/1073741824).toFixed(0)} GiB · `
+      + ` &nbsp; Pricing: ${rupees(c.pricePerUnitPaise)}/GB · 1 GB = ${(c.unitBytes/1073741824).toFixed(0)} GiB · `
       + `GST ${c.gstPercent}% · gateway ${c.gatewayPercent}% · min top-up ${rupees(c.minTopupPaise)}`;
   } catch (e) { document.getElementById('rzp-status').textContent = e.message; }
 }
@@ -416,12 +416,12 @@ async function load() {
       <td>${t.channels}</td>
       <td>${t.uploaded}</td>
       <td class="nowrap" title="Actual data uploaded">${fmtBytes(t.uploaded_bytes)}</td>
-      <td class="nowrap">${t.unlimited ? '<b>∞</b>' : '<b>' + t.units + '</b> units'} · ${rupees(t.balance_paise)}
+      <td class="nowrap">${t.unlimited ? '<b>∞</b>' : '<b>' + t.units + '</b> GB'} · ${rupees(t.balance_paise)}
         <button title="Adjust balance by ₹" onclick="adjust(${t.id}, '${esc(t.name)}')">±</button></td>
-      <td class="nowrap">${t.used_units} units</td>
+      <td class="nowrap">${t.used_units} GB</td>
       <td class="nowrap">${t.unlimited
         ? '<span class="badge ok">Unmetered</span> <button title="Switch to metered (keeps balance)" onclick="planMeter(' + t.id + ')">Meter…</button>'
-        : '<input type="number" min="0" step="1" value="' + t.units + '" style="width:56px" onchange="planUnits(' + t.id + ', this.value)" title="Units (videos) for this workspace"> <button title="Make this workspace unmetered" onclick="planUnmetered(' + t.id + ')">∞</button>'}</td>
+        : '<input type="number" min="0" step="1" value="' + t.units + '" style="width:56px" onchange="planUnits(' + t.id + ', this.value)" title="GB for this workspace"> <button title="Make this workspace unmetered" onclick="planUnmetered(' + t.id + ')">∞</button>'}</td>
       <td><button class="primary" onclick="impersonate(${t.id})">Impersonate</button></td>
     </tr>
   `).join('') || '<tr><td colspan="13" class="muted">No tenants yet.</td></tr>';
@@ -441,12 +441,12 @@ async function adjust(id, name) {
   } catch (e) { toast(e.message, 'err'); }
 }
 
-// Plan control: type a number of units, or make the workspace unmetered.
+// Plan control: type a number of GB, or make the workspace unmetered.
 async function planUnits(id, val) {
   const n = Math.max(0, Math.round(Number(val) || 0));
   try {
     await api('/admin/tenants/' + id + '/plan', { method: 'POST', body: { units: n } });
-    toast(`${n} unit${n === 1 ? '' : 's'} saved`);
+    toast(`${n} GB saved`);
     load();
   } catch (e) { toast(e.message, 'err'); load(); }
 }
@@ -460,7 +460,7 @@ async function planUnmetered(id) {
 async function planMeter(id) {
   try {
     await api('/admin/tenants/' + id + '/plan', { method: 'POST', body: { unmetered: false } });
-    toast('Metering on — set the units');
+    toast('Metering on — set the GB');
     load();
   } catch (e) { toast(e.message, 'err'); load(); }
 }

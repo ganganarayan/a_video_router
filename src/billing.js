@@ -140,7 +140,7 @@ export async function deductForUpload(tenantId, recordingId, sizeBytes) {
       await client.query(
         `INSERT INTO wallet_txns (tenant_id, type, amount_paise, balance_after_paise, units, recording_id, note)
          VALUES ($1, 'deduction', 0, $2, $3, $4, $5)`,
-        [tenantId, Number(w.balance_paise), uUnits, recordingId, `unmetered (${uUnits} unit(s))`],
+        [tenantId, Number(w.balance_paise), uUnits, recordingId, `unmetered (${uUnits} GB)`],
       );
       await client.query('COMMIT');
       return { charged: 0, units: uUnits, unlimited: true };
@@ -161,7 +161,7 @@ export async function deductForUpload(tenantId, recordingId, sizeBytes) {
       `INSERT INTO wallet_txns (tenant_id, type, amount_paise, balance_after_paise, units, recording_id, note)
        VALUES ($1, 'deduction', $2, $3, $4, $5, $6)`,
       [tenantId, -cost, newBalance, units, recordingId,
-        freeApplied ? `free first upload (${freeApplied} unit free)` : `${chargeableUnits} unit(s)`],
+        freeApplied ? `free first upload (${freeApplied} GB free)` : `${chargeableUnits} GB`],
     );
     await client.query('COMMIT');
     log(`billing: tenant ${tenantId} charged ${cost} paise (${units} unit(s), free ${freeApplied}) -> balance ${newBalance}`);
@@ -219,7 +219,7 @@ export function packQuote(units, cfg) {
 export function validateUnits(units) {
   const u = Number(units);
   if (!Number.isInteger(u) || u < UNITS_STEP || u % UNITS_STEP !== 0) {
-    return { ok: false, error: `Buy units in multiples of ${UNITS_STEP} (minimum ${UNITS_STEP}).` };
+    return { ok: false, error: `Buy GB in multiples of ${UNITS_STEP} (minimum ${UNITS_STEP}).` };
   }
   return { ok: true, units: u };
 }
@@ -392,7 +392,7 @@ export async function setPlanUnits(tenantId, units) {
     await client.query(
       `INSERT INTO wallet_txns (tenant_id, type, amount_paise, balance_after_paise, units, note)
        VALUES ($1, 'adjustment', $2, $3, $4, $5)`,
-      [tenantId, delta, paise, u, `super-admin set plan to ${u} unit(s)`],
+      [tenantId, delta, paise, u, `super-admin set plan to ${u} GB`],
     );
     await client.query('COMMIT');
     return { units: u, balancePaise: paise };

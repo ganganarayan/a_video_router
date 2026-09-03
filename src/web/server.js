@@ -256,7 +256,7 @@ export function createServer() {
       '',
       '> AVideoRouter automatically moves Zoom and Fathom recordings to YouTube and your LMS —',
       '> downloading, uploading, organizing into courses, and optionally deleting the Zoom original —',
-      '> on a schedule, hands-free. Subscription-free, pay-as-you-go (₹50 per unit of transfer, up to 1 GB).',
+      '> on a schedule, hands-free. Subscription-free, pay-as-you-go (₹50 per GB of transfer).',
       '',
       '## Start here',
       `- [Home](${base}/): what it does, pricing, and how it works`,

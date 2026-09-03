@@ -412,7 +412,7 @@ apiRouter.post('/admin/tenants/:id/plan', requireSuperAdmin, wrap(async (req, re
   }
   const units = Number(req.body.units);
   if (!Number.isInteger(units) || units < 0) {
-    return res.status(400).json({ error: 'Units must be a whole number (0 or more).' });
+    return res.status(400).json({ error: 'GB must be a whole number (0 or more).' });
   }
   const r = await billing.setPlanUnits(id, units);
   res.json({ ok: true, ...r });

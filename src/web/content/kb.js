@@ -115,16 +115,16 @@ export const KB_TOPICS = [
   {
     slug: 'pay-as-you-go-video-automation-pricing',
     title: 'No rigid subscriptions — pay only for what you transfer',
-    teaser: 'Subscription-free, pay-as-you-go at ₹50 per unit (up to 1 GB), with GST invoices and free team access.',
-    metaDescription: 'AVideoRouter is subscription-free: pay-as-you-go at ₹50 per unit of transfer (up to 1 GB), buy credits only as needed, with GST invoices and free team access.',
+    teaser: 'Subscription-free, pay-as-you-go at ₹50 per GB of transfer, with GST invoices and free team access.',
+    metaDescription: 'AVideoRouter is subscription-free: pay-as-you-go at ₹50 per GB of transfer, buy credits only as needed, with GST invoices and free team access.',
     keywords: ['pay as you go video tool', 'no subscription video automation', 'affordable zoom to youtube tool', 'video automation pricing india', 'gst invoice saas'],
     painHeading: 'The pain: rigid software subscriptions',
     pain: `<p>Most tools force you into an expensive monthly subscription — you pay the same whether you
         ran fifty sessions this month or five. When your usage fluctuates, a fixed lock-in feels like
         money down the drain.</p>`,
     solutionHeading: 'How AVideoRouter solves it',
-    solution: `<p>AVideoRouter is <b>subscription-free and pay-as-you-go</b>: ₹50 per unit of transfer
-        (one unit is up to 1&nbsp;GB per file). Buy credits only as you need them, they never expire
+    solution: `<p>AVideoRouter is <b>subscription-free and pay-as-you-go</b>: ₹50 per GB of transfer
+        (billed per GB, rounded up). Buy credits only as you need them, they never expire
         until used, GST invoices are supported, and you can add your team with a ₹1,000+ top-up (or on Always-On). Your first upload is on us.</p>`,
   },
 ];
