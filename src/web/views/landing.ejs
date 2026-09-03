@@ -63,6 +63,8 @@
     header .wrap{display:flex;align-items:center;justify-content:space-between;height:62px}
     .brand{font-weight:800;font-size:19px;letter-spacing:.2px}
     .brand span{background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+    .brand-row{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--text)}
+    .brand-logo{height:34px;width:auto;display:block}
 
     .hero{text-align:center;padding:70px 0 40px}
     .hero h1{font-size:clamp(30px,5vw,50px);line-height:1.1;margin:0 0 18px;font-weight:800}
@@ -138,7 +140,10 @@
 </head>
 <body>
   <header><div class="wrap">
-    <div class="brand"><span>A</span>Video<span>Router</span></div>
+    <a href="/" class="brand-row">
+      <img src="/public/logo.jpg" alt="AVideoRouter logo" class="brand-logo" onerror="this.style.display='none'">
+      <div class="brand"><span>A</span>Video<span>Router</span></div>
+    </a>
     <span style="display:flex;align-items:center;gap:12px"><span data-theme-toggle></span><a class="btn primary" href="/register">Sign up free</a><a class="btn" href="/login">Log in</a></span>
   </div></header>
 
