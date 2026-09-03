@@ -63,8 +63,8 @@
     header .wrap{display:flex;align-items:center;justify-content:space-between;height:62px}
     .brand{font-weight:800;font-size:19px;letter-spacing:.2px}
     .brand span{background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
-    .brand-row{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--text)}
-    .brand-logo{height:34px;width:auto;display:block}
+    .hero-visual{display:flex;justify-content:center;margin:10px auto 0;max-width:840px}
+    .hero-img{width:100%;height:auto;border-radius:16px;border:1px solid var(--line);box-shadow:0 20px 60px rgba(0,0,0,.4)}
 
     .hero{text-align:center;padding:70px 0 40px}
     .hero h1{font-size:clamp(30px,5vw,50px);line-height:1.1;margin:0 0 18px;font-weight:800}
@@ -140,10 +140,7 @@
 </head>
 <body>
   <header><div class="wrap">
-    <a href="/" class="brand-row">
-      <img src="/public/logo.jpg" alt="AVideoRouter logo" class="brand-logo" onerror="this.style.display='none'">
-      <div class="brand"><span>A</span>Video<span>Router</span></div>
-    </a>
+    <div class="brand"><span>A</span>Video<span>Router</span></div>
     <span style="display:flex;align-items:center;gap:12px"><span data-theme-toggle></span><a class="btn primary" href="/register">Sign up free</a><a class="btn" href="/login">Log in</a></span>
   </div></header>
 
@@ -159,6 +156,12 @@
         <a class="btn big" href="#how">See how it works</a>
       </div>
       <div class="tiny">Start free · Pay as you go · GST invoice provided</div>
+    </div>
+
+    <!-- HERO VISUAL (the product-story banner) -->
+    <div class="hero-visual">
+      <img src="/public/logo.jpg" alt="AVideoRouter — Zoom and Fathom recordings routed through AI to YouTube and your LMS"
+        class="hero-img" onerror="this.closest('.hero-visual').style.display='none'">
     </div>
 
     <!-- HERO VIDEO (pulled live from settings — accepts a full embed snippet OR a bare URL) -->
