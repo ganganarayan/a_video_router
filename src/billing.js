@@ -121,7 +121,18 @@ export async function deductForUpload(tenantId, recordingId, sizeBytes) {
     const { rows } = await client.query('SELECT * FROM wallets WHERE tenant_id = $1 FOR UPDATE', [tenantId]);
     const w = rows[0];
     if (!w) { await client.query('ROLLBACK'); return { charged: 0, skipped: 'no wallet' }; }
-    if (w.unlimited) { await client.query('COMMIT'); return { charged: 0, unlimited: true }; }
+    if (w.unlimited) {
+      // Unmetered: never charged, but still record the units so the "Used" column
+      // reflects real usage. Balance is left untouched.
+      const uUnits = computeUnits(sizeBytes, cfg.unitBytes);
+      await client.query(
+        `INSERT INTO wallet_txns (tenant_id, type, amount_paise, balance_after_paise, units, recording_id, note)
+         VALUES ($1, 'deduction', 0, $2, $3, $4, $5)`,
+        [tenantId, Number(w.balance_paise), uUnits, recordingId, `unmetered (${uUnits} unit(s))`],
+      );
+      await client.query('COMMIT');
+      return { charged: 0, units: uUnits, unlimited: true };
+    }
 
     const units = computeUnits(sizeBytes, cfg.unitBytes);
     let freeApplied = 0;
