@@ -73,6 +73,8 @@ apiRouter.get('/tenants', requireSuperAdmin, wrap(async (_req, res) => {
                AND u.deleted_at IS NULL ORDER BY u.id LIMIT 1) AS owner_email,
             (SELECT count(*) FROM users u WHERE u.tenant_id = t.id AND u.deleted_at IS NULL)::int AS users,
             (SELECT count(*) FROM processed_recordings p WHERE p.tenant_id = t.id AND p.youtube_video_id IS NOT NULL)::int AS uploaded,
+            (SELECT COALESCE(SUM(p.file_size_bytes), 0) FROM processed_recordings p
+               WHERE p.tenant_id = t.id AND p.youtube_video_id IS NOT NULL)::bigint AS uploaded_bytes,
             (SELECT count(*) FROM youtube_channels c WHERE c.tenant_id = t.id AND c.refresh_token IS NOT NULL)::int AS channels
      FROM tenants t
      LEFT JOIN wallets w ON w.tenant_id = t.id

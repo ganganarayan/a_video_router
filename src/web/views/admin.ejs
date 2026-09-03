@@ -150,7 +150,7 @@
   <table id="tenants-table">
     <thead><tr>
       <th>#</th><th>Slug</th><th>Name</th><th>Owner email</th><th>Status</th><th>Users</th>
-      <th>Channels</th><th>Uploaded</th><th>Balance</th><th>Used</th>
+      <th>Channels</th><th>Uploaded</th><th>Data</th><th>Balance</th><th>Used</th>
       <th>Plan</th><th></th>
     </tr></thead>
     <tbody></tbody>
@@ -161,6 +161,16 @@
 function rupees(paise) {
   if (paise == null) return '—';
   return '₹' + (Number(paise) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// Actual data uploaded, in binary units (matches unit_bytes = 1 GiB).
+function fmtBytes(bytes) {
+  const n = Number(bytes) || 0;
+  if (n < 1024) return n + ' B';
+  const units = ['KB', 'MB', 'GB', 'TB', 'PB'];
+  let v = n / 1024, i = 0;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+  return v.toLocaleString(undefined, { maximumFractionDigits: v < 10 ? 2 : 1 }) + ' ' + units[i];
 }
 
 const PROVIDER_LABELS = { razorpay: 'Razorpay', easebuzz: 'Easebuzz', phonepe: 'PhonePe' };
@@ -405,6 +415,7 @@ async function load() {
       <td>${t.users}</td>
       <td>${t.channels}</td>
       <td>${t.uploaded}</td>
+      <td class="nowrap" title="Actual data uploaded">${fmtBytes(t.uploaded_bytes)}</td>
       <td class="nowrap">${t.unlimited ? '<b>∞</b>' : '<b>' + t.units + '</b> units'} · ${rupees(t.balance_paise)}
         <button title="Adjust balance by ₹" onclick="adjust(${t.id}, '${esc(t.name)}')">±</button></td>
       <td class="nowrap">${t.used_units} units</td>
@@ -413,7 +424,7 @@ async function load() {
         : '<input type="number" min="0" step="1" value="' + t.units + '" style="width:56px" onchange="planUnits(' + t.id + ', this.value)" title="Units (videos) for this workspace"> <button title="Make this workspace unmetered" onclick="planUnmetered(' + t.id + ')">∞</button>'}</td>
       <td><button class="primary" onclick="impersonate(${t.id})">Impersonate</button></td>
     </tr>
-  `).join('') || '<tr><td colspan="12" class="muted">No tenants yet.</td></tr>';
+  `).join('') || '<tr><td colspan="13" class="muted">No tenants yet.</td></tr>';
 }
 
 async function adjust(id, name) {
