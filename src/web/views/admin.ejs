@@ -150,8 +150,8 @@
   <table id="tenants-table">
     <thead><tr>
       <th>#</th><th>Slug</th><th>Name</th><th>Owner email</th><th>Status</th><th>Users</th>
-      <th>Channels</th><th>Uploaded</th><th>Wallet (₹)</th><th>Free upload</th>
-      <th>Unmetered</th><th></th>
+      <th>Channels</th><th>Uploaded</th><th>Balance</th><th>Used</th>
+      <th>Plan</th><th></th>
     </tr></thead>
     <tbody></tbody>
   </table>
@@ -405,10 +405,12 @@ async function load() {
       <td>${t.users}</td>
       <td>${t.channels}</td>
       <td>${t.uploaded}</td>
-      <td class="nowrap">${rupees(t.balance_paise)}
-        <button title="Adjust balance" onclick="adjust(${t.id}, '${esc(t.name)}')">±</button></td>
-      <td>${t.free_upload_used ? 'used' : 'available'}</td>
-      <td><input type="checkbox" ${t.unlimited ? 'checked' : ''} onchange="setUnlimited(${t.id}, this.checked)"></td>
+      <td class="nowrap">${t.unlimited ? '<b>∞</b>' : '<b>' + t.units + '</b> units'} · ${rupees(t.balance_paise)}
+        <button title="Adjust balance by ₹" onclick="adjust(${t.id}, '${esc(t.name)}')">±</button></td>
+      <td class="nowrap">${t.used_units} units</td>
+      <td class="nowrap">${t.unlimited
+        ? '<span class="badge ok">Unmetered</span> <button title="Switch to metered (keeps balance)" onclick="planMeter(' + t.id + ')">Meter…</button>'
+        : '<input type="number" min="0" step="1" value="' + t.units + '" style="width:56px" onchange="planUnits(' + t.id + ', this.value)" title="Units (videos) for this workspace"> <button title="Make this workspace unmetered" onclick="planUnmetered(' + t.id + ')">∞</button>'}</td>
       <td><button class="primary" onclick="impersonate(${t.id})">Impersonate</button></td>
     </tr>
   `).join('') || '<tr><td colspan="12" class="muted">No tenants yet.</td></tr>';
@@ -428,10 +430,28 @@ async function adjust(id, name) {
   } catch (e) { toast(e.message, 'err'); }
 }
 
-async function setUnlimited(id, unlimited) {
-  try { await api('/admin/tenants/' + id + '/unlimited', { method: 'POST', body: { unlimited } });
-    toast(unlimited ? 'Tenant set to unmetered' : 'Metering enabled for tenant'); }
-  catch (e) { toast(e.message, 'err'); load(); }
+// Plan control: type a number of units, or make the workspace unmetered.
+async function planUnits(id, val) {
+  const n = Math.max(0, Math.round(Number(val) || 0));
+  try {
+    await api('/admin/tenants/' + id + '/plan', { method: 'POST', body: { units: n } });
+    toast(`${n} unit${n === 1 ? '' : 's'} saved`);
+    load();
+  } catch (e) { toast(e.message, 'err'); load(); }
+}
+async function planUnmetered(id) {
+  try {
+    await api('/admin/tenants/' + id + '/plan', { method: 'POST', body: { unmetered: true } });
+    toast('Set to unmetered');
+    load();
+  } catch (e) { toast(e.message, 'err'); load(); }
+}
+async function planMeter(id) {
+  try {
+    await api('/admin/tenants/' + id + '/plan', { method: 'POST', body: { unmetered: false } });
+    toast('Metering on — set the units');
+    load();
+  } catch (e) { toast(e.message, 'err'); load(); }
 }
 
 async function impersonate(id) {

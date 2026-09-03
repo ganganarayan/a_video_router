@@ -76,6 +76,25 @@ export function computeUnits(sizeBytes, unitBytes) {
   return Math.max(1, Math.ceil(Number(sizeBytes) / Number(unitBytes)));
 }
 
+// Effective unit balance = wallet credit (paise → units at the base ₹/unit rate)
+// plus the still-unused free upload. Unmetered wallets are unbounded → null.
+export function unitsBalance(wallet, cfg) {
+  if (!wallet) return 0;
+  if (wallet.unlimited) return null; // unmetered
+  const paidUnits = Math.floor(Number(wallet.balance_paise) / cfg.pricePerUnitPaise);
+  return paidUnits + (wallet.free_upload_used ? 0 : 1);
+}
+
+// Total units consumed so far (sum of deduction transactions).
+export async function usedUnits(tenantId) {
+  const { rows } = await query(
+    `SELECT COALESCE(SUM(units), 0)::int AS used
+       FROM wallet_txns WHERE tenant_id = $1 AND type = 'deduction'`,
+    [tenantId],
+  );
+  return Number(rows[0].used);
+}
+
 // ---------- pre-push gate ----------
 // Strict: a NEW push is allowed only when the tenant is unlimited, still has the
 // free upload, or has a positive balance. The size (units) isn't known yet, so
@@ -325,6 +344,41 @@ export async function adjustBalance(tenantId, amountPaise, note) {
 
 export async function setUnlimited(tenantId, unlimited) {
   await query('UPDATE wallets SET unlimited = $1, updated_at = now() WHERE tenant_id = $2', [Boolean(unlimited), tenantId]);
+}
+
+// Super-admin: set a tenant's plan to a fixed number of units. The wallet balance
+// becomes units × base ₹/unit, the free upload is marked used (so the grant is
+// not double-counted with the free-first-upload), and unmetered is cleared. When
+// the balance reaches 0 the next upload is gated (the pre-flight prompts to top
+// up). units may be 0. Records an adjustment transaction for the audit trail.
+export async function setPlanUnits(tenantId, units) {
+  const cfg = await getBillingConfig();
+  const u = Math.max(0, Math.round(Number(units) || 0));
+  const paise = u * cfg.pricePerUnitPaise;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query('SELECT balance_paise FROM wallets WHERE tenant_id = $1 FOR UPDATE', [tenantId]);
+    if (!rows[0]) { await client.query('ROLLBACK'); throw new Error('no wallet'); }
+    const delta = paise - Number(rows[0].balance_paise);
+    await client.query(
+      `UPDATE wallets SET balance_paise = $1, free_upload_used = true, unlimited = false, updated_at = now()
+       WHERE tenant_id = $2`,
+      [paise, tenantId],
+    );
+    await client.query(
+      `INSERT INTO wallet_txns (tenant_id, type, amount_paise, balance_after_paise, units, note)
+       VALUES ($1, 'adjustment', $2, $3, $4, $5)`,
+      [tenantId, delta, paise, u, `super-admin set plan to ${u} unit(s)`],
+    );
+    await client.query('COMMIT');
+    return { units: u, balancePaise: paise };
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 // ---------- Always-On subscription (features-only tier) ----------

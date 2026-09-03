@@ -114,14 +114,22 @@ async function loadWallet() {
   CFG = await api('/billing');
   const perVideo = CFG.pricePerUnitPaise;
   const b = document.getElementById('balance');
-  b.textContent = fmtRs(CFG.balance_paise);
-  b.style.color = CFG.balance_paise < 0 ? 'var(--err)' : '';
+  if (CFG.unlimited) {
+    b.textContent = 'Unmetered';
+    b.style.color = '';
+  } else {
+    // Amount and units, side by side.
+    b.innerHTML = `<b>${CFG.units}</b> unit${CFG.units === 1 ? '' : 's'}`
+      + ` <span class="muted" style="font-weight:400">· ${fmtRs(CFG.balance_paise)}</span>`;
+    b.style.color = CFG.units < 0 ? 'var(--err)' : '';
+  }
 
   const vids = document.getElementById('balance-videos');
-  if (CFG.unlimited) vids.textContent = 'Unmetered — uploads are not charged.';
-  else if (CFG.balance_paise > 0) vids.textContent = '≈ ' + Math.floor(CFG.balance_paise / perVideo) + ' units of credit';
-  else if (CFG.balance_paise < 0) vids.textContent = 'Negative — buy credits to keep pushing.';
-  else vids.textContent = CFG.free_upload_used ? 'No credits — buy a pack to push.' : '';
+  const used = `${CFG.usedUnits} unit${CFG.usedUnits === 1 ? '' : 's'} used`;
+  if (CFG.unlimited) vids.textContent = 'Uploads are not charged.';
+  else if (CFG.units > 0) vids.textContent = `${used} · ${CFG.units} left`;
+  else if (CFG.units < 0) vids.textContent = `${used} · negative — buy credits to keep uploading.`;
+  else vids.textContent = `${used} · no credits — buy a pack to upload.`;
 
   const badges = [];
   if (CFG.unlimited) badges.push('<span class="badge ok">unlimited (unmetered)</span>');

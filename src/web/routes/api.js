@@ -60,6 +60,8 @@ apiRouter.get('/tenants', requireSuperAdmin, wrap(async (_req, res) => {
   const { rows } = await query(
     `SELECT t.id, t.slug, t.name, t.status, t.created_at,
             w.balance_paise, w.free_upload_used, w.unlimited,
+            (SELECT COALESCE(SUM(wt.units), 0) FROM wallet_txns wt
+               WHERE wt.tenant_id = t.id AND wt.type = 'deduction')::int AS used_units,
             (SELECT u.email FROM users u WHERE u.tenant_id = t.id AND u.staff_permission IS NULL
                AND u.deleted_at IS NULL ORDER BY u.id LIMIT 1) AS owner_email,
             (SELECT count(*) FROM users u WHERE u.tenant_id = t.id AND u.deleted_at IS NULL)::int AS users,
@@ -69,7 +71,12 @@ apiRouter.get('/tenants', requireSuperAdmin, wrap(async (_req, res) => {
      LEFT JOIN wallets w ON w.tenant_id = t.id
      ORDER BY t.id`,
   );
-  res.json(rows);
+  // Add the effective unit balance (credit + pending free upload) at the base rate.
+  const cfg = await billing.getBillingConfig();
+  res.json(rows.map((r) => ({
+    ...r,
+    units: billing.unitsBalance(r, cfg), // null = unmetered
+  })));
 }));
 
 // NOTE: register the static /impersonate/stop BEFORE the parameterized
@@ -381,6 +388,25 @@ apiRouter.post('/admin/tenants/:id/adjust', requireSuperAdmin, wrap(async (req, 
 apiRouter.post('/admin/tenants/:id/unlimited', requireSuperAdmin, wrap(async (req, res) => {
   await billing.setUnlimited(Number(req.params.id), Boolean(req.body.unlimited));
   res.json({ ok: true });
+}));
+
+// Set a tenant's plan (super-admin only): either a fixed number of units, or
+// unmetered. { unmetered: true|false } toggles unlimited; { units: N } sets the
+// wallet to N units (any whole number, default 1 for new tenants).
+apiRouter.post('/admin/tenants/:id/plan', requireSuperAdmin, wrap(async (req, res) => {
+  const id = Number(req.params.id);
+  const t = await getTenantById(id);
+  if (!t) return res.status(404).json({ error: 'tenant not found' });
+  if (typeof req.body.unmetered === 'boolean') {
+    await billing.setUnlimited(id, req.body.unmetered);
+    return res.json({ ok: true, unmetered: req.body.unmetered });
+  }
+  const units = Number(req.body.units);
+  if (!Number.isInteger(units) || units < 0) {
+    return res.status(400).json({ error: 'Units must be a whole number (0 or more).' });
+  }
+  const r = await billing.setPlanUnits(id, units);
+  res.json({ ok: true, ...r });
 }));
 
 // Account settings (own login) — always available, no tenant needed.
@@ -1131,6 +1157,8 @@ apiRouter.get('/billing', wrap(async (req, res) => {
     balance_paise: Number(w?.balance_paise || 0),
     unlimited: Boolean(w?.unlimited),
     free_upload_used: Boolean(w?.free_upload_used),
+    units: billing.unitsBalance(w, c),      // effective unit balance (null = unmetered)
+    usedUnits: await billing.usedUnits(T(req)),
     pricePerUnitPaise: c.pricePerUnitPaise,
     unitBytes: c.unitBytes,
     gstPercent: c.gstPercent,
