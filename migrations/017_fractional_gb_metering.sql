@@ -1,0 +1,11 @@
+-- ============================================================
+-- 017 — Byte-accurate (fractional-GB) metering
+--
+-- Usage is now charged by ACTUAL data transferred, not rounded up to whole GB:
+-- a 2.5 GB file consumes exactly 2.5 GB, and the wallet's GB count falls
+-- fractionally as data moves. Buying stays in whole-GB packs (multiples of 10).
+--
+-- wallet_txns.units therefore has to hold fractional GB. Widen it from INTEGER
+-- to NUMERIC — additive and lossless (existing whole-number rows are preserved).
+-- ============================================================
+ALTER TABLE wallet_txns ALTER COLUMN units TYPE NUMERIC(14,4);

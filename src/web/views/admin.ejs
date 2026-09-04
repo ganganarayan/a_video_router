@@ -163,6 +163,12 @@ function rupees(paise) {
   return '₹' + (Number(paise) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// GB balances are byte-accurate (fractional). Show up to 2 decimals, trimmed.
+function fmtGb(n) {
+  if (n == null) return '—';
+  return (Math.round((Number(n) || 0) * 100) / 100).toLocaleString(undefined);
+}
+
 // Actual data uploaded, in binary units (matches unit_bytes = 1 GiB).
 function fmtBytes(bytes) {
   const n = Number(bytes) || 0;
@@ -416,12 +422,12 @@ async function load() {
       <td>${t.channels}</td>
       <td>${t.uploaded}</td>
       <td class="nowrap" title="Actual data uploaded">${fmtBytes(t.uploaded_bytes)}</td>
-      <td class="nowrap">${t.unlimited ? '<b>∞</b>' : '<b>' + t.units + '</b> GB'} · ${rupees(t.balance_paise)}
+      <td class="nowrap">${t.unlimited ? '<b>∞</b>' : '<b>' + fmtGb(t.units) + '</b> GB'} · ${rupees(t.balance_paise)}
         <button title="Adjust balance by ₹" onclick="adjust(${t.id}, '${esc(t.name)}')">±</button></td>
-      <td class="nowrap">${t.used_units} GB</td>
+      <td class="nowrap">${fmtGb(t.used_units)} GB</td>
       <td class="nowrap">${t.unlimited
         ? '<span class="badge ok">Unmetered</span> <button title="Switch to metered (keeps balance)" onclick="planMeter(' + t.id + ')">Meter…</button>'
-        : '<input type="number" min="0" step="1" value="' + t.units + '" style="width:56px" onchange="planUnits(' + t.id + ', this.value)" title="GB for this workspace"> <button title="Make this workspace unmetered" onclick="planUnmetered(' + t.id + ')">∞</button>'}</td>
+        : '<input type="number" min="0" step="1" value="' + Math.round(Number(t.units) || 0) + '" style="width:56px" onchange="planUnits(' + t.id + ', this.value)" title="GB for this workspace"> <button title="Make this workspace unmetered" onclick="planUnmetered(' + t.id + ')">∞</button>'}</td>
       <td><button class="primary" onclick="impersonate(${t.id})">Impersonate</button></td>
     </tr>
   `).join('') || '<tr><td colspan="13" class="muted">No tenants yet.</td></tr>';

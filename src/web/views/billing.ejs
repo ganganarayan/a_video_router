@@ -2,8 +2,9 @@
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <h1>Billing</h1>
 <p class="muted">Pay as you go — from <b>₹50 per GB of transfer</b>, dropping to ₹45/GB (50&nbsp;GB) and ₹40/GB
-(100&nbsp;GB). You're billed per GB, rounded up (a 2.5&nbsp;GB file = 3&nbsp;GB). Your first
-upload is free. Buy GB in multiples of 10; an upload already in progress always finishes even if
+(100&nbsp;GB). You're billed for the actual data transferred — a 2.5&nbsp;GB file uses 2.5&nbsp;GB, and
+your balance drops as data moves. Your first upload is free. Buy GB in multiples of 10; an upload
+already in progress always finishes even if
 credits run out, and the shortfall is settled on your next top-up. If you have a GST number and want a
 GST invoice (to claim input credit), add your GST details in <a href="/settings">Settings</a> or the
 top-up popup.</p>
@@ -78,6 +79,8 @@ top-up popup.</p>
 
 <script>
 const fmtRs = (paise) => '₹' + (Number(paise) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// GB balances are byte-accurate (fractional). Show up to 2 decimals, trimmed.
+const fmtGb = (n) => (Math.round((Number(n) || 0) * 100) / 100).toLocaleString('en-IN');
 let CFG = null;
 const packSize = () => Math.max(1, Number(CFG.unitsStep) || 10);
 
@@ -119,15 +122,15 @@ async function loadWallet() {
     b.style.color = '';
   } else {
     // Amount and units, side by side.
-    b.innerHTML = `<b>${CFG.units}</b> GB`
+    b.innerHTML = `<b>${fmtGb(CFG.units)}</b> GB`
       + ` <span class="muted" style="font-weight:400">· ${fmtRs(CFG.balance_paise)}</span>`;
     b.style.color = CFG.units < 0 ? 'var(--err)' : '';
   }
 
   const vids = document.getElementById('balance-videos');
-  const used = `${CFG.usedUnits} GB used`;
+  const used = `${fmtGb(CFG.usedUnits)} GB used`;
   if (CFG.unlimited) vids.textContent = 'Uploads are not charged.';
-  else if (CFG.units > 0) vids.textContent = `${used} · ${CFG.units} left`;
+  else if (CFG.units > 0) vids.textContent = `${used} · ${fmtGb(CFG.units)} left`;
   else if (CFG.units < 0) vids.textContent = `${used} · negative — buy credits to keep uploading.`;
   else vids.textContent = `${used} · no credits — buy a pack to upload.`;
 
@@ -300,8 +303,8 @@ async function loadTxns() {
   document.querySelector('#txn-table tbody').innerHTML = rows.map(t => {
     const amt = Number(t.amount_paise);
     const cls = amt >= 0 ? 'ok' : 'err';
-    const vids = t.type === 'topup' && CFG ? Math.round(Number(t.amount_paise) / CFG.pricePerUnitPaise)
-      : (t.units ? t.units : '');
+    const vids = t.type === 'topup' && CFG ? fmtGb(Number(t.amount_paise) / CFG.pricePerUnitPaise)
+      : (t.units != null && t.units !== '' ? fmtGb(t.units) : '');
     return `<tr>
       <td class="nowrap">${fmtDate(t.created_at)}</td>
       <td><span class="badge ${t.type === 'topup' ? 'ok' : (t.type === 'deduction' ? 'warn' : '')}">${esc(t.type)}</span></td>

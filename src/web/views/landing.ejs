@@ -31,7 +31,7 @@
           "@type": "Offer",
           "price": "50",
           "priceCurrency": "INR",
-          "description": "Pay as you go — ₹50 per GB of transfer (billed per GB, rounded up). First upload free. Optional Always-On subscription."
+          "description": "Pay as you go — ₹50 per GB of actual data transferred (a 2.5 GB file is 2.5 GB, not rounded up). First upload free. Optional Always-On subscription."
         }
       }
     ]
@@ -291,7 +291,7 @@
             <li><b><%= p.units %> GB</b> — ₹<%= (p.base / 100).toLocaleString('en-IN') %>
               <span class="muted">(₹<%= Math.round(p.ratePerUnitPaise / 100) %>/GB<%= p.bonusPaise > 0 ? ' — bigger pack, lower rate' : '' %>)</span></li>
             <% }); %>
-            <li>Billed per GB, rounded up — a 2.5&nbsp;GB file is 3&nbsp;GB</li>
+            <li>Billed for the actual data transferred — a 2.5&nbsp;GB file is 2.5&nbsp;GB, not rounded up</li>
             <li>Bigger packs beyond 50&nbsp;GB at the lowest ₹40/GB rate</li>
             <li>GST invoice on request — just add your GSTIN</li>
             <li>Add staff with a ₹1,000+ top-up</li>
@@ -333,7 +333,7 @@
         <details><summary>Can my team help run it?</summary>
           <p>Yes — add staff with view or edit permissions once you're on Always-On <b>or</b> have topped up ₹1,000+. It's designed to be simple enough for anyone to operate.</p></details>
         <details><summary>How is it priced?</summary>
-          <p>Pay as you go from ₹50 per GB of transfer (billed per GB, rounded up — a 2.5&nbsp;GB file is 3&nbsp;GB), dropping to ₹45 and ₹40 on bigger packs. Your first upload is free. Add your GSTIN for a GST invoice. Optional Always-On (₹999/month) unlocks the daily scheduler and unlimited staff; staff also unlock with a ₹1,000+ top-up. Transfers stay pay-as-you-go on top.</p></details>
+          <p>Pay as you go from ₹50 per GB of transfer (billed for the actual data transferred — a 2.5&nbsp;GB file is 2.5&nbsp;GB, not rounded up), dropping to ₹45 and ₹40 on bigger packs. Your first upload is free. Add your GSTIN for a GST invoice. Optional Always-On (₹999/month) unlocks the daily scheduler and unlimited staff; staff also unlock with a ₹1,000+ top-up. Transfers stay pay-as-you-go on top.</p></details>
       </div>
     </div>
   </section>

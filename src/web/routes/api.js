@@ -68,7 +68,7 @@ apiRouter.get('/tenants', requireSuperAdmin, wrap(async (_req, res) => {
     `SELECT t.id, t.slug, t.name, t.status, t.created_at,
             w.balance_paise, w.free_upload_used, w.unlimited,
             (SELECT COALESCE(SUM(wt.units), 0) FROM wallet_txns wt
-               WHERE wt.tenant_id = t.id AND wt.type = 'deduction')::int AS used_units,
+               WHERE wt.tenant_id = t.id AND wt.type = 'deduction')::numeric AS used_units,
             (SELECT u.email FROM users u WHERE u.tenant_id = t.id AND u.staff_permission IS NULL
                AND u.deleted_at IS NULL ORDER BY u.id LIMIT 1) AS owner_email,
             (SELECT count(*) FROM users u WHERE u.tenant_id = t.id AND u.deleted_at IS NULL)::int AS users,

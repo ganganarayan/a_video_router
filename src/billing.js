@@ -82,25 +82,27 @@ export async function history(tenantId, limit = 100) {
   return rows;
 }
 
-// Units = file size in GB, rounded up (1 GB per unit), minimum 1. Uncapped:
-// a 2.5 GB file is 3 units, a 4 GB file is 4 units.
+// GB consumed by a transfer = exact bytes ÷ bytes-per-GB. Byte-accurate, NOT
+// rounded up: a 2.5 GB file consumes exactly 2.5 GB, a 0.3 GB file 0.3 GB.
+// Billing is by actual data transferred; buying is still in whole-GB packs.
 export function computeUnits(sizeBytes, unitBytes) {
-  return Math.max(1, Math.ceil(Number(sizeBytes) / Number(unitBytes)));
+  return Number(sizeBytes) / Number(unitBytes);
 }
 
-// Effective unit balance = wallet credit (paise → units at the base ₹/unit rate)
-// plus the still-unused free upload. Unmetered wallets are unbounded → null.
+// Effective GB balance = wallet credit (paise → GB at the base ₹/GB rate) plus
+// the still-unused free upload. Fractional — falls as actual data is transferred.
+// Unmetered wallets are unbounded → null.
 export function unitsBalance(wallet, cfg) {
   if (!wallet) return 0;
   if (wallet.unlimited) return null; // unmetered
-  const paidUnits = Math.floor(Number(wallet.balance_paise) / cfg.pricePerUnitPaise);
-  return paidUnits + (wallet.free_upload_used ? 0 : 1);
+  const paidGb = Number(wallet.balance_paise) / cfg.pricePerUnitPaise;
+  return paidGb + (wallet.free_upload_used ? 0 : 1);
 }
 
 // Total units consumed so far (sum of deduction transactions).
 export async function usedUnits(tenantId) {
   const { rows } = await query(
-    `SELECT COALESCE(SUM(units), 0)::int AS used
+    `SELECT COALESCE(SUM(units), 0)::numeric AS used
        FROM wallet_txns WHERE tenant_id = $1 AND type = 'deduction'`,
     [tenantId],
   );
@@ -133,24 +135,24 @@ export async function deductForUpload(tenantId, recordingId, sizeBytes) {
     const { rows } = await client.query('SELECT * FROM wallets WHERE tenant_id = $1 FOR UPDATE', [tenantId]);
     const w = rows[0];
     if (!w) { await client.query('ROLLBACK'); return { charged: 0, skipped: 'no wallet' }; }
+    // Exact GB transferred (fractional, byte-accurate — no round-up).
+    const gb = computeUnits(sizeBytes, cfg.unitBytes);
     if (w.unlimited) {
-      // Unmetered: never charged, but still record the units so the "Used" column
+      // Unmetered: never charged, but still record the GB so the "Used" column
       // reflects real usage. Balance is left untouched.
-      const uUnits = computeUnits(sizeBytes, cfg.unitBytes);
       await client.query(
         `INSERT INTO wallet_txns (tenant_id, type, amount_paise, balance_after_paise, units, recording_id, note)
          VALUES ($1, 'deduction', 0, $2, $3, $4, $5)`,
-        [tenantId, Number(w.balance_paise), uUnits, recordingId, `unmetered (${uUnits} GB)`],
+        [tenantId, Number(w.balance_paise), gb, recordingId, `unmetered (${gb.toFixed(2)} GB)`],
       );
       await client.query('COMMIT');
-      return { charged: 0, units: uUnits, unlimited: true };
+      return { charged: 0, units: gb, unlimited: true };
     }
 
-    const units = computeUnits(sizeBytes, cfg.unitBytes);
     let freeApplied = 0;
-    if (!w.free_upload_used) freeApplied = Math.min(units, 1); // first upload: free covers ≤1 unit
-    const chargeableUnits = units - freeApplied;
-    const cost = chargeableUnits * cfg.pricePerUnitPaise;
+    if (!w.free_upload_used) freeApplied = Math.min(gb, 1); // first upload: free covers the first ≤1 GB
+    const chargeableGb = gb - freeApplied;
+    const cost = Math.round(chargeableGb * cfg.pricePerUnitPaise); // exact paise for the data moved
     const newBalance = Number(w.balance_paise) - cost;
 
     await client.query(
@@ -160,12 +162,12 @@ export async function deductForUpload(tenantId, recordingId, sizeBytes) {
     await client.query(
       `INSERT INTO wallet_txns (tenant_id, type, amount_paise, balance_after_paise, units, recording_id, note)
        VALUES ($1, 'deduction', $2, $3, $4, $5, $6)`,
-      [tenantId, -cost, newBalance, units, recordingId,
-        freeApplied ? `free first upload (${freeApplied} GB free)` : `${chargeableUnits} GB`],
+      [tenantId, -cost, newBalance, gb, recordingId,
+        freeApplied ? `free first upload (${freeApplied.toFixed(2)} GB free)` : `${chargeableGb.toFixed(2)} GB`],
     );
     await client.query('COMMIT');
-    log(`billing: tenant ${tenantId} charged ${cost} paise (${units} unit(s), free ${freeApplied}) -> balance ${newBalance}`);
-    return { charged: cost, units, freeApplied, newBalance };
+    log(`billing: tenant ${tenantId} charged ${cost} paise (${gb.toFixed(4)} GB, free ${freeApplied.toFixed(4)}) -> balance ${newBalance}`);
+    return { charged: cost, units: gb, freeApplied, newBalance };
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     throw err;

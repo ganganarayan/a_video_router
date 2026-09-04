@@ -190,9 +190,10 @@ async function downloadUploadFinish(ctx, rec, rule, downloadFn, counts, details,
     log(`uploaded: ${ytTitle} -> ${url}`);
     progress?.finish();
 
-    // Charge the wallet by ACTUAL uploaded size (>1 unit = ₹50 × units; first
-    // upload free ≤1 unit). The upload already succeeded — a billing hiccup must
-    // never fail the row, and the balance is allowed to go negative here.
+    // Charge the wallet by ACTUAL uploaded size, byte-accurate (₹50 × exact GB
+    // transferred; first upload free for the first ≤1 GB). The upload already
+    // succeeded — a billing hiccup must never fail the row, and the balance is
+    // allowed to go negative here.
     try {
       await deductForUpload(ctx.tenantId, rec.id, size);
     } catch (err) {
