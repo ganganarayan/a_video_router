@@ -236,6 +236,57 @@ async function insertHit(h) {
   if (!h.country && !h.isBot && h.ip) enrichGeo(h.ip, hitId, h.visitorId);
 }
 
+// Resolve a signup's acquisition snapshot from the anonymous visitor cookie.
+// Prefers the visitor row (rich first-touch UTM / referrer / geo captured on the
+// public pages the person browsed before registering); falls back to the raw
+// request when there is no visitor row (e.g. a direct hit to /register). Safe to
+// call in any signup path — returns an all-null-ish object on any failure so it
+// can never block account creation.
+export async function signupAttribution(req) {
+  const ua = req.headers['user-agent'] || null;
+  const ip = clientIp(req);
+  const { browser, os, device } = parseUA(ua || '');
+  const geo = headerGeo(req);
+  const base = {
+    visitor_id: req.cookies?.[VID_COOKIE] || null,
+    utm_source: null, utm_medium: null, utm_campaign: null,
+    referrer: str(req.headers.referer || req.headers.referrer),
+    landing_path: null,
+    ua: str(ua), ip,
+    browser, os, device,
+    country: geo.country, city: geo.city,
+  };
+  try {
+    if (!base.visitor_id) return base;
+    const { rows } = await query(
+      `SELECT utm_source, utm_medium, utm_campaign, referrer, landing_path,
+              ua_raw, browser, os, device_type, country, city
+         FROM visitors WHERE visitor_id = $1`,
+      [base.visitor_id],
+    );
+    const v = rows[0];
+    if (!v) return base;
+    return {
+      visitor_id: base.visitor_id,
+      utm_source: v.utm_source || null,
+      utm_medium: v.utm_medium || null,
+      utm_campaign: v.utm_campaign || null,
+      referrer: v.referrer || base.referrer,
+      landing_path: v.landing_path || null,
+      ua: v.ua_raw || base.ua,
+      ip: base.ip, // current request IP; visitors.ip is first-touch and may differ
+      browser: v.browser || browser,
+      os: v.os || os,
+      device: v.device_type || device,
+      country: v.country || geo.country,
+      city: v.city || geo.city,
+    };
+  } catch (e) {
+    logError('signupAttribution:', e);
+    return base;
+  }
+}
+
 // Client beacon: confirms the visitor's most recent hit as definitely human and
 // attaches viewport / timezone / Meta cookies. Called by the public POST /api/track.
 export async function recordBeacon(req) {

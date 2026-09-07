@@ -11,7 +11,7 @@ import {
 } from './auth.js';
 import crypto from 'node:crypto';
 import { sendPlatformMail } from '../lib/mailer.js';
-import { trackMiddleware, recordBeacon } from './track.js';
+import { trackMiddleware, recordBeacon, signupAttribution } from './track.js';
 import * as meta from '../lib/meta.js';
 import { apiRouter } from './routes/api.js';
 import { oauthRouter } from './routes/oauth.js';
@@ -100,7 +100,8 @@ export function createServer() {
       const rerender = (error) => res.status(400).render('register',
         { error, values: { email, name, workspace }, googleEnabled, eventId: event_id || crypto.randomUUID() });
       if (!password || String(password).length < 8) return rerender('Choose a password of at least 8 characters.');
-      const result = await createTenantOwner({ email, name, workspaceName: workspace, passwordHash: await hashPassword(password) });
+      const attribution = await signupAttribution(req);
+      const result = await createTenantOwner({ email, name, workspaceName: workspace, passwordHash: await hashPassword(password), attribution });
       if (!result.ok) return rerender(result.error);
       setSessionCookie(res, result.email);
       recordLogin(result.email, req.ip);

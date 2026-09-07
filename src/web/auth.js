@@ -296,17 +296,30 @@ async function uniqueSlug(base) {
 
 // Create a brand-new workspace for a self-serve signup. passwordHash is null for
 // Google-OAuth accounts (they sign in via Google). Returns the new tenant + email.
-export async function createTenantOwner({ email, name, workspaceName, passwordHash = null }) {
+export async function createTenantOwner({ email, name, workspaceName, passwordHash = null, attribution = null }) {
   const emailLc = String(email || '').toLowerCase().trim();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailLc)) return { ok: false, error: 'A valid email is required.' };
   if (await getUserByEmail(emailLc)) return { ok: false, error: 'An account with that email already exists — please log in.' };
   const displayName = String(name || '').trim() || emailLc.split('@')[0];
   const wsName = String(workspaceName || '').trim() || displayName;
   const slug = await uniqueSlug(slugify(wsName || emailLc.split('@')[0]));
+  const a = attribution || {};
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const { rows } = await client.query('INSERT INTO tenants (slug, name) VALUES ($1, $2) RETURNING id', [slug, wsName]);
+    // Stamp the acquisition snapshot (UTM / referrer / user-agent / geo) on the
+    // tenant at creation. All fields are optional — a NULL attribution just
+    // leaves them blank (e.g. an admin-created or pre-capture account).
+    const { rows } = await client.query(
+      `INSERT INTO tenants
+         (slug, name, signup_visitor_id, signup_utm_source, signup_utm_medium,
+          signup_utm_campaign, signup_referrer, signup_landing_path, signup_ua,
+          signup_ip, signup_browser, signup_os, signup_device, signup_country, signup_city)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id`,
+      [slug, wsName, a.visitor_id || null, a.utm_source || null, a.utm_medium || null,
+       a.utm_campaign || null, a.referrer || null, a.landing_path || null, a.ua || null,
+       a.ip || null, a.browser || null, a.os || null, a.device || null, a.country || null, a.city || null],
+    );
     const tenantId = rows[0].id;
     await client.query(
       `INSERT INTO users (tenant_id, email, name, role, password_hash, must_change_password)
@@ -371,7 +384,7 @@ export async function consumePasswordReset(token, newPassword) {
 
 // Google sign-in: find the user by email; create a new workspace if none exists.
 // Returns { ok, email, created } — `created` true only for a brand-new signup.
-export async function signInWithGoogle({ email, name }) {
+export async function signInWithGoogle({ email, name, attribution = null }) {
   const emailLc = String(email || '').toLowerCase().trim();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailLc)) return { ok: false, error: 'Google did not return a valid email.' };
   const existing = await getUserByEmail(emailLc);
@@ -379,7 +392,7 @@ export async function signInWithGoogle({ email, name }) {
     if (existing.deleted_at) return { ok: false, error: 'This account is disabled.' };
     return { ok: true, email: emailLc, created: false };
   }
-  const created = await createTenantOwner({ email: emailLc, name, workspaceName: name });
+  const created = await createTenantOwner({ email: emailLc, name, workspaceName: name, attribution });
   if (!created.ok) return created;
   return { ok: true, email: emailLc, created: true, tenantId: created.tenantId };
 }

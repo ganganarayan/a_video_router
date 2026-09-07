@@ -8,6 +8,7 @@ import {
 import { getChannelById, getAuthUrl, handleOAuthCallback } from '../../providers/youtube.js';
 import { getZoomAuthUrl, handleZoomOAuthCallback } from '../../providers/zoom.js';
 import { getConfigValue } from '../../db.js';
+import { signupAttribution } from '../track.js';
 import { decrypt } from '../../lib/secrets.js';
 import * as meta from '../../lib/meta.js';
 import { logError } from '../../lib/logger.js';
@@ -73,7 +74,8 @@ oauthRouter.get('/google/callback', async (req, res) => {
     const info = await infoRes.json();
     if (!info.email || info.email_verified === false) throw new Error('Google did not return a verified email.');
 
-    const result = await signInWithGoogle({ email: info.email, name: info.name || '' });
+    const attribution = await signupAttribution(req);
+    const result = await signInWithGoogle({ email: info.email, name: info.name || '', attribution });
     if (!result.ok) throw new Error(result.error);
     setSessionCookie(res, result.email);
     recordLogin(result.email, req.ip);
