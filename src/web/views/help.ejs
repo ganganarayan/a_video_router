@@ -154,9 +154,11 @@ const KB = [
   { id: 'push-single', cat: 'Sources & manual push', q: 'Push a single recording right now',
     a: `<ol class="kb-steps">
           <li>Open <b>Sources</b> and find the recording.</li>
-          <li>(Optional) set a YouTube <b>title</b>/<b>description</b> before pushing.</li>
-          <li>Click <b>Push</b> — it uploads immediately using that recording's destinations.</li>
-        </ol>` },
+          <li>(Optional) set a YouTube <b>title</b>/<b>description</b>, and pick the file and channel.</li>
+          <li>Click <b>Push to YouTube</b> — it uploads the recording right away.</li>
+          <li>Once it's on YouTube, click <b>Push to LMS</b> to file it into a course. This is a separate action, so you can do it later.</li>
+        </ol>
+        <div class="kb-note">Prefer the raw file? <b>Download</b> saves the original Zoom recording straight to your computer, free — no Zoom login.</div>` },
   { cat: 'Sources & manual push', q: 'Delete a recording from Zoom',
     a: `<p>Deletion is <b>manual only</b> — the pipeline never auto-deletes. On <b>Sources</b>, the
         <b>Delete from Zoom</b> button unlocks only after the recording has a YouTube video ID (i.e. it's
