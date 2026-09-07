@@ -25,6 +25,7 @@ const LEGAL_LABELS = { privacy: 'Privacy', terms: 'Terms', refund: 'Refund', shi
 const LEGAL_LINKS = LEGAL_ORDER.map((slug) => ({ href: `/${slug}`, label: LEGAL_LABELS[slug] }));
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const STARTED_AT = new Date().toISOString(); // process boot time, for /api/version
 
 export function createServer() {
   const app = express();
@@ -55,6 +56,14 @@ export function createServer() {
   });
 
   app.get('/health', (_req, res) => res.json({ ok: true }));
+
+  // Public deploy-verification: the git SHA this instance is running (Railway
+  // injects RAILWAY_GIT_COMMIT_SHA at build). Lets a deploy be confirmed against
+  // the pushed commit without auth or a tenant.
+  app.get('/api/version', (_req, res) => res.json({
+    sha: process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_COMMIT_SHA || 'dev',
+    startedAt: STARTED_AT,
+  }));
 
   // Self-service DB backup/restore (gated by PASSWORD_RESET_KEY).
   app.use('/dbadmin', dbadminRouter);
