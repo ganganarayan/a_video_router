@@ -149,15 +149,15 @@
 <div class="card">
   <h2>Usage audit <span class="muted">— recompute “Used” from actual bytes</span></h2>
   <p class="muted" style="margin-top:0">The <b>Used</b> column sums historical wallet deductions, and pre-fractional-metering rows
-    were rounded up to whole GB — so Used reads high. This recomputes each deduction from the recording’s
-    <b>actual bytes</b> and shows the gap, plus the proportional paise a metered tenant was over-charged.
-    <b>Read-only</b> — running this changes nothing.</p>
+    were rounded up to whole GB — so Used reads high and the GB wallet was over-drained. This recomputes each
+    deduction from the recording’s <b>actual bytes</b> and shows the GB gap and the GB to restore to the wallet.
+    <b>GB-only — no money is refunded</b>; the credit just stays in the GB wallet. <b>Read-only</b> — running this changes nothing.</p>
   <p class="row"><button id="run-audit">Run usage audit</button> <span id="audit-note" class="muted"></span></p>
   <div id="audit-wrap" class="table-wrap" style="display:none">
     <table id="audit-table">
       <thead><tr>
         <th>#</th><th>Workspace</th><th>Metered</th><th>Rows (fixable/total)</th>
-        <th>Used now</th><th>Actual</th><th>Over</th><th>Charged</th><th>Refund</th><th>Balance → after</th>
+        <th>Used now (GB)</th><th>Actual (GB)</th><th>Restore (GB)</th><th>Wallet GB → after</th>
       </tr></thead>
       <tbody></tbody>
     </table>
@@ -181,10 +181,11 @@ function rupees(paise) {
   return '₹' + (Number(paise) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-// GB balances are byte-accurate (fractional). Show up to 2 decimals, trimmed.
+// GB balances are byte-accurate (fractional). Always show exactly 2 decimals so
+// the credit count is simple and consistent to read (e.g. 5.00, 12.34 GB).
 function fmtGb(n) {
   if (n == null) return '—';
-  return (Math.round((Number(n) || 0) * 100) / 100).toLocaleString(undefined);
+  return (Number(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 // Actual data uploaded, in binary units (matches unit_bytes = 1 GiB).
@@ -498,14 +499,13 @@ document.getElementById('run-audit').onclick = async () => {
         <td class="nowrap">${t.correctable_rows}/${t.deduction_rows}</td>
         <td class="nowrap">${fmtGb(t.current_used_units)} GB</td>
         <td class="nowrap">${fmtGb(t.actual_used_units)} GB</td>
-        <td class="nowrap">${t.delta_units > 0.0001 ? '<b>' + fmtGb(t.delta_units) + '</b> GB' : '—'}</td>
-        <td class="nowrap">${rupees(t.current_charged_paise)}</td>
-        <td class="nowrap">${t.proposed_refund_paise > 0 ? '<b>' + rupees(t.proposed_refund_paise) + '</b>' : '—'}</td>
-        <td class="nowrap">${rupees(t.balance_paise)} → ${rupees(t.proposed_balance_paise)}</td>
-      </tr>`).join('') || '<tr><td colspan="10" class="muted">No tenants.</td></tr>';
+        <td class="nowrap">${t.restore_units > 0.0001 ? '<b>' + fmtGb(t.restore_units) + '</b> GB' : '—'}</td>
+        <td class="nowrap">${t.unlimited ? '<span class="muted">∞</span>'
+          : fmtGb(t.current_balance_units) + ' → <b>' + fmtGb(t.proposed_balance_units) + '</b> GB'}</td>
+      </tr>`).join('') || '<tr><td colspan="8" class="muted">No tenants.</td></tr>';
     document.getElementById('audit-wrap').style.display = '';
-    note.innerHTML = `Over-counted total: <b>${fmtGb(a.totals.overcounted_units)} GB</b>`
-      + ` · refund if applied: <b>${rupees(a.totals.refund_paise)}</b>`;
+    note.innerHTML = `GB to restore across all workspaces: <b>${fmtGb(a.totals.restore_units)} GB</b>`
+      + ` <span class="muted">(no money moves — credit stays in the GB wallet)</span>`;
   } catch (e) { note.textContent = ''; toast(e.message, 'err'); }
   finally { btn.disabled = false; }
 };

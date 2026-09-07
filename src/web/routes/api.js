@@ -94,22 +94,22 @@ apiRouter.get('/tenants', requireSuperAdmin, wrap(async (_req, res) => {
 
 // READ-ONLY usage audit. The "Used" figure is SUM(wallet_txns.units) for
 // deductions, but pre-017 rows stored whole-GB CEIL values (migration 016
-// unmetered backfill, and old metered charges), so Used is inflated. This
-// recomputes what each deduction SHOULD be from the linked recording's actual
-// bytes and reports the per-tenant gap — plus the proportional paise over-charge
-// that a metered tenant was billed. Nothing is written here; the correction is a
-// separate, explicitly-clicked action once these numbers are reviewed.
+// unmetered backfill, and old metered charges), so Used is inflated and the GB
+// wallet was over-drained. This recomputes what each deduction SHOULD be from the
+// linked recording's actual bytes and reports the per-tenant GB gap and the GB to
+// restore to the wallet. This is GB-only — NO money is refunded; the credit just
+// stays in the GB wallet. Nothing is written here; correction is a separate,
+// explicitly-clicked action once these numbers are reviewed.
 //
 //   correctable row = a deduction whose recording's file_size_bytes is known.
 //   Rows with unknown bytes are left unchanged (contribute zero delta).
-//   proposed refund per row = amount_paise − round(amount_paise × actual/old).
+//   GB to restore = old GB counted − actual GB (from bytes).
 apiRouter.get('/admin/usage-audit', requireSuperAdmin, wrap(async (_req, res) => {
   const cfg = await billing.getBillingConfig();
   const { rows } = await query(
     `WITH d AS (
        SELECT wt.tenant_id,
               wt.units AS old_units,
-              wt.amount_paise,
               (p.file_size_bytes IS NOT NULL) AS has_bytes,
               CASE WHEN p.file_size_bytes IS NOT NULL
                    THEN p.file_size_bytes::numeric / $1
@@ -121,15 +121,10 @@ apiRouter.get('/admin/usage-audit', requireSuperAdmin, wrap(async (_req, res) =>
      SELECT t.id, t.slug, t.name,
             COALESCE(w.unlimited, false) AS unlimited,
             w.balance_paise,
-            count(d.*)::int                                        AS deduction_rows,
-            count(d.*) FILTER (WHERE d.has_bytes)::int             AS correctable_rows,
-            COALESCE(SUM(d.old_units), 0)::numeric                 AS current_used_units,
-            COALESCE(SUM(d.actual_units), 0)::numeric              AS actual_used_units,
-            COALESCE(SUM(d.amount_paise), 0)::bigint               AS current_charged_paise,
-            COALESCE(SUM(
-              d.amount_paise - round(d.amount_paise *
-                CASE WHEN d.old_units > 0 THEN d.actual_units / d.old_units ELSE 1 END)
-            ), 0)::bigint                                          AS proposed_refund_paise
+            count(d.*)::int                            AS deduction_rows,
+            count(d.*) FILTER (WHERE d.has_bytes)::int AS correctable_rows,
+            COALESCE(SUM(d.old_units), 0)::numeric     AS current_used_units,
+            COALESCE(SUM(d.actual_units), 0)::numeric  AS actual_used_units
      FROM tenants t
      LEFT JOIN wallets w ON w.tenant_id = t.id
      LEFT JOIN d ON d.tenant_id = t.id
@@ -137,23 +132,27 @@ apiRouter.get('/admin/usage-audit', requireSuperAdmin, wrap(async (_req, res) =>
      ORDER BY t.id`,
     [cfg.unitBytes],
   );
-  const tenants = rows.map((r) => ({
-    ...r,
-    current_used_units: Number(r.current_used_units),
-    actual_used_units: Number(r.actual_used_units),
-    delta_units: Number(r.current_used_units) - Number(r.actual_used_units),
-    // Refund only ever applies to metered tenants (unmetered rows charge 0 paise).
-    proposed_refund_paise: r.unlimited ? 0 : Number(r.proposed_refund_paise),
-    proposed_balance_paise: r.unlimited
-      ? r.balance_paise
-      : Number(r.balance_paise || 0) + Number(r.proposed_refund_paise),
-  }));
+  // GB balance is derived from the wallet at the base ₹/GB rate. Restoring the
+  // over-counted GB raises the remaining GB credit — no cash movement.
+  const rate = cfg.pricePerUnitPaise;
+  const tenants = rows.map((r) => {
+    const currentUsed = Number(r.current_used_units);
+    const actualUsed = Number(r.actual_used_units);
+    const restoreGb = Math.max(0, currentUsed - actualUsed);
+    const currentGb = r.unlimited ? null : Number(r.balance_paise || 0) / rate;
+    return {
+      id: r.id, slug: r.slug, name: r.name, unlimited: r.unlimited,
+      deduction_rows: r.deduction_rows, correctable_rows: r.correctable_rows,
+      current_used_units: currentUsed,
+      actual_used_units: actualUsed,
+      restore_units: restoreGb,
+      current_balance_units: currentGb,
+      proposed_balance_units: r.unlimited ? null : currentGb + restoreGb,
+    };
+  });
   res.json({
     unitBytes: cfg.unitBytes,
-    totals: {
-      overcounted_units: tenants.reduce((s, t) => s + Math.max(0, t.delta_units), 0),
-      refund_paise: tenants.reduce((s, t) => s + t.proposed_refund_paise, 0),
-    },
+    totals: { restore_units: tenants.reduce((s, t) => s + t.restore_units, 0) },
     tenants,
   });
 }));

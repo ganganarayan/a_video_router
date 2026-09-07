@@ -45,7 +45,7 @@ Fathom cannot be deleted or downloaded via API (storage is unlimited).</p>
     <table id="zoom-table">
       <thead><tr>
         <th>Title</th><th>Recorded</th><th>Length</th><th>Size on Zoom</th><th>Speaker view</th>
-        <th>Zoom status</th><th>Pipeline status</th><th>YouTube link</th><th>Push to…</th><th></th>
+        <th>Zoom status</th><th>Pipeline status</th><th>YouTube link</th><th>Push to… / actions</th>
       </tr></thead>
       <tbody></tbody>
     </table>
@@ -136,6 +136,17 @@ function downloadBtn(source, i, item) {
     title="${canDl ? 'Download this recording to your computer (free)' : 'Not downloadable (deleted on Zoom or no MP4 file).'}">Download</button>`;
 }
 
+// Delete-from-Zoom button — Zoom only, active only once the recording is on
+// YouTube (the YouTube copy stays). Lives in the same action group so all row
+// buttons sit together on the left instead of overflowing to a far column.
+function deleteBtn(source, i, item) {
+  if (source !== 'zoom') return '';
+  return `<button class="danger" data-zoom-del="${i}" ${item.can_delete ? '' : 'disabled'}
+    title="${item.can_delete
+      ? 'Deletes this recording from Zoom (frees storage). The YouTube copy stays.'
+      : 'Inactive until this recording has been uploaded to YouTube.'}">Delete from Zoom</button>`;
+}
+
 // Each row now has THREE independent actions instead of one combined Push:
 //   • Push to YouTube — uploads the recording (hidden once it is on YouTube).
 //   • Push to LMS — registers the YouTube video in a course. Stays available
@@ -167,8 +178,9 @@ function pushCell(source, i, item) {
     }
   }
 
-  // --- Download leg ---
+  // --- Download + Delete legs (Zoom only) ---
   parts.push(downloadBtn(source, i, item));
+  parts.push(deleteBtn(source, i, item));
 
   return `<div class="row" style="min-width:220px; flex-wrap:wrap; gap:6px">${parts.filter(Boolean).join('')}</div>`;
 }
@@ -248,16 +260,8 @@ function renderZoom(s) {
       <td>${pipelineBadge(z)}${z.source_deleted ? ' <span class="badge ok">deleted on Zoom</span>' : ''}</td>
       <td>${ytCell(z)}</td>
       <td>${pushCell('zoom', i, z)}</td>
-      <td>
-        <button class="danger" data-zoom-del="${i}" ${z.can_delete ? '' : 'disabled'}
-          title="${z.can_delete
-            ? 'Deletes this recording from Zoom (frees storage). The YouTube copy stays.'
-            : 'Inactive until this recording has been uploaded to YouTube.'}">
-          Delete from Zoom
-        </button>
-      </td>
     </tr>
-  `).join('') || '<tr><td colspan="10" class="muted">No recordings on Zoom in this window.</td></tr>';
+  `).join('') || '<tr><td colspan="9" class="muted">No recordings on Zoom in this window.</td></tr>';
   bindRowActions(tbody);
 }
 

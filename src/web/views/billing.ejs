@@ -79,8 +79,9 @@ top-up popup.</p>
 
 <script>
 const fmtRs = (paise) => '₹' + (Number(paise) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-// GB balances are byte-accurate (fractional). Show up to 2 decimals, trimmed.
-const fmtGb = (n) => (Math.round((Number(n) || 0) * 100) / 100).toLocaleString('en-IN');
+// GB balances are byte-accurate (fractional). Always show exactly 2 decimals so
+// the GB credit count is simple and consistent (e.g. 5.00, 12.34 GB).
+const fmtGb = (n) => (Number(n) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 let CFG = null;
 const packSize = () => Math.max(1, Number(CFG.unitsStep) || 10);
 
