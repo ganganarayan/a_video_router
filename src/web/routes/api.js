@@ -5,6 +5,7 @@ import { Readable } from 'node:stream';
 import cron from 'node-cron';
 import cronParser from 'cron-parser';
 import {
+  pool,
   query, getTenants, getTenantById, getTenantSettings, setTenantSetting,
   getConfigValue, setConfigValue,
 } from '../../db.js';
@@ -155,6 +156,72 @@ apiRouter.get('/admin/usage-audit', requireSuperAdmin, wrap(async (_req, res) =>
     totals: { restore_units: tenants.reduce((s, t) => s + t.restore_units, 0) },
     tenants,
   });
+}));
+
+// APPLY the usage correction (super-admin, explicit action, transactional):
+//   1) Rewrite every correctable deduction's `units` to the recording's ACTUAL
+//      bytes — this makes the "Used" figure match "Data" everywhere (admin +
+//      each tenant's billing page). Money-neutral: it only touches the reporting
+//      units column, never a balance.
+//   2) For METERED wallets that were over-drained by the old whole-GB rounding,
+//      restore the over-counted GB back into the wallet (credit stays in the GB
+//      wallet at the base ₹/GB rate — NO cash), with an 'adjustment' audit line.
+// Idempotent: a second run finds units already actual (over_gb = 0) and changes
+// nothing.
+apiRouter.post('/admin/usage-audit/apply', requireSuperAdmin, wrap(async (_req, res) => {
+  const cfg = await billing.getBillingConfig();
+  const unitBytes = cfg.unitBytes, rate = cfg.pricePerUnitPaise;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // GB over-counted per metered tenant — computed BEFORE the rewrite.
+    const { rows: restores } = await client.query(
+      `SELECT wt.tenant_id,
+              SUM(wt.units - p.file_size_bytes::numeric / $1) AS over_gb
+         FROM wallet_txns wt
+         JOIN processed_recordings p ON p.id = wt.recording_id
+         JOIN wallets w ON w.tenant_id = wt.tenant_id
+        WHERE wt.type = 'deduction' AND p.file_size_bytes IS NOT NULL
+          AND w.unlimited = false
+        GROUP BY wt.tenant_id
+        HAVING SUM(wt.units - p.file_size_bytes::numeric / $1) > 0`,
+      [unitBytes],
+    );
+    // 1) Recompute Used from actual bytes for all correctable deductions.
+    const upd = await client.query(
+      `UPDATE wallet_txns wt
+          SET units = p.file_size_bytes::numeric / $1
+         FROM processed_recordings p
+        WHERE wt.recording_id = p.id AND wt.type = 'deduction'
+          AND p.file_size_bytes IS NOT NULL
+          AND wt.units <> p.file_size_bytes::numeric / $1`,
+      [unitBytes],
+    );
+    // 2) Restore over-drained GB into metered wallets.
+    let tenantsCredited = 0, gbRestored = 0;
+    for (const r of restores) {
+      const overGb = Number(r.over_gb);
+      const paise = Math.round(overGb * rate);
+      if (paise <= 0) continue;
+      const { rows: [w] } = await client.query(
+        'UPDATE wallets SET balance_paise = balance_paise + $1, updated_at = now() WHERE tenant_id = $2 RETURNING balance_paise',
+        [paise, r.tenant_id],
+      );
+      await client.query(
+        `INSERT INTO wallet_txns (tenant_id, type, amount_paise, balance_after_paise, units, note)
+         VALUES ($1, 'adjustment', $2, $3, $4, 'usage recompute — restored over-counted GB to wallet')`,
+        [r.tenant_id, paise, Number(w.balance_paise), overGb],
+      );
+      tenantsCredited++; gbRestored += overGb;
+    }
+    await client.query('COMMIT');
+    res.json({ ok: true, rowsFixed: upd.rowCount, tenantsCredited, gbRestored });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
 }));
 
 // NOTE: register the static /impersonate/stop BEFORE the parameterized

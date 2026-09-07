@@ -38,4 +38,4 @@
   const helpId = HELP_MAP[page];
 %>
 <% if (helpId) { %><a class="help-fab" href="/help#<%= helpId %>" title="Help for this page" aria-label="Help for this page">?</a><% } %>
-<main>
+<main class="page-<%= page %>">

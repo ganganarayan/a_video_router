@@ -26,6 +26,16 @@ nav a.tab.active, nav a.tab:hover { background: var(--panel2); color: var(--text
 nav form { margin-left: auto; }
 
 main { max-width: 1200px; margin: 24px auto; padding: 0 20px; }
+/* Data-heavy pages get more of the screen so their wide tables fit without a
+   horizontal scroll (still centered, still padded). */
+main.page-admin, main.page-logs, main.page-sources,
+main.page-visitors, main.page-traffic { max-width: min(1760px, 96vw); }
+/* Dense tables: tighter cells + let long links/names truncate with ellipsis
+   instead of forcing the row wide. */
+main.page-admin table, main.page-logs table { font-size: 12.5px; }
+main.page-admin th, main.page-admin td,
+main.page-logs th, main.page-logs td { padding: 7px 8px; }
+td.trunc { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 h1 { font-size: 20px; margin: 0 0 16px; }
 h2 { font-size: 15px; margin: 0 0 12px; color: var(--text); }
 

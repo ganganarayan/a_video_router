@@ -152,7 +152,9 @@
     were rounded up to whole GB — so Used reads high and the GB wallet was over-drained. This recomputes each
     deduction from the recording’s <b>actual bytes</b> and shows the GB gap and the GB to restore to the wallet.
     <b>GB-only — no money is refunded</b>; the credit just stays in the GB wallet. <b>Read-only</b> — running this changes nothing.</p>
-  <p class="row"><button id="run-audit">Run usage audit</button> <span id="audit-note" class="muted"></span></p>
+  <p class="row"><button id="run-audit">Run usage audit</button>
+    <button id="apply-audit" class="primary" style="display:none">Apply corrections</button>
+    <span id="audit-note" class="muted"></span></p>
   <div id="audit-wrap" class="table-wrap" style="display:none">
     <table id="audit-table">
       <thead><tr>
@@ -168,7 +170,7 @@
   <table id="tenants-table">
     <thead><tr>
       <th>#</th><th>Slug</th><th>Name</th><th>Owner email</th><th>Acquired</th><th>Status</th><th>Users</th>
-      <th>Channels</th><th>Uploaded</th><th>Data</th><th>Balance</th><th>Used</th>
+      <th>Channels</th><th>Uploaded · data</th><th>Balance</th><th>Used</th>
       <th>Plan</th><th></th>
     </tr></thead>
     <tbody></tbody>
@@ -440,8 +442,7 @@ async function load() {
       <td>${t.status === 'active' ? '<span class="badge ok">active</span>' : '<span class="badge err">suspended</span>'}</td>
       <td>${t.users}</td>
       <td>${t.channels}</td>
-      <td>${t.uploaded}</td>
-      <td class="nowrap" title="Actual data uploaded">${fmtBytes(t.uploaded_bytes)}</td>
+      <td class="nowrap" title="Videos uploaded · actual data transferred">${t.uploaded} · ${fmtBytes(t.uploaded_bytes)}</td>
       <td class="nowrap">${t.unlimited ? '<b>∞</b>' : '<b>' + fmtGb(t.units) + '</b> GB'} · ${rupees(t.balance_paise)}
         <button title="Adjust balance by ₹" onclick="adjust(${t.id}, '${esc(t.name)}')">±</button></td>
       <td class="nowrap">${fmtGb(t.used_units)} GB</td>
@@ -450,7 +451,7 @@ async function load() {
         : '<input type="number" min="0" step="1" value="' + Math.round(Number(t.units) || 0) + '" style="width:56px" onchange="planUnits(' + t.id + ', this.value)" title="GB for this workspace"> <button title="Make this workspace unmetered" onclick="planUnmetered(' + t.id + ')">∞</button>'}</td>
       <td><button class="primary" onclick="impersonate(${t.id})">Impersonate</button></td>
     </tr>
-  `).join('') || '<tr><td colspan="14" class="muted">No tenants yet.</td></tr>';
+  `).join('') || '<tr><td colspan="13" class="muted">No tenants yet.</td></tr>';
 }
 
 // Acquisition snapshot captured at signup (utm / referrer / user-agent / geo),
@@ -506,7 +507,25 @@ document.getElementById('run-audit').onclick = async () => {
     document.getElementById('audit-wrap').style.display = '';
     note.innerHTML = `GB to restore across all workspaces: <b>${fmtGb(a.totals.restore_units)} GB</b>`
       + ` <span class="muted">(no money moves — credit stays in the GB wallet)</span>`;
+    // Offer Apply only when something is actually off (Used != actual anywhere).
+    const needsFix = a.tenants.some(t => Math.abs(t.current_used_units - t.actual_used_units) > 0.001);
+    document.getElementById('apply-audit').style.display = needsFix ? '' : 'none';
   } catch (e) { note.textContent = ''; toast(e.message, 'err'); }
+  finally { btn.disabled = false; }
+};
+
+// Apply the correction: recompute Used from actual bytes everywhere, and restore
+// the over-counted GB into metered wallets (credit stays in the GB wallet, no cash).
+document.getElementById('apply-audit').onclick = async () => {
+  if (!confirm('Recompute Used from actual bytes for all workspaces, and restore the over-counted GB into metered wallets?\n\nCredit stays in the GB wallet — no money is refunded. This is safe to run again.')) return;
+  const btn = document.getElementById('apply-audit');
+  btn.disabled = true;
+  try {
+    const r = await api('/admin/usage-audit/apply', { method: 'POST' });
+    toast(`Fixed ${r.rowsFixed} usage rows · restored ${fmtGb(r.gbRestored)} GB to ${r.tenantsCredited} wallet(s)`);
+    await load();                             // tenant table: Used now matches Data
+    document.getElementById('run-audit').click(); // re-run audit to show it's clean
+  } catch (e) { toast(e.message, 'err'); }
   finally { btn.disabled = false; }
 };
 

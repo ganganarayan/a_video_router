@@ -126,11 +126,13 @@ function titleDescFields(source, i, item) {
       title="YouTube description" style="min-width:220px">`;
 }
 
-// Download button — free direct download to the user's computer. Zoom only:
-// Fathom video is an HLS stream reconstructed via ffmpeg, so there is no
-// pass-through download route for it.
+// Download button — free direct download to the user's computer. Shown on every
+// row for a consistent action set. Functional for Zoom; disabled for Fathom
+// (its video is an HLS stream reconstructed via ffmpeg — no pass-through file).
 function downloadBtn(source, i, item) {
-  if (source !== 'zoom') return '';
+  if (source !== 'zoom') {
+    return `<button disabled title="Direct download isn't available for Fathom recordings — they're streamed, not stored as a downloadable file.">Download</button>`;
+  }
   const canDl = !item.source_deleted && (item.files || []).length;
   return `<button data-dl="${source}:${i}" ${canDl ? '' : 'disabled'}
     title="${canDl ? 'Download this recording to your computer (free)' : 'Not downloadable (deleted on Zoom or no MP4 file).'}">Download</button>`;
@@ -166,16 +168,20 @@ function pushCell(source, i, item) {
       <button data-push-yt="${source}:${i}">Push to YouTube</button>`);
   }
 
-  // --- LMS leg (only when at least one LMS course is configured) ---
-  if (lmsOptions.length) {
-    if (item.lms_lesson_url) {
-      parts.push('<span class="muted">in LMS ✓</span>');
-    } else {
-      const onYt = Boolean(item.youtube_url);
-      parts.push(`${lmsSelect(source, i, item)}
-        <button data-push-lms="${source}:${i}" ${onYt ? '' : 'disabled'}
-          title="${onYt ? 'Register this YouTube video in your LMS course.' : 'Upload to YouTube first, then push to the LMS.'}">Push to LMS</button>`);
-    }
+  // --- LMS leg — always shown so the action set is consistent across rows.
+  // Enabled only once the video is on YouTube AND an LMS course exists; otherwise
+  // disabled with a tooltip that says exactly what's needed.
+  if (item.lms_lesson_url) {
+    parts.push('<span class="muted">in LMS ✓</span>');
+  } else {
+    const onYt = Boolean(item.youtube_url);
+    const hasLms = lmsOptions.length > 0;
+    const canLms = onYt && hasLms;
+    const tip = !hasLms ? 'Add an LMS course in Routing first, then push it here.'
+      : (!onYt ? 'Upload to YouTube first, then push to the LMS.'
+        : 'Register this YouTube video in your LMS course.');
+    parts.push(`${hasLms ? lmsSelect(source, i, item) : ''}
+        <button data-push-lms="${source}:${i}" ${canLms ? '' : 'disabled'} title="${tip}">Push to LMS</button>`);
   }
 
   // --- Download + Delete legs (Zoom only) ---

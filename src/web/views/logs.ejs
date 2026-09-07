@@ -60,16 +60,16 @@ async function load() {
     <tr>
       <td class="nowrap">${fmtDate(r.uploaded_at || r.discovered_at)}</td>
       <td>${esc(r.source)}</td>
-      <td>${esc(r.title)}</td>
-      <td>${esc(r.channel_label || '—')}</td>
+      <td class="trunc" title="${esc(r.title)}">${esc(r.title)}</td>
+      <td class="trunc" title="${esc(r.channel_label || '')}">${esc(r.channel_label || '—')}</td>
       <td class="nowrap">${r.file_size_bytes ? fmtBytes(Number(r.file_size_bytes)) : '—'}</td>
       <td class="nowrap">${fmtBps(Number(r.download_bps) || 0)}</td>
       <td class="nowrap">${fmtBps(Number(r.upload_bps) || 0)}</td>
       <td class="nowrap">${transferTime(r)}</td>
       <td>${destinationCell(r)}</td>
       <td>${sourceFileCell(r)}</td>
-      <td class="row">
-        <button data-edit="${r.id}">Edit title/desc/privacy</button>
+      <td class="row nowrap">
+        <button data-edit="${r.id}" title="Edit YouTube title / description / privacy">Edit</button>
         ${deleteBtn(r)}
       </td>
     </tr>
