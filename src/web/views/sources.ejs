@@ -105,16 +105,17 @@ function lmsSelect(source, i, item) {
     <option value="">LMS course…</option>${opts}</select>`;
 }
 
-// Zoom rows: pick the exact recording file to upload (avoids the "no
-// speaker-view" failure when a meeting only has other views).
+// Zoom rows: pick the exact recording file to act on. Before upload it chooses
+// which file goes to YouTube (avoids the "no speaker-view" failure when a meeting
+// only has other views); after upload it chooses which file Download grabs.
 function fileSelect(source, i, item) {
-  if (source !== 'zoom' || item.youtube_url) return '';
+  if (source !== 'zoom') return '';
   const files = item.files || [];
   if (!files.length) return '<span class="badge warn">no MP4 files</span>';
   const opts = files.map(f =>
     `<option value="${esc(f.id)}"${f.is_default ? ' selected' : ''}>${esc(f.recording_type)} (${fmtBytes(f.file_size)})</option>`
   ).join('');
-  return `<select data-file="${source}:${i}" title="Which recording file to upload">${opts}</select>`;
+  return `<select data-file="${source}:${i}" title="Which recording file to use">${opts}</select>`;
 }
 
 // Title + description to use for the YouTube upload (shown only before upload).
@@ -185,6 +186,10 @@ function pushCell(source, i, item) {
   }
 
   // --- Download + Delete legs (Zoom only) ---
+  // For already-uploaded Zoom rows the file picker isn't shown above (the YouTube
+  // leg is done), so render it here next to Download to choose which recording
+  // file to grab. Pre-upload rows already show the picker in the YouTube leg.
+  if (source === 'zoom' && item.youtube_url) parts.push(fileSelect(source, i, item));
   parts.push(downloadBtn(source, i, item));
   parts.push(deleteBtn(source, i, item));
 
