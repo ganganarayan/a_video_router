@@ -1,9 +1,11 @@
 <%- include('partials/head') %>
 <h1>Source videos</h1>
 <p class="muted">Live listing from Zoom and Fathom (last 30 days), matched against the pipeline log.
-Pick a destination per row and press <b>Push</b> — jobs queue up and process one by one.
+Each row has its own buttons: <b>Push to YouTube</b> uploads the recording, then <b>Push to LMS</b>
+registers that video in your course (it stays active after the YouTube upload so you can push to the
+LMS separately). <b>Download</b> saves the original to your computer (free, Zoom only).
 <b>Delete from Zoom</b> unlocks only after that recording has a YouTube link.
-Fathom cannot be deleted via API (storage is unlimited).</p>
+Fathom cannot be deleted or downloaded via API (storage is unlimited).</p>
 
 <p class="row">
   <button id="refresh" class="primary">Refresh listing</button>
@@ -124,16 +126,51 @@ function titleDescFields(source, i, item) {
       title="YouTube description" style="min-width:220px">`;
 }
 
+// Download button — free direct download to the user's computer. Zoom only:
+// Fathom video is an HLS stream reconstructed via ffmpeg, so there is no
+// pass-through download route for it.
+function downloadBtn(source, i, item) {
+  if (source !== 'zoom') return '';
+  const canDl = !item.source_deleted && (item.files || []).length;
+  return `<button data-dl="${source}:${i}" ${canDl ? '' : 'disabled'}
+    title="${canDl ? 'Download this recording to your computer (free)' : 'Not downloadable (deleted on Zoom or no MP4 file).'}">Download</button>`;
+}
+
+// Each row now has THREE independent actions instead of one combined Push:
+//   • Push to YouTube — uploads the recording (hidden once it is on YouTube).
+//   • Push to LMS — registers the YouTube video in a course. Stays available
+//     after the upload (it needs the YouTube link first, so it is disabled until
+//     the video is on YouTube).
+//   • Download — free copy to the user's computer (Zoom only).
 function pushCell(source, i, item) {
-  // Once a recording is on YouTube there is nothing to push — show a marker, no button.
-  if (item.youtube_url) return '<span class="muted">on YouTube ✓</span>';
-  return `<div class="row" style="min-width:220px">
-    ${titleDescFields(source, i, item)}
-    ${fileSelect(source, i, item)}
-    ${channelSelect(source, i, item)}
-    ${lmsSelect(source, i, item)}
-    <button data-push="${source}:${i}">Push</button>
-  </div>`;
+  const parts = [];
+
+  // --- YouTube leg ---
+  if (item.youtube_url) {
+    parts.push('<span class="muted">on YouTube ✓</span>');
+  } else {
+    parts.push(`${titleDescFields(source, i, item)}
+      ${fileSelect(source, i, item)}
+      ${channelSelect(source, i, item)}
+      <button data-push-yt="${source}:${i}">Push to YouTube</button>`);
+  }
+
+  // --- LMS leg (only when at least one LMS course is configured) ---
+  if (lmsOptions.length) {
+    if (item.lms_lesson_url) {
+      parts.push('<span class="muted">in LMS ✓</span>');
+    } else {
+      const onYt = Boolean(item.youtube_url);
+      parts.push(`${lmsSelect(source, i, item)}
+        <button data-push-lms="${source}:${i}" ${onYt ? '' : 'disabled'}
+          title="${onYt ? 'Register this YouTube video in your LMS course.' : 'Upload to YouTube first, then push to the LMS.'}">Push to LMS</button>`);
+    }
+  }
+
+  // --- Download leg ---
+  parts.push(downloadBtn(source, i, item));
+
+  return `<div class="row" style="min-width:220px; flex-wrap:wrap; gap:6px">${parts.filter(Boolean).join('')}</div>`;
 }
 
 async function loadMeta() {
@@ -162,22 +199,31 @@ async function load() {
 }
 
 function bindRowActions(tbody) {
-  tbody.querySelectorAll('[data-push]').forEach((btn) => {
-    btn.onclick = () => pushRow(btn.dataset.push, btn);
+  tbody.querySelectorAll('[data-push-yt]').forEach((btn) => {
+    btn.onclick = () => pushYouTube(btn.dataset.pushYt, btn);
+  });
+  tbody.querySelectorAll('[data-push-lms]').forEach((btn) => {
+    if (!btn.disabled) btn.onclick = () => pushLms(btn.dataset.pushLms, btn);
+  });
+  tbody.querySelectorAll('[data-dl]').forEach((btn) => {
+    if (!btn.disabled) btn.onclick = () => downloadRow(btn.dataset.dl);
   });
   tbody.querySelectorAll('[data-zoom-del]').forEach((btn) => {
     btn.onclick = () => deleteFromZoom(Number(btn.dataset.zoomDel), btn);
   });
-  tbody.querySelectorAll('[data-zoom-dl]').forEach((btn) => {
-    btn.onclick = () => {
-      const i = Number(btn.dataset.zoomDl);
-      const z = current.zoom[i];
-      const sel = tbody.querySelector(`[data-file="zoom:${i}"]`);
-      let url = '/api/sources/zoom/download?source_id=' + encodeURIComponent(z.source_id);
-      if (sel && sel.value) url += '&file_id=' + encodeURIComponent(sel.value);
-      window.location.href = url; // attachment header → browser downloads, no navigation
-    };
-  });
+}
+
+// Free direct download to the user's computer (Zoom only — attachment header
+// makes the browser download without navigating away).
+function downloadRow(key) {
+  const [source, iStr] = key.split(':');
+  if (source !== 'zoom') return;
+  const z = current.zoom[Number(iStr)];
+  if (!z) return;
+  const sel = document.querySelector(`[data-file="zoom:${iStr}"]`);
+  let url = '/api/sources/zoom/download?source_id=' + encodeURIComponent(z.source_id);
+  if (sel && sel.value) url += '&file_id=' + encodeURIComponent(sel.value);
+  window.location.href = url;
 }
 
 function renderZoom(s) {
@@ -203,8 +249,6 @@ function renderZoom(s) {
       <td>${ytCell(z)}</td>
       <td>${pushCell('zoom', i, z)}</td>
       <td>
-        <button data-zoom-dl="${i}" ${(!z.source_deleted && (z.files || []).length) ? '' : 'disabled'}
-          title="Download this recording to your computer (free)">Download</button>
         <button class="danger" data-zoom-del="${i}" ${z.can_delete ? '' : 'disabled'}
           title="${z.can_delete
             ? 'Deletes this recording from Zoom (frees storage). The YouTube copy stays.'
@@ -239,46 +283,59 @@ function renderFathom(s) {
   bindRowActions(tbody);
 }
 
-async function pushRow(key, btn) {
+// Push to YouTube — uploads the recording. Channel + title (+ Zoom file) only;
+// LMS is a separate button/job now.
+async function pushYouTube(key, btn) {
   const [source, iStr] = key.split(':');
   const item = current[source][Number(iStr)];
   if (!item) return;
   const chSel = document.querySelector(`[data-ch="${key}"]`);
-  const lmsSel = document.querySelector(`[data-lms="${key}"]`);
   const fileSel = document.querySelector(`[data-file="${key}"]`);
   const titleEl = document.querySelector(`[data-title="${key}"]`);
   const descEl = document.querySelector(`[data-desc="${key}"]`);
   const channelId = chSel?.value || null;
   const fileId = fileSel?.value || null;
-  const lmsOpt = lmsSel?.value !== '' && lmsSel ? lmsOptions[Number(lmsSel.value)] : null;
 
-  if (!item.youtube_url && titleEl && !titleEl.value.trim()) {
-    return toast('Enter a YouTube title.', 'err');
-  }
-
-  if (!item.youtube_url && !channelId) {
-    return toast('Pick a YouTube channel — this video is not uploaded yet.', 'err');
-  }
-  if (!item.youtube_url && source === 'zoom' && (item.files || []).length && !fileId) {
+  if (titleEl && !titleEl.value.trim()) return toast('Enter a YouTube title.', 'err');
+  if (!channelId) return toast('Pick a YouTube channel — this video is not uploaded yet.', 'err');
+  if (source === 'zoom' && (item.files || []).length && !fileId) {
     return toast('Pick which recording file to upload.', 'err');
   }
-  if (item.youtube_url && !lmsOpt) {
-    return toast('Already on YouTube — pick an LMS course to push it into the LMS.', 'err');
-  }
+  await queuePush(btn, item.title, {
+    source,
+    source_id: item.source_id,
+    file_id: fileId,
+    title: item.title,
+    video_title: titleEl?.value || null,
+    description: descEl?.value || null,
+    channel_id: channelId,
+  });
+}
+
+// Push to LMS — registers the already-uploaded YouTube video in a course.
+// Requires the YouTube link to exist first (the button is disabled until then).
+async function pushLms(key, btn) {
+  const [source, iStr] = key.split(':');
+  const item = current[source][Number(iStr)];
+  if (!item) return;
+  if (!item.youtube_url) return toast('Upload to YouTube first, then push to the LMS.', 'err');
+  const lmsSel = document.querySelector(`[data-lms="${key}"]`);
+  const lmsOpt = lmsSel && lmsSel.value !== '' ? lmsOptions[Number(lmsSel.value)] : null;
+  if (!lmsOpt) return toast('Pick an LMS course to push this video into.', 'err');
+  await queuePush(btn, item.title, {
+    source,
+    source_id: item.source_id,
+    title: item.title,
+    lms_course_id: lmsOpt.course_id,
+    lms_module_id: lmsOpt.module_id || null,
+  });
+}
+
+async function queuePush(btn, title, body) {
   btn.disabled = true;
   try {
-    const r = await api('/push', { method: 'POST', body: {
-      source,
-      source_id: item.source_id,
-      file_id: fileId,
-      title: item.title,
-      video_title: titleEl?.value || null,
-      description: descEl?.value || null,
-      channel_id: channelId,
-      lms_course_id: lmsOpt?.course_id || null,
-      lms_module_id: lmsOpt?.module_id || null,
-    }});
-    toast(r.duplicate ? 'Already queued.' : `Queued as job #${r.jobId}: ${item.title}`);
+    const r = await api('/push', { method: 'POST', body });
+    toast(r.duplicate ? 'Already queued.' : `Queued as job #${r.jobId}: ${title}`);
     pollQueue();
   } catch (e) {
     toast(e.message, 'err');
