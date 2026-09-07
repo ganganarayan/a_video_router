@@ -69,6 +69,29 @@ export function fathomFfmpegArgs(shareUrl, destPath) {
   ];
 }
 
+// Stream a Fathom recording as MP4 straight to a consumer (e.g. the browser
+// Download), without a temp file. Uses fragmented MP4 (frag_keyframe+empty_moov)
+// so the moov atom isn't deferred to the end — ffmpeg can pipe bytes as they are
+// remuxed. Returns the child process; caller pipes proc.stdout and must kill it
+// on client disconnect. Memory-light: nothing is buffered here.
+export function spawnFathomStream(shareUrl) {
+  const m3u8 = `${String(shareUrl).replace(/\/+$/, '')}/video.m3u8`;
+  const args = [
+    '-hide_banner', '-loglevel', 'error',
+    '-http_persistent', '0',
+    '-reconnect', '1',
+    '-reconnect_streamed', '1',
+    '-reconnect_delay_max', '5',
+    '-i', m3u8,
+    '-c', 'copy',
+    '-bsf:a', 'aac_adtstoasc',
+    '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
+    '-f', 'mp4',
+    'pipe:1',
+  ];
+  return spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+}
+
 export function downloadFathomVideo(shareUrl, destPath, onProgress) {
   return new Promise((resolve, reject) => {
     const args = fathomFfmpegArgs(shareUrl, destPath);

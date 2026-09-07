@@ -17,7 +17,7 @@ import {
 } from '../auth.js';
 import { runPipeline, isRunning } from '../../pipeline/run.js';
 import { enqueuePush, getJobs } from '../../pipeline/manual.js';
-import { ingestTempPath } from '../../pipeline/download.js';
+import { ingestTempPath, spawnFathomStream } from '../../pipeline/download.js';
 import { reloadSchedules, getSchedules } from '../../scheduler.js';
 import * as zoom from '../../providers/zoom.js';
 import * as fathom from '../../providers/fathom.js';
@@ -986,6 +986,38 @@ apiRouter.get('/sources/zoom/download', wrap(async (req, res) => {
   stream.on('error', () => { if (!res.headersSent) res.status(502); res.destroy(); });
   req.on('close', () => stream.destroy()); // client cancelled — stop pulling from Zoom
   stream.pipe(res);
+}));
+
+// Download a Fathom recording to the user's computer (FREE — not metered).
+// Fathom serves HLS, so we remux with ffmpeg and PIPE the MP4 straight to the
+// browser (fragmented MP4 — no temp file, nothing buffered). Content-Length is
+// unknown up front (live remux), so the browser shows an indeterminate size.
+apiRouter.get('/sources/fathom/download', wrap(async (req, res) => {
+  const tid = T(req);
+  const sourceId = String(req.query.source_id || '');
+  if (!sourceId) return res.status(400).json({ error: 'source_id is required' });
+  const account = await fathom.getFathomAccount(tid);
+  if (!account) return res.status(400).json({ error: 'Fathom is not connected.' });
+
+  const meetings = await fathom.listMeetings(account, 30);
+  const m = meetings.find((x) => x.recordingId === sourceId);
+  const shareUrl = m?.shareUrl;
+  if (!shareUrl) return res.status(404).json({ error: 'Recording not found on Fathom (or it has no share URL).' });
+
+  const safeName = String(m.title || 'fathom-recording').replace(/[^\w.-]+/g, '_').slice(0, 80) || 'recording';
+  res.setHeader('Content-Type', 'video/mp4');
+  res.setHeader('Content-Disposition', `attachment; filename="${safeName}.mp4"`);
+
+  const proc = spawnFathomStream(shareUrl);
+  let stderr = '';
+  proc.stderr.on('data', (d) => { stderr += d.toString().slice(0, 2000); });
+  proc.on('error', (err) => { if (!res.headersSent) res.status(502).json({ error: `ffmpeg failed: ${err.message}` }); else res.destroy(); });
+  proc.on('close', (code) => { if (code && code !== 0) { logError(`fathom download ffmpeg exited ${code}: ${stderr.slice(-300)}`); res.destroy(); } });
+  req.on('close', () => { try { proc.kill('SIGKILL'); } catch { /* already gone */ } }); // client cancelled → stop ffmpeg
+  // Free download — audit only, never billed.
+  query(`INSERT INTO download_events (tenant_id, source, user_email, bytes) VALUES ($1, 'fathom', $2, NULL)`,
+    [tid, req.user?.email || null]).catch(() => {});
+  proc.stdout.pipe(res);
 }));
 
 apiRouter.post('/sources/zoom/delete', requireOwner, wrap(async (req, res) => {

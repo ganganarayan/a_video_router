@@ -5,7 +5,7 @@ Each row has its own buttons: <b>Push to YouTube</b> uploads the recording, then
 registers that video in your course (it stays active after the YouTube upload so you can push to the
 LMS separately). <b>Download</b> saves the original to your computer (free, Zoom only).
 <b>Delete from Zoom</b> unlocks only after that recording has a YouTube link.
-Fathom cannot be deleted or downloaded via API (storage is unlimited).</p>
+Fathom recordings can be downloaded (reconstructed for you) but not deleted via API (storage is unlimited).</p>
 
 <p class="row">
   <button id="refresh" class="primary">Refresh listing</button>
@@ -127,16 +127,17 @@ function titleDescFields(source, i, item) {
       title="YouTube description" style="min-width:220px">`;
 }
 
-// Download button — free direct download to the user's computer. Shown on every
-// row for a consistent action set. Functional for Zoom; disabled for Fathom
-// (its video is an HLS stream reconstructed via ffmpeg — no pass-through file).
+// Download button — free direct download to the user's computer, on every row.
+// Zoom streams the stored MP4 directly; Fathom is reconstructed from its HLS
+// stream via ffmpeg and piped to you (may take a moment to start on big files).
 function downloadBtn(source, i, item) {
-  if (source !== 'zoom') {
-    return `<button disabled title="Direct download isn't available for Fathom recordings — they're streamed, not stored as a downloadable file.">Download</button>`;
+  if (source === 'zoom') {
+    const canDl = !item.source_deleted && (item.files || []).length;
+    return `<button data-dl="zoom:${i}" ${canDl ? '' : 'disabled'}
+      title="${canDl ? 'Download this recording to your computer (free)' : 'Not downloadable (deleted on Zoom or no MP4 file).'}">Download</button>`;
   }
-  const canDl = !item.source_deleted && (item.files || []).length;
-  return `<button data-dl="${source}:${i}" ${canDl ? '' : 'disabled'}
-    title="${canDl ? 'Download this recording to your computer (free)' : 'Not downloadable (deleted on Zoom or no MP4 file).'}">Download</button>`;
+  return `<button data-dl="fathom:${i}"
+    title="Download this recording to your computer (free — reconstructed from Fathom, may take a moment to start)">Download</button>`;
 }
 
 // Delete-from-Zoom button — Zoom only, active only once the recording is on
@@ -236,15 +237,19 @@ function bindRowActions(tbody) {
   });
 }
 
-// Free direct download to the user's computer (Zoom only — attachment header
-// makes the browser download without navigating away).
+// Free direct download to the user's computer (attachment header makes the
+// browser download without navigating away). Zoom streams the chosen stored MP4;
+// Fathom is remuxed from HLS by the server and streamed back.
 function downloadRow(key) {
   const [source, iStr] = key.split(':');
-  if (source !== 'zoom') return;
-  const z = current.zoom[Number(iStr)];
-  if (!z) return;
+  const item = (current[source] || [])[Number(iStr)];
+  if (!item) return;
+  if (source === 'fathom') {
+    window.location.href = '/api/sources/fathom/download?source_id=' + encodeURIComponent(item.source_id);
+    return;
+  }
   const sel = document.querySelector(`[data-file="zoom:${iStr}"]`);
-  let url = '/api/sources/zoom/download?source_id=' + encodeURIComponent(z.source_id);
+  let url = '/api/sources/zoom/download?source_id=' + encodeURIComponent(item.source_id);
   if (sel && sel.value) url += '&file_id=' + encodeURIComponent(sel.value);
   window.location.href = url;
 }
