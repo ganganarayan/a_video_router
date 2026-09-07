@@ -146,10 +146,28 @@
   <pre id="email-test-out" class="muted" style="white-space:pre-wrap; margin-top:8px; display:none"></pre>
 </div>
 
+<div class="card">
+  <h2>Usage audit <span class="muted">— recompute “Used” from actual bytes</span></h2>
+  <p class="muted" style="margin-top:0">The <b>Used</b> column sums historical wallet deductions, and pre-fractional-metering rows
+    were rounded up to whole GB — so Used reads high. This recomputes each deduction from the recording’s
+    <b>actual bytes</b> and shows the gap, plus the proportional paise a metered tenant was over-charged.
+    <b>Read-only</b> — running this changes nothing.</p>
+  <p class="row"><button id="run-audit">Run usage audit</button> <span id="audit-note" class="muted"></span></p>
+  <div id="audit-wrap" class="table-wrap" style="display:none">
+    <table id="audit-table">
+      <thead><tr>
+        <th>#</th><th>Workspace</th><th>Metered</th><th>Rows (fixable/total)</th>
+        <th>Used now</th><th>Actual</th><th>Over</th><th>Charged</th><th>Refund</th><th>Balance → after</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
 <div class="card table-wrap">
   <table id="tenants-table">
     <thead><tr>
-      <th>#</th><th>Slug</th><th>Name</th><th>Owner email</th><th>Status</th><th>Users</th>
+      <th>#</th><th>Slug</th><th>Name</th><th>Owner email</th><th>Acquired</th><th>Status</th><th>Users</th>
       <th>Channels</th><th>Uploaded</th><th>Data</th><th>Balance</th><th>Used</th>
       <th>Plan</th><th></th>
     </tr></thead>
@@ -417,6 +435,7 @@ async function load() {
       <td class="mono">${esc(t.slug)}</td>
       <td>${esc(t.name)}</td>
       <td class="mono">${esc(t.owner_email || '—')}${t.owner_email ? ` <button title="Set this owner's password" onclick="resetOwnerPw(${t.id}, '${esc(t.owner_email)}')">Reset pw</button>` : ''}</td>
+      <td class="nowrap">${acqCell(t)}</td>
       <td>${t.status === 'active' ? '<span class="badge ok">active</span>' : '<span class="badge err">suspended</span>'}</td>
       <td>${t.users}</td>
       <td>${t.channels}</td>
@@ -430,8 +449,66 @@ async function load() {
         : '<input type="number" min="0" step="1" value="' + Math.round(Number(t.units) || 0) + '" style="width:56px" onchange="planUnits(' + t.id + ', this.value)" title="GB for this workspace"> <button title="Make this workspace unmetered" onclick="planUnmetered(' + t.id + ')">∞</button>'}</td>
       <td><button class="primary" onclick="impersonate(${t.id})">Impersonate</button></td>
     </tr>
-  `).join('') || '<tr><td colspan="13" class="muted">No tenants yet.</td></tr>';
+  `).join('') || '<tr><td colspan="14" class="muted">No tenants yet.</td></tr>';
 }
+
+// Acquisition snapshot captured at signup (utm / referrer / user-agent / geo),
+// linked from the anonymous visitor cookie. The cell shows the signup date and a
+// short source; the tooltip carries the full breakdown. Blank source for accounts
+// created before capture (or with no tracked visit) shows as "direct/unknown".
+function refHost(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; } }
+function acqDate(iso) {
+  if (!iso) return '—';
+  try { return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); }
+  catch { return String(iso).slice(0, 10); }
+}
+function acqCell(t) {
+  const src = t.signup_utm_source
+    || (t.signup_referrer ? refHost(t.signup_referrer) : null)
+    || 'direct/unknown';
+  const geo = [t.signup_city, t.signup_country].filter(Boolean).join(', ') || '—';
+  const ua = [t.signup_browser, t.signup_os, t.signup_device].filter(Boolean).join(' · ') || '—';
+  const tip = [
+    'Signed up: ' + acqDate(t.created_at),
+    'UTM source: ' + (t.signup_utm_source || '—'),
+    'UTM medium: ' + (t.signup_utm_medium || '—'),
+    'UTM campaign: ' + (t.signup_utm_campaign || '—'),
+    'Referrer: ' + (t.signup_referrer || '—'),
+    'Landing page: ' + (t.signup_landing_path || '—'),
+    'Location: ' + geo,
+    'Device: ' + ua,
+    'IP: ' + (t.signup_ip || '—'),
+    'User agent: ' + (t.signup_ua || '—'),
+  ].join('\n');
+  return `<span title="${esc(tip)}">${acqDate(t.created_at)}<br><span class="muted">${esc(src)}</span></span>`;
+}
+
+// Read-only usage audit: recompute Used from actual bytes; show the gap + refund.
+document.getElementById('run-audit').onclick = async () => {
+  const note = document.getElementById('audit-note');
+  const btn = document.getElementById('run-audit');
+  btn.disabled = true; note.textContent = 'Computing…';
+  try {
+    const a = await api('/admin/usage-audit');
+    document.querySelector('#audit-table tbody').innerHTML = a.tenants.map(t => `
+      <tr>
+        <td>${t.id}</td>
+        <td>${esc(t.name)}</td>
+        <td>${t.unlimited ? '<span class="muted">∞</span>' : 'yes'}</td>
+        <td class="nowrap">${t.correctable_rows}/${t.deduction_rows}</td>
+        <td class="nowrap">${fmtGb(t.current_used_units)} GB</td>
+        <td class="nowrap">${fmtGb(t.actual_used_units)} GB</td>
+        <td class="nowrap">${t.delta_units > 0.0001 ? '<b>' + fmtGb(t.delta_units) + '</b> GB' : '—'}</td>
+        <td class="nowrap">${rupees(t.current_charged_paise)}</td>
+        <td class="nowrap">${t.proposed_refund_paise > 0 ? '<b>' + rupees(t.proposed_refund_paise) + '</b>' : '—'}</td>
+        <td class="nowrap">${rupees(t.balance_paise)} → ${rupees(t.proposed_balance_paise)}</td>
+      </tr>`).join('') || '<tr><td colspan="10" class="muted">No tenants.</td></tr>';
+    document.getElementById('audit-wrap').style.display = '';
+    note.innerHTML = `Over-counted total: <b>${fmtGb(a.totals.overcounted_units)} GB</b>`
+      + ` · refund if applied: <b>${rupees(a.totals.refund_paise)}</b>`;
+  } catch (e) { note.textContent = ''; toast(e.message, 'err'); }
+  finally { btn.disabled = false; }
+};
 
 async function adjust(id, name) {
   const raw = prompt('Adjust wallet for "' + name + '" by amount in ₹ (use a negative number to debit):', '0');

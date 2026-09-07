@@ -66,6 +66,10 @@ apiRouter.get('/whoami', wrap(async (req, res) => {
 apiRouter.get('/tenants', requireSuperAdmin, wrap(async (_req, res) => {
   const { rows } = await query(
     `SELECT t.id, t.slug, t.name, t.status, t.created_at,
+            t.signup_utm_source, t.signup_utm_medium, t.signup_utm_campaign,
+            t.signup_referrer, t.signup_landing_path, t.signup_ua, t.signup_ip,
+            t.signup_browser, t.signup_os, t.signup_device,
+            t.signup_country, t.signup_city,
             w.balance_paise, w.free_upload_used, w.unlimited,
             (SELECT COALESCE(SUM(wt.units), 0) FROM wallet_txns wt
                WHERE wt.tenant_id = t.id AND wt.type = 'deduction')::numeric AS used_units,
@@ -86,6 +90,72 @@ apiRouter.get('/tenants', requireSuperAdmin, wrap(async (_req, res) => {
     ...r,
     units: billing.unitsBalance(r, cfg), // null = unmetered
   })));
+}));
+
+// READ-ONLY usage audit. The "Used" figure is SUM(wallet_txns.units) for
+// deductions, but pre-017 rows stored whole-GB CEIL values (migration 016
+// unmetered backfill, and old metered charges), so Used is inflated. This
+// recomputes what each deduction SHOULD be from the linked recording's actual
+// bytes and reports the per-tenant gap — plus the proportional paise over-charge
+// that a metered tenant was billed. Nothing is written here; the correction is a
+// separate, explicitly-clicked action once these numbers are reviewed.
+//
+//   correctable row = a deduction whose recording's file_size_bytes is known.
+//   Rows with unknown bytes are left unchanged (contribute zero delta).
+//   proposed refund per row = amount_paise − round(amount_paise × actual/old).
+apiRouter.get('/admin/usage-audit', requireSuperAdmin, wrap(async (_req, res) => {
+  const cfg = await billing.getBillingConfig();
+  const { rows } = await query(
+    `WITH d AS (
+       SELECT wt.tenant_id,
+              wt.units AS old_units,
+              wt.amount_paise,
+              (p.file_size_bytes IS NOT NULL) AS has_bytes,
+              CASE WHEN p.file_size_bytes IS NOT NULL
+                   THEN p.file_size_bytes::numeric / $1
+                   ELSE wt.units END AS actual_units
+       FROM wallet_txns wt
+       LEFT JOIN processed_recordings p ON p.id = wt.recording_id
+       WHERE wt.type = 'deduction'
+     )
+     SELECT t.id, t.slug, t.name,
+            COALESCE(w.unlimited, false) AS unlimited,
+            w.balance_paise,
+            count(d.*)::int                                        AS deduction_rows,
+            count(d.*) FILTER (WHERE d.has_bytes)::int             AS correctable_rows,
+            COALESCE(SUM(d.old_units), 0)::numeric                 AS current_used_units,
+            COALESCE(SUM(d.actual_units), 0)::numeric              AS actual_used_units,
+            COALESCE(SUM(d.amount_paise), 0)::bigint               AS current_charged_paise,
+            COALESCE(SUM(
+              d.amount_paise - round(d.amount_paise *
+                CASE WHEN d.old_units > 0 THEN d.actual_units / d.old_units ELSE 1 END)
+            ), 0)::bigint                                          AS proposed_refund_paise
+     FROM tenants t
+     LEFT JOIN wallets w ON w.tenant_id = t.id
+     LEFT JOIN d ON d.tenant_id = t.id
+     GROUP BY t.id, t.slug, t.name, w.unlimited, w.balance_paise
+     ORDER BY t.id`,
+    [cfg.unitBytes],
+  );
+  const tenants = rows.map((r) => ({
+    ...r,
+    current_used_units: Number(r.current_used_units),
+    actual_used_units: Number(r.actual_used_units),
+    delta_units: Number(r.current_used_units) - Number(r.actual_used_units),
+    // Refund only ever applies to metered tenants (unmetered rows charge 0 paise).
+    proposed_refund_paise: r.unlimited ? 0 : Number(r.proposed_refund_paise),
+    proposed_balance_paise: r.unlimited
+      ? r.balance_paise
+      : Number(r.balance_paise || 0) + Number(r.proposed_refund_paise),
+  }));
+  res.json({
+    unitBytes: cfg.unitBytes,
+    totals: {
+      overcounted_units: tenants.reduce((s, t) => s + Math.max(0, t.delta_units), 0),
+      refund_paise: tenants.reduce((s, t) => s + t.proposed_refund_paise, 0),
+    },
+    tenants,
+  });
 }));
 
 // NOTE: register the static /impersonate/stop BEFORE the parameterized
