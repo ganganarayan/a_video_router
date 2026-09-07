@@ -964,7 +964,13 @@ apiRouter.get('/sources/zoom/download', wrap(async (req, res) => {
   // Base recording scope (avoids the granular per-meeting 400).
   const meeting = await zoom.findMeetingInWindow(account, sourceId);
   if (!meeting) return res.status(404).json({ error: 'Recording not found on Zoom (it may have been deleted).' });
-  const file = fileId ? zoom.findFile(meeting, fileId) : zoom.pickRecordingFile(meeting);
+  // Without a specific file id, prefer the speaker-view MP4 but fall back to ANY
+  // MP4 the meeting has (many recordings are active_speaker / gallery only, with
+  // no shared_screen_with_speaker_view). This matches the listing, which enables
+  // Download from listVideoFiles — so if the row is downloadable there, it is here.
+  const file = fileId
+    ? zoom.findFile(meeting, fileId)
+    : (zoom.pickRecordingFile(meeting) || zoom.listVideoFiles(meeting)[0] || null);
   if (!file || !file.download_url) return res.status(404).json({ error: 'No downloadable MP4 for this recording.' });
 
   const safeName = String(meeting.topic || 'recording').replace(/[^\w.-]+/g, '_').slice(0, 80) || 'recording';
