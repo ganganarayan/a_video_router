@@ -244,6 +244,7 @@ function downloadRow(key) {
   const [source, iStr] = key.split(':');
   const item = (current[source] || [])[Number(iStr)];
   if (!item) return;
+  toast('Download started — keep this window open until it completes.');
   if (source === 'fathom') {
     window.location.href = '/api/sources/fathom/download?source_id=' + encodeURIComponent(item.source_id);
     return;
