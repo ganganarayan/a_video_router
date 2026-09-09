@@ -10,7 +10,8 @@ import { runMigrations, query } from './db.js';
 import { log, logError } from './lib/logger.js';
 import { createServer } from './web/server.js';
 import { startScheduler } from './scheduler.js';
-import { recoverInterruptedDownloads } from './pipeline/run.js';
+import { recoverInterruptedDownloads, isRunning } from './pipeline/run.js';
+import { hasActiveJobs } from './pipeline/manual.js';
 
 // Capture the reason a crash restarts the container instead of it dying silently.
 // (An OS-level OOM kill still won't reach these — that shows only in Railway's
@@ -29,6 +30,16 @@ setInterval(() => {
   const m = process.memoryUsage();
   log(`mem rss=${Math.round(m.rss / 1048576)}MB heap=${Math.round(m.heapUsed / 1048576)}MB`);
 }, 30000).unref();
+
+// Keep a (serverless) Postgres awake WHILE any push job or pipeline run is in
+// flight, so a multi-minute Fathom/Zoom transfer can't be cut off by the DB
+// idle-sleeping mid-operation. Only pings while work is active — an idle app still
+// lets the DB sleep (cost savings). App boot already wakes it via waitForDb().
+setInterval(() => {
+  if (isRunning() || hasActiveJobs()) {
+    query('SELECT 1').catch((err) => logError('db keepalive ping failed:', err.message));
+  }
+}, 20000).unref();
 
 // Migration 004 seeds the super admin; this is a belt-and-suspenders ensure for
 // any DB where a super_admin row is missing. Passwordless first login + forced
