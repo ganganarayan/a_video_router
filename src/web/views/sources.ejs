@@ -377,7 +377,10 @@ function fmtDuration(ms) {
 }
 
 function qSize(j) {
-  const b = j.transfer?.fileSizeBytes || j.progress?.total || 0;
+  // Final size first, then a known total; otherwise the bytes moved so far.
+  // Fathom HLS has no total up front, so `done` is the live downloaded size —
+  // show it instead of "—" so there's real progress feedback during download.
+  const b = j.transfer?.fileSizeBytes || j.progress?.total || j.progress?.done || 0;
   return b ? fmtBytes(b) : '—';
 }
 function qSpeed(j) {

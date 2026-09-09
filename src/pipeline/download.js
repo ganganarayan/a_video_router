@@ -51,16 +51,23 @@ export function cleanupTemp(filePath) {
 }
 
 // Fathom serves a single composited video at <share_url>/video.m3u8.
-// -c copy remux (no re-encode); reconnect flags survive Fathom's redirect-to-GCS
-// chunk hosts; +faststart makes the mp4 stream-friendly for the YouTube upload.
+// -c copy remux (no re-encode); +faststart makes the mp4 stream-friendly for the
+// YouTube upload. Connection tuning (shared with spawnFathomStream, see below):
+//   -http_persistent 1 + -multiple_requests 1 keep ONE connection alive across
+//   all HLS segments instead of a fresh TCP+TLS handshake per chunk (that per-
+//   chunk handshake was crushing throughput to KB/s on long recordings).
+//   -reconnect* let a brief Fathom/GCS stall recover instead of killing the job;
+//   delay_max 30 tolerates a longer hiccup before giving up.
 export function fathomFfmpegArgs(shareUrl, destPath) {
   const m3u8 = `${String(shareUrl).replace(/\/+$/, '')}/video.m3u8`;
   return [
     '-hide_banner', '-loglevel', 'error',
-    '-http_persistent', '0',
+    '-http_persistent', '1',
+    '-multiple_requests', '1',
     '-reconnect', '1',
     '-reconnect_streamed', '1',
-    '-reconnect_delay_max', '5',
+    '-reconnect_on_network_error', '1',
+    '-reconnect_delay_max', '30',
     '-i', m3u8,
     '-c', 'copy',
     '-bsf:a', 'aac_adtstoasc',
@@ -78,10 +85,12 @@ export function spawnFathomStream(shareUrl) {
   const m3u8 = `${String(shareUrl).replace(/\/+$/, '')}/video.m3u8`;
   const args = [
     '-hide_banner', '-loglevel', 'error',
-    '-http_persistent', '0',
+    '-http_persistent', '1',
+    '-multiple_requests', '1',
     '-reconnect', '1',
     '-reconnect_streamed', '1',
-    '-reconnect_delay_max', '5',
+    '-reconnect_on_network_error', '1',
+    '-reconnect_delay_max', '30',
     '-i', m3u8,
     '-c', 'copy',
     '-bsf:a', 'aac_adtstoasc',
