@@ -161,7 +161,9 @@ export async function listRecentRecordings(account, limit = 20, maxMonths = 6) {
       }
       nextPageToken = data.next_page_token || '';
     } while (nextPageToken);
-    to = new Date(from.getTime() - 24 * 3600 * 1000);
+    // Contiguous windows: the next one ends exactly where this began (uuid de-dup
+    // guards the shared boundary day), so no recording falls into a gap.
+    to = from;
   }
   return collected
     .sort((a, b) => new Date(b.start_time || 0) - new Date(a.start_time || 0))
@@ -229,14 +231,16 @@ export async function downloadRecording(account, downloadUrl, destPath, onProgre
 }
 
 // Open an authenticated read stream for a recording file (for streaming straight to
-// the browser — the free "download to local computer" feature). Caller pipes res.body.
-export async function openRecordingStream(account, downloadUrl) {
+// the browser — the free "download to local computer" feature, and inline preview).
+// Caller pipes res.body. An optional Range header is forwarded so the browser's
+// <video> element can seek (Zoom serves 206 Partial Content), which also lets it
+// fetch the moov atom when it sits at the end of the file.
+export async function openRecordingStream(account, downloadUrl, rangeHeader) {
   const token = await getAccessToken(account);
-  const res = await fetch(`${downloadUrl}?access_token=${token}`, {
-    headers: { Authorization: `Bearer ${token}` },
-    redirect: 'follow',
-  });
-  if (!res.ok || !res.body) {
+  const headers = { Authorization: `Bearer ${token}` };
+  if (rangeHeader) headers.Range = rangeHeader;
+  const res = await fetch(`${downloadUrl}?access_token=${token}`, { headers, redirect: 'follow' });
+  if ((!res.ok && res.status !== 206) || !res.body) {
     throw new Error(`Zoom download failed (${res.status})`);
   }
   return res;

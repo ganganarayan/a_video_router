@@ -151,6 +151,18 @@ function deleteBtn(source, i, item) {
       : 'Inactive until this recording has been uploaded to YouTube.'}">Delete from Zoom</button>`;
 }
 
+// A hidden player row inserted right under each recording. The <video> src is set
+// lazily (only when Preview is clicked) so we don't stream N videos at once.
+// Zoom plays via the inline (Range-capable) download route; Fathom via its route,
+// which redirects to the signed CDN MP4.
+function previewRow(source, i, cols) {
+  return `<tr class="prev-row" id="prev-${source}-${i}" style="display:none">
+    <td colspan="${cols}">
+      <video controls preload="none" playsinline style="width:100%;max-width:640px;border-radius:8px;background:#000"></video>
+      <div class="muted" style="margin-top:4px">Play to review the topic, then set the title above and Push to YouTube.</div>
+    </td></tr>`;
+}
+
 // Each row now has THREE independent actions instead of one combined Push:
 //   • Push to YouTube — uploads the recording (hidden once it is on YouTube).
 //   • Push to LMS — registers the YouTube video in a course. Stays available
@@ -191,6 +203,7 @@ function pushCell(source, i, item) {
   // leg is done), so render it here next to Download to choose which recording
   // file to grab. Pre-upload rows already show the picker in the YouTube leg.
   if (source === 'zoom' && item.youtube_url) parts.push(fileSelect(source, i, item));
+  parts.push(`<button data-preview="${source}:${i}" title="Play this recording here to review it, then set the title and push">Preview</button>`);
   parts.push(downloadBtn(source, i, item));
   parts.push(deleteBtn(source, i, item));
 
@@ -235,6 +248,37 @@ function bindRowActions(tbody) {
   tbody.querySelectorAll('[data-zoom-del]').forEach((btn) => {
     btn.onclick = () => deleteFromZoom(Number(btn.dataset.zoomDel), btn);
   });
+  tbody.querySelectorAll('[data-preview]').forEach((btn) => {
+    btn.onclick = () => togglePreview(btn.dataset.preview);
+  });
+}
+
+// Show/hide the inline player under a row; set the video src on first open only.
+function togglePreview(key) {
+  const [source, iStr] = key.split(':');
+  const i = Number(iStr);
+  const row = document.getElementById(`prev-${source}-${i}`);
+  if (!row) return;
+  const v = row.querySelector('video');
+  const opening = row.style.display === 'none';
+  if (opening) {
+    if (!v.src) {
+      const item = (current[source] || [])[i];
+      if (!item) return;
+      if (source === 'fathom') {
+        v.src = '/api/sources/fathom/download?source_id=' + encodeURIComponent(item.source_id);
+      } else {
+        const sel = document.querySelector(`[data-file="zoom:${i}"]`);
+        let url = '/api/sources/zoom/download?source_id=' + encodeURIComponent(item.source_id) + '&inline=1';
+        if (sel && sel.value) url += '&file_id=' + encodeURIComponent(sel.value);
+        v.src = url;
+      }
+    }
+    row.style.display = '';
+  } else {
+    try { v.pause(); } catch { /* ignore */ }
+    row.style.display = 'none';
+  }
 }
 
 // Free direct download to the user's computer (attachment header makes the
@@ -278,6 +322,7 @@ function renderZoom(s) {
       <td>${ytCell(z)}</td>
       <td>${pushCell('zoom', i, z)}</td>
     </tr>
+    ${previewRow('zoom', i, 9)}
   `).join('') || '<tr><td colspan="9" class="muted">No recordings on Zoom in this window.</td></tr>';
   bindRowActions(tbody);
 }
@@ -300,6 +345,7 @@ function renderFathom(s) {
       <td>${ytCell(f)}</td>
       <td>${pushCell('fathom', i, f)}</td>
     </tr>
+    ${previewRow('fathom', i, 6)}
   `).join('') || '<tr><td colspan="6" class="muted">No recordings on Fathom in this window.</td></tr>';
   bindRowActions(tbody);
 }

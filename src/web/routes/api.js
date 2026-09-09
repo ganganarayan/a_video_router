@@ -981,6 +981,22 @@ apiRouter.get('/sources/zoom/download', wrap(async (req, res) => {
     : (zoom.pickRecordingFile(meeting) || zoom.listVideoFiles(meeting)[0] || null);
   if (!file || !file.download_url) return res.status(404).json({ error: 'No downloadable MP4 for this recording.' });
 
+  // Inline mode (the Sources "Preview" player): play in the browser instead of
+  // forcing a download. Forward the Range header so the <video> can seek — Zoom
+  // replies 206 Partial Content, which we mirror back. Not audited/billed (preview).
+  if (req.query.inline) {
+    const zres = await zoom.openRecordingStream(account, file.download_url, req.headers.range);
+    res.status(zres.status === 206 ? 206 : 200);
+    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Accept-Ranges', 'bytes');
+    const cr = zres.headers.get('content-range'); if (cr) res.setHeader('Content-Range', cr);
+    const cl = zres.headers.get('content-length'); if (cl) res.setHeader('Content-Length', cl);
+    const stream = Readable.fromWeb(zres.body);
+    stream.on('error', () => { if (!res.headersSent) res.status(502); res.destroy(); });
+    req.on('close', () => stream.destroy());
+    return stream.pipe(res);
+  }
+
   const safeName = String(meeting.topic || 'recording').replace(/[^\w.-]+/g, '_').slice(0, 80) || 'recording';
   res.setHeader('Content-Type', 'video/mp4');
   res.setHeader('Content-Disposition', `attachment; filename="${safeName}.mp4"`);
