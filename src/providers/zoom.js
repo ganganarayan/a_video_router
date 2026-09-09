@@ -141,6 +141,33 @@ export async function listRecordings(account, windowDays) {
   return meetings;
 }
 
+// Lists the most recent `limit` recordings. Zoom caps each query at a one-month
+// range, so we walk backward one month at a time and stop as soon as we have
+// enough (the common case is a single call). Newest first, de-duped by uuid.
+export async function listRecentRecordings(account, limit = 20, maxMonths = 6) {
+  const token = await getAccessToken(account);
+  const collected = [];
+  const seen = new Set();
+  let to = new Date();
+  for (let month = 0; month < maxMonths && collected.length < limit; month++) {
+    const from = new Date(to.getTime() - 30 * 24 * 3600 * 1000);
+    let nextPageToken = '';
+    do {
+      const qs = new URLSearchParams({ from: isoDate(from), to: isoDate(to), page_size: '300' });
+      if (nextPageToken) qs.set('next_page_token', nextPageToken);
+      const data = await zoomGet(token, `/users/me/recordings?${qs}`);
+      for (const m of data.meetings || []) {
+        if (!seen.has(m.uuid)) { seen.add(m.uuid); collected.push(m); }
+      }
+      nextPageToken = data.next_page_token || '';
+    } while (nextPageToken);
+    to = new Date(from.getTime() - 24 * 3600 * 1000);
+  }
+  return collected
+    .sort((a, b) => new Date(b.start_time || 0) - new Date(a.start_time || 0))
+    .slice(0, limit);
+}
+
 // Re-fetch a single meeting's recordings by UUID (used by the retry sweep after
 // the meeting has left the rolling window).
 export async function getMeetingRecordings(account, meetingUuid) {

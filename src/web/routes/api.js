@@ -783,9 +783,13 @@ apiRouter.post('/run-now', requireOwner, wrap(async (req, res) => {
 
 // ---------- source videos (live listing) ----------
 
+// How many recordings to list per source. The listing is bounded by this count
+// (the latest N), not by a day window.
+const SOURCES_LIMIT = 20;
+
 apiRouter.get('/sources', wrap(async (req, res) => {
   const tid = T(req);
-  const windowDays = Math.min(Math.max(Number(req.query.days) || 30, 1), 30);
+  const limit = Math.min(Math.max(Number(req.query.limit) || SOURCES_LIMIT, 1), 100);
   const [zoomAccount, fathomAccount] = await Promise.all([
     zoom.getZoomAccount(tid), fathom.getFathomAccount(tid),
   ]);
@@ -796,11 +800,11 @@ apiRouter.get('/sources', wrap(async (req, res) => {
     [tid],
   );
   const byKey = new Map(dbRows.map((r) => [`${r.source}:${r.source_id}`, r]));
-  const result = { windowDays, zoom: null, fathom: null, errors: {} };
+  const result = { limit, zoom: null, fathom: null, errors: {} };
 
   if (zoomAccount) {
     try {
-      const meetings = await zoom.listRecordings(zoomAccount, windowDays);
+      const meetings = await zoom.listRecentRecordings(zoomAccount, limit);
       result.zoom = meetings.map((m) => {
         const rec = byKey.get(`zoom:${m.uuid}`) || null;
         return {
@@ -837,7 +841,11 @@ apiRouter.get('/sources', wrap(async (req, res) => {
 
   if (fathomAccount) {
     try {
-      const meetings = await fathom.listMeetings(fathomAccount, windowDays);
+      // Fathom's created_after accepts an arbitrary range, so pull a generous
+      // window then keep only the latest `limit`, newest first.
+      const meetings = (await fathom.listMeetings(fathomAccount, 365))
+        .sort((a, b) => new Date(b.recordedAt || 0) - new Date(a.recordedAt || 0))
+        .slice(0, limit);
       result.fathom = meetings.map((m) => {
         const rec = byKey.get(`fathom:${m.recordingId}`) || null;
         return {

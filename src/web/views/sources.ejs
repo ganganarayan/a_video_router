@@ -1,6 +1,6 @@
 <%- include('partials/head') %>
 <h1>Source videos</h1>
-<p class="muted">Live listing from Zoom and Fathom (last 30 days), matched against the pipeline log.
+<p class="muted">Live listing of your latest 20 recordings from Zoom and Fathom, matched against the pipeline log.
 Each row has its own buttons: <b>Push to YouTube</b> uploads the recording, then <b>Push to LMS</b>
 registers that video in your course (it stays active after the YouTube upload so you can push to the
 LMS separately). <b>Download</b> saves the original to your computer (free, Zoom only).
@@ -263,7 +263,7 @@ function renderZoom(s) {
     tbody.innerHTML = '';
     return;
   }
-  note.textContent = `— ${s.zoom.length} recording(s) in the last ${s.windowDays} days`;
+  note.textContent = `— showing ${s.zoom.length} of the latest ${s.limit} recording(s)`;
   tbody.innerHTML = s.zoom.map((z, i) => `
     <tr>
       <td>${esc(z.title)}</td>
@@ -290,7 +290,7 @@ function renderFathom(s) {
     tbody.innerHTML = '';
     return;
   }
-  note.textContent = `— ${s.fathom.length} recording(s) in the last ${s.windowDays} days`;
+  note.textContent = `— showing ${s.fathom.length} of the latest ${s.limit} recording(s)`;
   tbody.innerHTML = s.fathom.map((f, i) => `
     <tr>
       <td>${esc(f.title)}</td>
