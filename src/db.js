@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { config } from './config.js';
-import { log } from './lib/logger.js';
+import { log, logError } from './lib/logger.js';
 
 const LOCAL_HOSTS = /localhost|127\.0\.0\.1|railway\.internal/;
 
@@ -11,6 +11,18 @@ export const pool = new pg.Pool({
   connectionString: config.databaseUrl,
   ssl: LOCAL_HOSTS.test(config.databaseUrl) ? false : { rejectUnauthorized: false },
   max: 5,
+});
+
+// A Pool emits 'error' when an IDLE pooled connection dies on its own — the
+// managed Postgres restarting, sleeping/waking, or a network drop (Postgres sends
+// FATAL 57P01 "terminating connection due to administrator command"). With NO
+// listener, Node treats it as an unhandled 'error' event and crashes the whole
+// process — which is exactly what was killing the app (and wiping the in-memory
+// push queue, orphaning the in-flight recording) every time the DB bounced. Log
+// it and move on: the pool discards the dead client and opens a fresh one on the
+// next query. An in-flight query still rejects and its caller handles that.
+pool.on('error', (err) => {
+  logError(`pg pool idle-client error (recovered): ${err.code || ''} ${err.message}`.trim());
 });
 
 export function query(text, params) {
