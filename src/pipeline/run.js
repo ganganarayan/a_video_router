@@ -8,7 +8,7 @@ import { matchRule, buildVideoTitle } from './router.js';
 import { STATES, RETRYABLE_STATES } from './states.js';
 import fs from 'node:fs';
 import {
-  cacheFilePath, partialFilePath, isCachedComplete, cleanupTemp, downloadFathomVideo,
+  cacheFilePath, partialFilePath, isCachedComplete, cleanupTemp, streamToFile,
 } from './download.js';
 import { lock, unlock, isLocked, recordingKey } from './locks.js';
 import { ProgressTracker } from './progress.js';
@@ -60,6 +60,14 @@ async function ensureRow(tenantId, source, sourceId, fields) {
 async function getRules(tenantId) {
   const { rows } = await query('SELECT * FROM routing_rules WHERE tenant_id = $1', [tenantId]);
   return rows;
+}
+
+// Fathom download: resolve a signed MP4 URL via Fathom's official download API,
+// then stream that single file to disk — fast, resumable, real byte size, and no
+// HLS remux or per-segment request storm against Fathom. A stall aborts and errors.
+async function fathomDownloadToFile(account, recordingId, dest, onProgress) {
+  const { url, sizeBytes } = await fathom.resolveDownloadUrl(account, recordingId);
+  return streamToFile(url, dest, onProgress, { totalHint: sizeBytes });
 }
 
 function noteSkip(rec, reason, counts, details) {
@@ -265,7 +273,7 @@ async function processZoomRecording(ctx, rec, meeting, counts, details) {
   );
 }
 
-async function processFathomRecording(ctx, rec, shareUrl, counts, details) {
+async function processFathomRecording(ctx, rec, counts, details) {
   if (isLocked(recordingKey(ctx.tenantId, 'fathom', rec.source_id))) return; // manual push in flight
   if (rec.youtube_video_id) {
     const rule = matchRule(ctx.rules, 'fathom', rec.title);
@@ -278,14 +286,9 @@ async function processFathomRecording(ctx, rec, shareUrl, counts, details) {
     await updateRec(rec.id, { status: STATES.SKIPPED_NO_ROUTE, error_message: null });
     return noteSkip(rec, 'no routing rule matched', counts, details);
   }
-  if (!shareUrl) {
-    counts.errors++;
-    details.errors.push({ title: rec.title, source: 'fathom', message: 'no share_url available' });
-    return updateRec(rec.id, { status: STATES.ERROR, error_message: 'no share_url available' });
-  }
   await downloadUploadFinish(
     ctx, rec, rule,
-    (dest, onProgress) => downloadFathomVideo(shareUrl, dest, onProgress),
+    (dest, onProgress) => fathomDownloadToFile(ctx.fathomAccount, rec.source_id, dest, onProgress),
     counts, details,
   );
 }
@@ -327,7 +330,7 @@ async function processFathomPhase(ctx, seen, counts, details) {
       });
       if (isNew) counts.found++;
       seen.add(`fathom:${m.recordingId}`);
-      await processFathomRecording(ctx, rec, m.shareUrl || rec.source_meta?.share_url, counts, details);
+      await processFathomRecording(ctx, rec, counts, details);
     } catch (err) {
       counts.errors++;
       details.errors.push({ title: m.title, source: 'fathom', message: err.message });
@@ -357,7 +360,7 @@ async function retrySweep(ctx, seen, counts, details) {
         }
         await processZoomRecording(ctx, rec, meeting, counts, details);
       } else {
-        await processFathomRecording(ctx, rec, rec.source_meta?.share_url, counts, details);
+        await processFathomRecording(ctx, rec, counts, details);
       }
     } catch (err) {
       counts.errors++;
@@ -422,7 +425,6 @@ export async function manualPush(job) {
 
     let rec;
     let meeting = null;
-    let shareUrl = null;
     if (job.source === 'zoom') {
       if (!ctx.zoomAccount) throw new Error('Zoom is not connected.');
       // Use the account-level listing (works with the base recording scope)
@@ -451,7 +453,6 @@ export async function manualPush(job) {
         duration_minutes: m?.durationMinutes ?? null,
         source_meta: m?.shareUrl ? { share_url: m.shareUrl } : {},
       }));
-      shareUrl = m?.shareUrl || rec.source_meta?.share_url || null;
     }
 
     rec = await getRec(rec.id);
@@ -496,10 +497,9 @@ export async function manualPush(job) {
           counts, details, tracker,
         );
       } else {
-        if (!shareUrl) throw new Error('No Fathom share URL available for this recording.');
         await downloadUploadFinish(
           ctx, rec, rule,
-          (dest, onProgress) => downloadFathomVideo(shareUrl, dest, onProgress),
+          (dest, onProgress) => fathomDownloadToFile(ctx.fathomAccount, rec.source_id, dest, onProgress),
           counts, details, tracker,
         );
       }
@@ -537,6 +537,21 @@ export async function manualPush(job) {
 }
 
 // --- the run ---
+
+// On boot, a download/upload that was in flight when the process died leaves its
+// row stuck in 'downloading'/'uploading' with no YouTube link — the in-memory job
+// and its cleanup went with the process. Reset those to 'error' (a retryable
+// state) so they don't show "downloading" forever and get picked up again.
+export async function recoverInterruptedDownloads() {
+  const { rowCount } = await query(
+    `UPDATE processed_recordings
+        SET status = 'error',
+            error_message = 'Interrupted — the server restarted mid-transfer. Retry the push.'
+      WHERE status IN ('downloading', 'uploading') AND youtube_video_id IS NULL`,
+  );
+  if (rowCount) log(`orphan recovery: reset ${rowCount} interrupted recording(s) to retryable`);
+  return rowCount;
+}
 
 export async function runPipeline(tenantId, runType = 'manual') {
   if (tenantId == null) { logError('runPipeline called without tenantId'); return { error: 'no tenant' }; }

@@ -17,7 +17,7 @@ import {
 } from '../auth.js';
 import { runPipeline, isRunning } from '../../pipeline/run.js';
 import { enqueuePush, getJobs } from '../../pipeline/manual.js';
-import { ingestTempPath, spawnFathomStream } from '../../pipeline/download.js';
+import { ingestTempPath } from '../../pipeline/download.js';
 import { reloadSchedules, getSchedules } from '../../scheduler.js';
 import * as zoom from '../../providers/zoom.js';
 import * as fathom from '../../providers/fathom.js';
@@ -997,9 +997,9 @@ apiRouter.get('/sources/zoom/download', wrap(async (req, res) => {
 }));
 
 // Download a Fathom recording to the user's computer (FREE — not metered).
-// Fathom serves HLS, so we remux with ffmpeg and PIPE the MP4 straight to the
-// browser (fragmented MP4 — no temp file, nothing buffered). Content-Length is
-// unknown up front (live remux), so the browser shows an indeterminate size.
+// Fathom's official download API generates a real MP4 and returns a short-lived
+// signed CDN URL — redirect the browser straight to it. Fast, resumable, and it
+// puts zero bytes through Railway (the browser fetches Fathom's CDN directly).
 apiRouter.get('/sources/fathom/download', wrap(async (req, res) => {
   const tid = T(req);
   const sourceId = String(req.query.source_id || '');
@@ -1007,25 +1007,17 @@ apiRouter.get('/sources/fathom/download', wrap(async (req, res) => {
   const account = await fathom.getFathomAccount(tid);
   if (!account) return res.status(400).json({ error: 'Fathom is not connected.' });
 
-  const meetings = await fathom.listMeetings(account, 30);
-  const m = meetings.find((x) => x.recordingId === sourceId);
-  const shareUrl = m?.shareUrl;
-  if (!shareUrl) return res.status(404).json({ error: 'Recording not found on Fathom (or it has no share URL).' });
-
-  const safeName = String(m.title || 'fathom-recording').replace(/[^\w.-]+/g, '_').slice(0, 80) || 'recording';
-  res.setHeader('Content-Type', 'video/mp4');
-  res.setHeader('Content-Disposition', `attachment; filename="${safeName}.mp4"`);
-
-  const proc = spawnFathomStream(shareUrl);
-  let stderr = '';
-  proc.stderr.on('data', (d) => { stderr += d.toString().slice(0, 2000); });
-  proc.on('error', (err) => { if (!res.headersSent) res.status(502).json({ error: `ffmpeg failed: ${err.message}` }); else res.destroy(); });
-  proc.on('close', (code) => { if (code && code !== 0) { logError(`fathom download ffmpeg exited ${code}: ${stderr.slice(-300)}`); res.destroy(); } });
-  req.on('close', () => { try { proc.kill('SIGKILL'); } catch { /* already gone */ } }); // client cancelled → stop ffmpeg
-  // Free download — audit only, never billed.
-  query(`INSERT INTO download_events (tenant_id, source, user_email, bytes) VALUES ($1, 'fathom', $2, NULL)`,
-    [tid, req.user?.email || null]).catch(() => {});
-  proc.stdout.pipe(res);
+  let dl;
+  try {
+    dl = await fathom.resolveDownloadUrl(account, sourceId, { timeoutMs: 5 * 60 * 1000 });
+  } catch (err) {
+    logError(`fathom download failed for rec ${sourceId}:`, err.message);
+    return res.status(502).json({ error: `Fathom download failed: ${err.message}` });
+  }
+  // Free download — audit only, never billed. Size is known from the API now.
+  query(`INSERT INTO download_events (tenant_id, source, user_email, bytes) VALUES ($1, 'fathom', $2, $3)`,
+    [tid, req.user?.email || null, dl.sizeBytes || null]).catch(() => {});
+  res.redirect(dl.url);
 }));
 
 apiRouter.post('/sources/zoom/delete', requireOwner, wrap(async (req, res) => {

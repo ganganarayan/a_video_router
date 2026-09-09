@@ -10,6 +10,7 @@ import { runMigrations, query } from './db.js';
 import { log, logError } from './lib/logger.js';
 import { createServer } from './web/server.js';
 import { startScheduler } from './scheduler.js';
+import { recoverInterruptedDownloads } from './pipeline/run.js';
 
 // Migration 004 seeds the super admin; this is a belt-and-suspenders ensure for
 // any DB where a super_admin row is missing. Passwordless first login + forced
@@ -29,6 +30,7 @@ async function ensureSuperAdmin() {
 async function main() {
   await runMigrations();
   await ensureSuperAdmin();
+  await recoverInterruptedDownloads().catch((err) => logError('orphan recovery failed:', err.message));
 
   const app = createServer();
   app.listen(config.port, () => log(`VideoRouter listening on :${config.port}`));

@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
-import { log } from '../lib/logger.js';
+import { Transform, Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 
 // Cache dir for downloaded source files. Defaults to a temp path; set CACHE_DIR
 // to a mounted Railway volume to make the cache survive container restarts.
@@ -45,89 +45,58 @@ export function isCachedComplete(recId, expectedBytes) {
 export function cleanupTemp(filePath) {
   try {
     if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
-  } catch (err) {
-    log(`temp cleanup failed for ${filePath}: ${err.message}`);
+  } catch {
+    /* best effort */
   }
 }
 
-// Fathom serves a single composited video at <share_url>/video.m3u8.
-// -c copy remux (no re-encode); +faststart makes the mp4 stream-friendly for the
-// YouTube upload. Connection tuning (shared with spawnFathomStream, see below):
-//   -http_persistent 1 + -multiple_requests 1 keep ONE connection alive across
-//   all HLS segments instead of a fresh TCP+TLS handshake per chunk (that per-
-//   chunk handshake was crushing throughput to KB/s on long recordings).
-//   -reconnect* let a brief Fathom/GCS stall recover instead of killing the job;
-//   delay_max 30 tolerates a longer hiccup before giving up.
-export function fathomFfmpegArgs(shareUrl, destPath) {
-  const m3u8 = `${String(shareUrl).replace(/\/+$/, '')}/video.m3u8`;
-  return [
-    '-hide_banner', '-loglevel', 'error',
-    '-http_persistent', '1',
-    '-multiple_requests', '1',
-    '-reconnect', '1',
-    '-reconnect_streamed', '1',
-    '-reconnect_on_network_error', '1',
-    '-reconnect_delay_max', '30',
-    '-i', m3u8,
-    '-c', 'copy',
-    '-bsf:a', 'aac_adtstoasc',
-    '-movflags', '+faststart',
-    '-y', destPath,
-  ];
-}
+// If a transfer sends no bytes for this long, treat it as stalled: abort the
+// fetch (closing the connection to the source so we stop holding it open / hitting
+// the source) and fail loudly, so the row goes to 'error' instead of hanging.
+const STALL_TIMEOUT_MS = 60_000;
 
-// Stream a Fathom recording as MP4 straight to a consumer (e.g. the browser
-// Download), without a temp file. Uses fragmented MP4 (frag_keyframe+empty_moov)
-// so the moov atom isn't deferred to the end — ffmpeg can pipe bytes as they are
-// remuxed. Returns the child process; caller pipes proc.stdout and must kill it
-// on client disconnect. Memory-light: nothing is buffered here.
-export function spawnFathomStream(shareUrl) {
-  const m3u8 = `${String(shareUrl).replace(/\/+$/, '')}/video.m3u8`;
-  const args = [
-    '-hide_banner', '-loglevel', 'error',
-    '-http_persistent', '1',
-    '-multiple_requests', '1',
-    '-reconnect', '1',
-    '-reconnect_streamed', '1',
-    '-reconnect_on_network_error', '1',
-    '-reconnect_delay_max', '30',
-    '-i', m3u8,
-    '-c', 'copy',
-    '-bsf:a', 'aac_adtstoasc',
-    '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
-    '-f', 'mp4',
-    'pipe:1',
-  ];
-  return spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] });
-}
+// Stream a URL straight to a file with byte-progress and a stall watchdog.
+// Memory-light: the body is piped to disk, never buffered. `totalHint` supplies a
+// known size when the response has no Content-Length (so the UI still shows %).
+// Returns the final file size. Used for the fast Fathom download (a signed MP4
+// URL from Fathom's official download API) — same streaming shape as Zoom.
+export async function streamToFile(url, destPath, onProgress, opts = {}) {
+  const { totalHint = 0, stallMs = STALL_TIMEOUT_MS } = opts;
+  const controller = new AbortController();
+  let stallTimer = null;
+  let stalled = false;
+  const armStall = () => {
+    if (stallTimer) clearTimeout(stallTimer);
+    stallTimer = setTimeout(() => { stalled = true; controller.abort(); }, stallMs);
+  };
 
-export function downloadFathomVideo(shareUrl, destPath, onProgress) {
-  return new Promise((resolve, reject) => {
-    const args = fathomFfmpegArgs(shareUrl, destPath);
-    const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
-    let stderr = '';
-    proc.stderr.on('data', (d) => { stderr += d; });
-    // HLS has no known total up front, so report bytes-written as the output
-    // file grows (total 0 => the UI shows an indeterminate bar).
-    let poll = null;
-    if (onProgress) {
-      poll = setInterval(() => {
-        try { onProgress(fs.statSync(destPath).size, 0); } catch { /* not created yet */ }
-      }, 1000);
-    }
-    const stopPoll = () => { if (poll) clearInterval(poll); };
-    proc.on('error', (err) => { stopPoll(); reject(new Error(`ffmpeg spawn failed: ${err.message}`)); });
-    proc.on('close', (code) => {
-      stopPoll();
-      if (code === 0) {
-        try {
-          resolve(fs.statSync(destPath).size);
-        } catch (err) {
-          reject(new Error(`ffmpeg finished but output missing: ${err.message}`));
-        }
-      } else {
-        reject(new Error(`ffmpeg exited ${code}: ${stderr.slice(-500)}`));
-      }
-    });
+  const res = await fetch(url, { redirect: 'follow', signal: controller.signal });
+  if (!res.ok || !res.body) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`download failed (${res.status}): ${body.slice(0, 300)}`);
+  }
+
+  const total = Number(res.headers.get('content-length')) || totalHint || 0;
+  let received = 0;
+  armStall();
+  const counter = new Transform({
+    transform(chunk, _enc, cb) {
+      received += chunk.length;
+      armStall();
+      onProgress?.(received, total);
+      cb(null, chunk);
+    },
   });
+
+  try {
+    await pipeline(Readable.fromWeb(res.body), counter, fs.createWriteStream(destPath));
+  } catch (err) {
+    if (stalled || controller.signal.aborted) {
+      throw new Error(`transfer stalled — no data for ${Math.round(stallMs / 1000)}s; aborted the connection`);
+    }
+    throw err;
+  } finally {
+    if (stallTimer) clearTimeout(stallTimer);
+  }
+  return fs.statSync(destPath).size;
 }
