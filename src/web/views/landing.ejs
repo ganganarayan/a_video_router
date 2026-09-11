@@ -134,7 +134,47 @@
 
     .final{text-align:center}
     footer{border-top:1px solid var(--line);padding:30px 0;color:var(--muted);text-align:center;font-size:14px}
-    @media(max-width:760px){.steps,.grid{grid-template-columns:1fr}}
+
+    /* REALITY-CHECK section (directly below hero) */
+    .rc .eyebrow{display:inline-block;font-size:12px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;
+      color:var(--accent);background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:6px 15px;margin-bottom:18px}
+    .rc .emph{max-width:840px;margin:28px auto 0;
+      background:linear-gradient(135deg,rgba(79,140,255,.14),rgba(123,92,255,.14));
+      border:1px solid var(--accent);border-radius:14px;padding:22px 26px;text-align:center;
+      font-size:clamp(16px,2vw,19px);line-height:1.6}
+    .rc .emph b{color:var(--text)}
+    .rc-scroll{margin-top:36px}
+    table.rc-tbl{width:100%;border-collapse:collapse;font-size:15px}
+    table.rc-tbl th,table.rc-tbl td{padding:14px 16px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+    table.rc-tbl thead th{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:700;white-space:nowrap}
+    table.rc-tbl tbody th{font-weight:700;font-size:16px}
+    table.rc-tbl .why{color:var(--muted);font-size:14px}
+    table.rc-tbl .lim{color:var(--muted);font-size:14px}
+    table.rc-tbl .status{white-space:nowrap;font-weight:700}
+    table.rc-tbl .cost .money{display:block;font-weight:600}
+    table.rc-tbl .cost .effort{display:block;color:var(--muted);font-size:13px;margin-top:5px}
+    table.rc-tbl .cost a{color:var(--accent);font-weight:700}
+    table.rc-tbl tr.us th,table.rc-tbl tr.us td{
+      background:linear-gradient(135deg,rgba(79,140,255,.16),rgba(123,92,255,.16));
+      border-top:1px solid var(--accent);border-bottom:1px solid var(--accent)}
+    table.rc-tbl tr.us th{border-left:3px solid var(--accent)}
+    table.rc-tbl tr.us td:last-child{border-right:1px solid var(--accent)}
+    .rc-foot{color:var(--muted);font-size:14px;margin-top:20px;text-align:center;max-width:760px;margin-left:auto;margin-right:auto}
+    @media(max-width:760px){
+      .steps,.grid{grid-template-columns:1fr}
+      table.rc-tbl thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+      table.rc-tbl,table.rc-tbl tbody,table.rc-tbl tr,table.rc-tbl th,table.rc-tbl td{display:block;width:100%}
+      table.rc-tbl tr{background:var(--panel);border:1px solid var(--line);border-radius:12px;margin-bottom:16px;overflow:hidden}
+      table.rc-tbl tr.us{border-color:var(--accent)}
+      table.rc-tbl th,table.rc-tbl td{border-bottom:1px solid var(--line);padding:12px 16px}
+      table.rc-tbl tr td:last-child{border-bottom:none}
+      table.rc-tbl tbody th{font-size:19px;background:var(--panel2);border-bottom:2px solid var(--line)}
+      table.rc-tbl tr.us th{background:transparent;border-left:0}
+      table.rc-tbl tr.us th,table.rc-tbl tr.us td{border-top:0}
+      table.rc-tbl tr.us td:last-child{border-right:0}
+      table.rc-tbl td::before{content:attr(data-label);display:block;font-size:11px;letter-spacing:.05em;
+        text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:5px}
+    }
   </style>
   <script src="/public/theme.js"></script>
 </head>
@@ -187,6 +227,88 @@
       </div>
     </div>
   </div>
+
+  <!-- REALITY CHECK (directly below hero) -->
+  <section class="rc">
+    <div class="wrap" style="text-align:center">
+      <span class="eyebrow">The part the tutorials skip</span>
+      <h2>The workflow works. Until the file gets real.</h2>
+      <p class="lead">Anyone can wire Zoom → YouTube in n8n, Make, or Pabbly. The demo runs on a 40&nbsp;MB clip
+        and everyone claps. Then you feed it an actual 2–4&nbsp;GB recording — and it dies. So you're back to
+        downloading each session, waiting, and re-uploading by hand. Every single time.</p>
+      <p class="emph"><b>AVideoRouter streams the file instead of swallowing it</b> — so 2–4&nbsp;GB+ recordings move
+        Zoom/Fathom → YouTube or your LMS reliably, hands-off, in real time. <b>No caps. No crashes. No manual re-uploads.</b></p>
+
+      <div class="rc-scroll">
+        <table class="rc-tbl">
+          <thead>
+            <tr>
+              <th>Tool</th>
+              <th>Max limit</th>
+              <th>2–4&nbsp;GB recording?</th>
+              <th>Why it breaks</th>
+              <th>Real cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">Make</th>
+              <td class="lim" data-label="Max limit">Total data transfer capped per month — Make's own limits: 100&nbsp;MB (Free), 1&nbsp;GB (Core), 10&nbsp;GB (Pro/Teams).</td>
+              <td class="status" data-label="2–4 GB recording?">❌ Fails</td>
+              <td class="why" data-label="Why it breaks">Hard monthly transfer cap. One 3&nbsp;GB recording eats a third of the Pro plan; a few files and you're locked out for the month.</td>
+              <td class="cost" data-label="Real cost">
+                <span class="money">💰 ~$16–19/mo</span>
+                <span class="effort">⏱ Hours to build, then it fails on the first real file</span>
+              </td>
+            </tr>
+            <tr>
+              <th scope="row">Pabbly</th>
+              <td class="lim" data-label="Max limit">No published large-file support. A coach put it plainly: “I tried pushing a 2.3&nbsp;GB Zoom recording through Pabbly — it just choked. It's built for form and CRM data, not video.”</td>
+              <td class="status" data-label="2–4 GB recording?">❌ Fails</td>
+              <td class="why" data-label="Why it breaks">Never designed to carry video — there's no multi-GB path to use.</td>
+              <td class="cost" data-label="Real cost">
+                <span class="money">💰 ~$16/mo (or ~$349 lifetime)</span>
+                <span class="effort">⏱ Quick to wire up — straight into a dead end</span>
+              </td>
+            </tr>
+            <tr>
+              <th scope="row">n8n (self-hosted)</th>
+              <td class="lim" data-label="Max limit">No hard cap, but a hard memory wall. n8n's own docs say binary data is held in memory by default and “can cause crashes when working with large files.” A coach's real run: “My 3&nbsp;GB upload crashed with out-of-memory — even after I switched to filesystem mode. The node still loads the whole file to send it.”</td>
+              <td class="status" data-label="2–4 GB recording?">⚠️ Fails on any normal host</td>
+              <td class="why" data-label="Why it breaks">Loads the entire video into RAM to upload it. Needs 12–16&nbsp;GB of RAM to even attempt a large file — and still fails intermittently.</td>
+              <td class="cost" data-label="Real cost">
+                <span class="money">💰 $60–160/mo once RAM is sized for video</span>
+                <span class="effort">⏱ Days of config + crash-debugging</span>
+              </td>
+            </tr>
+            <tr>
+              <th scope="row">Doing it by hand</th>
+              <td class="lim" data-label="Max limit">Unlimited — because you are the pipeline.</td>
+              <td class="status" data-label="2–4 GB recording?">✅ (but you're the bottleneck)</td>
+              <td class="why" data-label="Why it breaks">Nothing breaks except your calendar and the boring task. Download, wait, re-upload — for every recording, forever.</td>
+              <td class="cost" data-label="Real cost">
+                <span class="money">💰 $0 software</span>
+                <span class="effort">⏱ Your time, every single recording, indefinitely, day in and day out.</span>
+              </td>
+            </tr>
+            <tr class="us">
+              <th scope="row">AVideoRouter</th>
+              <td class="lim" data-label="Max limit">No cap. Streams the file — never loads it into memory.</td>
+              <td class="status" data-label="2–4 GB recording?">✅ Works</td>
+              <td class="why" data-label="Why it breaks">It doesn't. Real-time, automatic, hands-off.</td>
+              <td class="cost" data-label="Real cost">
+                <span class="money">💰 <a href="#pricing">See the pricing section below</a></span>
+                <span class="effort">⏱ ~Zero — set once, then forget it</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="rc-foot">The “cheap” tools bill you monthly to fail. Doing it by hand is the most expensive of all —
+        it just hides the cost in your evenings.</p>
+    </div>
+  </section>
 
   <!-- PROBLEM -->
   <section>
