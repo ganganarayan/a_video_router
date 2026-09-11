@@ -75,6 +75,13 @@ tr:hover td { background: rgba(255,255,255,.02); }
 .badge.ok { background: rgba(46,204,113,.15); color: var(--ok); }
 .badge.warn { background: rgba(241,196,15,.15); color: var(--warn); }
 .badge.err { background: rgba(231,76,60,.15); color: var(--err); }
+/* On the auth cards (login / forgot / reset / set-password) the badge carries a
+   full sentence, not a one-word chip — let it wrap and sit as a block so it stays
+   inside the 360px card instead of overflowing on the nowrap pill style. */
+.login-box .badge {
+  display: block; white-space: normal; padding: 8px 12px;
+  font-size: 13px; line-height: 1.5; border-radius: 8px;
+}
 
 .stat { text-align: center; }
 .stat .num { font-size: 26px; font-weight: 700; }
