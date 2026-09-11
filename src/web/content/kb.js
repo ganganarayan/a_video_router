@@ -125,6 +125,6 @@ export const KB_TOPICS = [
     solutionHeading: 'How AVideoRouter solves it',
     solution: `<p>AVideoRouter is <b>subscription-free and pay-as-you-go</b>: ₹50 per GB of transfer
         (billed for the actual data you transfer — no rounding up). Buy credits only as you need them, they never expire
-        until used, GST invoices are supported, and you can add your team with a ₹1,000+ top-up (or on Always-On). Your first upload is on us.</p>`,
+        until used, GST invoices are supported, and you can add your team with a ₹1,000+ top-up (or on Always-On). Your first GB is on us.</p>`,
   },
 ];

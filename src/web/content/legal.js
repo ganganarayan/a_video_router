@@ -70,7 +70,7 @@ export const LEGAL = {
       </ul>
 
       <h2>Billing</h2>
-      <p>The service is pay-as-you-go. Each uploaded video draws one credit from your wallet; the first upload is
+      <p>The service is pay-as-you-go. Each uploaded video draws from your wallet as data transfers; the first GB is
       free. Credits are purchased in packs as shown on the Billing page, with applicable taxes and gateway fees.
       Purchased credits are non-refundable — see the Refund policy.</p>
 
@@ -97,7 +97,7 @@ export const LEGAL = {
       you pay for is lost.</p>
 
       <h2>Try before you buy</h2>
-      <p>Your <b>first upload is free</b>, so you can confirm the service works for you before purchasing any
+      <p>Your <b>first GB is free</b>, so you can confirm the service works for you before purchasing any
       credits.</p>
 
       <h2>Cancellation</h2>
