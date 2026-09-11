@@ -208,6 +208,31 @@ export async function findMeetingInWindow(account, meetingUuid, windowDays = 30)
   return meetings.find((m) => m.uuid === meetingUuid) || null;
 }
 
+// Locate a meeting by UUID across the same recent-listing window the Sources
+// page shows. The Sources listing lists the latest N recordings (which can span
+// several months via listRecentRecordings), but a 30-day findMeetingInWindow
+// misses anything older than 30 days — that broke Preview/Download for every
+// row after the newest one. We walk backward one month at a time (Zoom's
+// per-query cap) and stop as soon as we find the UUID.
+export async function findRecentMeeting(account, meetingUuid, maxMonths = 6) {
+  const token = await getAccessToken(account);
+  let to = new Date();
+  for (let month = 0; month < maxMonths; month++) {
+    const from = new Date(to.getTime() - 30 * 24 * 3600 * 1000);
+    let nextPageToken = '';
+    do {
+      const qs = new URLSearchParams({ from: isoDate(from), to: isoDate(to), page_size: '300' });
+      if (nextPageToken) qs.set('next_page_token', nextPageToken);
+      const data = await zoomGet(token, `/users/me/recordings?${qs}`);
+      const hit = (data.meetings || []).find((m) => m.uuid === meetingUuid);
+      if (hit) return hit;
+      nextPageToken = data.next_page_token || '';
+    } while (nextPageToken);
+    to = new Date(from.getTime() - 24 * 3600 * 1000);
+  }
+  return null;
+}
+
 export async function downloadRecording(account, downloadUrl, destPath, onProgress) {
   const token = await getAccessToken(account);
   const res = await fetch(`${downloadUrl}?access_token=${token}`, {

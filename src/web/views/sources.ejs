@@ -251,9 +251,38 @@ function bindRowActions(tbody) {
   tbody.querySelectorAll('[data-preview]').forEach((btn) => {
     btn.onclick = () => togglePreview(btn.dataset.preview);
   });
+  // Zoom file picker: keep an open preview in sync with the selected view.
+  tbody.querySelectorAll('[data-file]').forEach((sel) => {
+    sel.addEventListener('change', () => onPreviewFileChange(sel.dataset.file));
+  });
 }
 
-// Show/hide the inline player under a row; set the video src on first open only.
+// The stream URL for a recording's preview. For Zoom it reflects the currently
+// selected file (gallery / speaker view …) so the player follows the dropdown.
+function previewUrl(source, i) {
+  const item = (current[source] || [])[i];
+  if (!item) return null;
+  if (source === 'fathom') {
+    return '/api/sources/fathom/download?source_id=' + encodeURIComponent(item.source_id);
+  }
+  const sel = document.querySelector(`[data-file="zoom:${i}"]`);
+  let url = '/api/sources/zoom/download?source_id=' + encodeURIComponent(item.source_id) + '&inline=1';
+  if (sel && sel.value) url += '&file_id=' + encodeURIComponent(sel.value);
+  return url;
+}
+
+// (Re)point a row's <video> at the given URL only when it actually changed, so
+// re-opening the same file doesn't re-fetch but switching files does.
+function setPreviewSrc(v, url) {
+  if (!url || v.dataset.loadedUrl === url) return;
+  v.dataset.loadedUrl = url;
+  v.src = url;
+  v.load();
+}
+
+// Show/hide the inline player under a row. The src is set (or refreshed to match
+// the selected file) each time it opens — earlier this only set src on the very
+// first open, so it was stuck on whichever file was picked first.
 function togglePreview(key) {
   const [source, iStr] = key.split(':');
   const i = Number(iStr);
@@ -262,23 +291,22 @@ function togglePreview(key) {
   const v = row.querySelector('video');
   const opening = row.style.display === 'none';
   if (opening) {
-    if (!v.src) {
-      const item = (current[source] || [])[i];
-      if (!item) return;
-      if (source === 'fathom') {
-        v.src = '/api/sources/fathom/download?source_id=' + encodeURIComponent(item.source_id);
-      } else {
-        const sel = document.querySelector(`[data-file="zoom:${i}"]`);
-        let url = '/api/sources/zoom/download?source_id=' + encodeURIComponent(item.source_id) + '&inline=1';
-        if (sel && sel.value) url += '&file_id=' + encodeURIComponent(sel.value);
-        v.src = url;
-      }
-    }
+    setPreviewSrc(v, previewUrl(source, i));
     row.style.display = '';
   } else {
     try { v.pause(); } catch { /* ignore */ }
     row.style.display = 'none';
   }
+}
+
+// When the Zoom file dropdown changes, follow it live if that row's preview is
+// already open (otherwise it loads the right file the next time it opens).
+function onPreviewFileChange(key) {
+  const [source, iStr] = key.split(':');
+  const i = Number(iStr);
+  const row = document.getElementById(`prev-${source}-${i}`);
+  if (!row || row.style.display === 'none') return;
+  setPreviewSrc(row.querySelector('video'), previewUrl(source, i));
 }
 
 // Free direct download to the user's computer (attachment header makes the

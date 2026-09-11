@@ -969,8 +969,11 @@ apiRouter.get('/sources/zoom/download', wrap(async (req, res) => {
   const account = await zoom.getZoomAccount(tid);
   if (!account) return res.status(400).json({ error: 'Zoom is not connected.' });
 
-  // Base recording scope (avoids the granular per-meeting 400).
-  const meeting = await zoom.findMeetingInWindow(account, sourceId);
+  // Base recording scope (avoids the granular per-meeting 400). Search the same
+  // multi-month window the Sources listing uses — the 30-day findMeetingInWindow
+  // missed every recording older than 30 days, so Preview/Download worked only
+  // for the newest row and 404'd for the rest.
+  const meeting = await zoom.findRecentMeeting(account, sourceId);
   if (!meeting) return res.status(404).json({ error: 'Recording not found on Zoom (it may have been deleted).' });
   // Without a specific file id, prefer the speaker-view MP4 but fall back to ANY
   // MP4 the meeting has (many recordings are active_speaker / gallery only, with
