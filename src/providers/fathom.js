@@ -61,7 +61,11 @@ export async function getDownloadStatus(account, recordingId, downloadId) {
 // failure / expiry / timeout. This is the fast path that replaces the slow HLS
 // remux: one CDN file, real byte size, resumable.
 export async function resolveDownloadUrl(account, recordingId, opts = {}) {
-  const { timeoutMs = 8 * 60 * 1000, pollMs = 4000, onStatus } = opts;
+  // Poll fairly tightly (1.5s ≈ 40 req/min, under the 60/min limit): Fathom renders
+  // the MP4 on demand and the whole wait is counted inside the pipeline's download
+  // timer, so slack polling directly inflates Fathom transfer time vs Zoom's
+  // instant direct download. Faster polling detects "ready" sooner.
+  const { timeoutMs = 8 * 60 * 1000, pollMs = 1500, onStatus } = opts;
   const pick = (d) => {
     if (!d) return null;
     if (d.status === 'failed') throw new Error(`Fathom could not generate the MP4 (${d.failure_reason || 'generation failed'}).`);

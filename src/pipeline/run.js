@@ -428,9 +428,11 @@ export async function manualPush(job) {
     if (job.source === 'zoom') {
       if (!ctx.zoomAccount) throw new Error('Zoom is not connected.');
       // Use the account-level listing (works with the base recording scope)
-      // instead of the granular per-meeting endpoint.
-      meeting = await zoom.findMeetingInWindow(ctx.zoomAccount, job.source_id, 30);
-      if (!meeting) throw new Error('Recording not found on Zoom (deleted or outside the 30-day window).');
+      // instead of the granular per-meeting endpoint. Search the same multi-month
+      // window the Sources page shows (latest 20 can be older than 30 days) so a
+      // push of an older row doesn't fail with "not found".
+      meeting = await zoom.findRecentMeeting(ctx.zoomAccount, job.source_id);
+      if (!meeting) throw new Error('Recording not found on Zoom (it may have been deleted).');
       ({ rec } = await ensureRow(tid, 'zoom', job.source_id, {
         title: meeting.topic,
         recorded_at: meeting.start_time || null,
