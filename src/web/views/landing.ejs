@@ -151,6 +151,8 @@
     table.rc-tbl .why{color:var(--muted);font-size:14px}
     table.rc-tbl .lim{color:var(--muted);font-size:14px}
     table.rc-tbl .status{white-space:nowrap;font-weight:700}
+    table.rc-tbl .status .lead{display:block;margin-bottom:8px}
+    table.rc-tbl .status .solves{display:block;color:var(--ok);font-weight:600;font-size:13.5px;line-height:1.7}
     table.rc-tbl .cost .money{display:block;font-weight:600}
     table.rc-tbl .cost .effort{display:block;color:var(--muted);font-size:13px;margin-top:5px}
     table.rc-tbl .cost a{color:var(--accent);font-weight:700}
@@ -294,7 +296,15 @@
             <tr class="us">
               <th scope="row">AVideoRouter</th>
               <td class="lim" data-label="Max limit">No cap. Streams the file — never loads it into memory.</td>
-              <td class="status" data-label="2–4 GB recording?">✅ Works</td>
+              <td class="status" data-label="2–4 GB recording?">
+                <span class="lead">✅ Yes</span>
+                <span class="solves">✓ No size caps</span>
+                <span class="solves">✓ Built for video</span>
+                <span class="solves">✓ No crashes</span>
+                <span class="solves">✓ No RAM wall</span>
+                <span class="solves">✓ Handles 4&nbsp;GB+</span>
+                <span class="solves">✓ Fully hands-off</span>
+              </td>
               <td class="why" data-label="Why it breaks">It doesn't. Real-time, automatic, hands-off.</td>
               <td class="cost" data-label="Real cost">
                 <span class="money">💰 <a href="#pricing">See the pricing section below</a></span>
