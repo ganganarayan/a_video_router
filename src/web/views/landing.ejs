@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AVideoRouter — Zoom & Fathom recordings, auto-published to YouTube and your LMS</title>
-  <meta name="description" content="VideoRouter automatically routes your Zoom and Fathom recordings to YouTube and your course platform — on a schedule, hands-free. Pay as you go, first upload free.">
+  <meta name="description" content="VideoRouter automatically routes your Zoom and Fathom recordings to YouTube and your course platform — on a schedule, hands-free. Pay as you go, first GB free.">
   <link rel="canonical" href="https://avr.divineleads.guru/">
   <script type="application/ld+json">
   {
@@ -31,7 +31,7 @@
           "@type": "Offer",
           "price": "50",
           "priceCurrency": "INR",
-          "description": "Pay as you go — ₹50 per GB of actual data transferred (a 2.5 GB file is 2.5 GB, not rounded up). First upload free. Optional Always-On subscription."
+          "description": "Pay as you go — ₹50 per GB of actual data transferred (a 2.5 GB file is 2.5 GB, not rounded up). First GB free. Optional Always-On subscription."
         }
       }
     ]
@@ -153,6 +153,12 @@
     table.rc-tbl .status{white-space:nowrap;font-weight:700}
     table.rc-tbl .status .lead{display:block;margin-bottom:8px}
     table.rc-tbl .status .solves{display:block;color:var(--ok);font-weight:600;font-size:13.5px;line-height:1.7}
+    table.rc-tbl .cost .pain{display:block;color:#e0674f;font-weight:600;font-size:13.5px;line-height:1.7}
+    .rc .whyneed{max-width:640px;margin:36px auto 0;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:24px 26px;text-align:center}
+    .rc .whyneed h3{margin:0 0 8px;font-size:20px}
+    .rc .whyneed p{color:var(--muted);margin:0 0 14px}
+    .rc .whyneed .pains{list-style:none;padding:0;margin:0;display:inline-block;text-align:left}
+    .rc .whyneed .pains li{color:#e0674f;font-weight:600;padding:4px 0;font-size:15px}
     table.rc-tbl .cost .money{display:block;font-weight:600}
     table.rc-tbl .cost .effort{display:block;color:var(--muted);font-size:13px;margin-top:5px}
     table.rc-tbl .cost a{color:var(--accent);font-weight:700}
@@ -194,7 +200,7 @@
         LMS course and module, then clears it off Zoom. Connect once, set your rules, and it runs —
         on a schedule or one click.</p>
       <div class="cta-row">
-        <a class="btn primary big" href="/register">Start free — first upload's on us</a>
+        <a class="btn primary big" href="/register">Start free — first GB's on us</a>
         <a class="btn big" href="#how">See how it works</a>
       </div>
       <div class="tiny">Start free · Pay as you go · GST invoice provided</div>
@@ -289,13 +295,14 @@
               <td class="status" data-label="2–4 GB recording?">✅ (but you're the bottleneck)</td>
               <td class="why" data-label="Why it breaks">Nothing breaks except your calendar and the boring task. Download, wait, re-upload — for every recording, forever.</td>
               <td class="cost" data-label="Real cost">
-                <span class="money">💰 $0 software</span>
-                <span class="effort">⏱ Your time, every single recording, indefinitely, day in and day out.</span>
+                <span class="pain">❌ Your evenings, gone</span>
+                <span class="pain">❌ Every recording, forever</span>
+                <span class="pain">❌ Download, wait, re-upload</span>
               </td>
             </tr>
             <tr class="us">
               <th scope="row">AVideoRouter</th>
-              <td class="lim" data-label="Max limit">No cap. Streams the file — never loads it into memory.</td>
+              <td class="lim" data-label="Max limit">No cap. Streams the file — never downloads to memory.</td>
               <td class="status" data-label="2–4 GB recording?">
                 <span class="lead">✅ Yes</span>
                 <span class="solves">✓ No size caps</span>
@@ -305,9 +312,9 @@
                 <span class="solves">✓ Handles 4&nbsp;GB+</span>
                 <span class="solves">✓ Fully hands-off</span>
               </td>
-              <td class="why" data-label="Why it breaks">It doesn't. Real-time, automatic, hands-off.</td>
+              <td class="why" data-label="Why it breaks">It doesn't — it breaks your headache instead. The lost evenings, the wasted hours, the manual grind: gone.</td>
               <td class="cost" data-label="Real cost">
-                <span class="money">💰 <a href="#pricing">See the pricing section below</a></span>
+                <span class="money">💰 ₹50/GB · first GB free</span>
                 <span class="effort">⏱ ~Zero — set once, then forget it</span>
               </td>
             </tr>
@@ -317,6 +324,19 @@
 
       <p class="rc-foot">The “cheap” tools bill you monthly to fail. Doing it by hand is the most expensive of all —
         it just hides the cost in your evenings.</p>
+
+      <div class="whyneed">
+        <h3>Why do I need this?</h3>
+        <p>Because a real coach hit exactly these walls — and built AVideoRouter to end them:</p>
+        <ul class="pains">
+          <li>❌ Files too big</li>
+          <li>❌ Out-of-memory crashes</li>
+          <li>❌ Monthly transfer caps</li>
+          <li>❌ 12–16&nbsp;GB RAM needed</li>
+          <li>❌ Endless manual re-uploads</li>
+          <li>❌ Lost evenings, every week</li>
+        </ul>
+      </div>
     </div>
   </section>
 
@@ -391,9 +411,9 @@
             <tr>
               <th>Capability</th>
               <th class="us">AVideoRouter</th>
-              <th>Xapier</th>
-              <th>Maik</th>
-              <th>m8m</th>
+              <th>Zapier</th>
+              <th>Make</th>
+              <th>n8n</th>
               <th>Single-purpose apps</th>
             </tr>
           </thead>
@@ -406,12 +426,12 @@
             <tr><th>Preview &amp; download the original in-app</th><td class="us"><span class="y">✓</span> free · Zoom &amp; Fathom</td><td class="n">✗</td><td class="n">✗</td><td class="p">Build it</td><td class="p">Some</td></tr>
             <tr><th>Daily scheduler, hands-free</th><td class="us"><span class="y">✓</span></td><td class="p">Extra setup</td><td class="p">Extra setup</td><td class="p">Self-host</td><td class="p">Some</td></tr>
             <tr><th>No building, no maintenance</th><td class="us"><span class="y">✓</span></td><td class="p">Some setup</td><td class="n">Complex builds</td><td class="n">Self-host + upkeep</td><td><span class="y">✓</span></td></tr>
-            <tr><th>Price</th><td class="us"><span class="y">₹50/GB</span> · first free · no subscription</td><td class="n">From $19.99/mo</td><td class="n">From $9/mo</td><td class="p">Server + your time</td><td class="n">Monthly subscription</td></tr>
+            <tr><th>Price</th><td class="us"><span class="y">₹50/GB</span> · first GB free · no subscription</td><td class="n">From $19.99/mo</td><td class="n">From $9/mo</td><td class="p">Server + your time</td><td class="n">Monthly subscription</td></tr>
             <tr><th>Indian ₹ pricing + GST invoice</th><td class="us"><span class="y">✓</span></td><td class="n">✗</td><td class="n">✗</td><td class="n">✗</td><td class="p">Varies</td></tr>
           </tbody>
         </table>
       </div>
-      <p class="cmp-note">Comparison reflects typical out-of-the-box approaches for each category of tool. Names are illustrative.</p>
+      <p class="cmp-note">Comparison reflects typical out-of-the-box approaches for each tool; specifics vary by plan and configuration.</p>
     </div>
   </section>
 
@@ -424,7 +444,7 @@
         <div class="price">
           <h3 class="ptitle">Pay As You Go</h3>
           <div class="amt">From ₹50 <small>/ GB</small></div>
-          <p class="muted" style="margin:.3rem 0 6px">First upload free</p>
+          <p class="muted" style="margin:.3rem 0 6px">First GB free</p>
           <ul>
             <% packs.forEach(function (p) { %>
             <li><b><%= p.units %> GB</b> — ₹<%= (p.base / 100).toLocaleString('en-IN') %>
@@ -435,6 +455,7 @@
             <li>GST invoice on request — just add your GSTIN</li>
             <li>Add staff with a ₹1,000+ top-up</li>
             <li class="excl">No daily scheduler — that's Always-On</li>
+            <li>New to this? Our team will set it up for you — just ask.</li>
           </ul>
           <div><a class="btn primary big" href="/register">Start free</a></div>
         </div>
@@ -474,7 +495,7 @@
         <details><summary>Can my team help run it?</summary>
           <p>Yes — add staff with view or edit permissions once you're on Always-On <b>or</b> have topped up ₹1,000+. It's designed to be simple enough for anyone to operate.</p></details>
         <details><summary>How is it priced?</summary>
-          <p>Pay as you go from ₹50 per GB of transfer (billed for the actual data transferred — a 2.5&nbsp;GB file is 2.5&nbsp;GB, not rounded up), dropping to ₹45 and ₹40 on bigger packs. Your first upload is free. Add your GSTIN for a GST invoice. Optional Always-On (₹999/month) unlocks the daily scheduler and unlimited staff; staff also unlock with a ₹1,000+ top-up. Transfers stay pay-as-you-go on top.</p></details>
+          <p>Pay as you go from ₹50 per GB of transfer (billed for the actual data transferred — a 2.5&nbsp;GB file is 2.5&nbsp;GB, not rounded up), dropping to ₹45 and ₹40 on bigger packs. Your first GB is free. Add your GSTIN for a GST invoice. Optional Always-On (₹999/month) unlocks the daily scheduler and unlimited staff; staff also unlock with a ₹1,000+ top-up. Transfers stay pay-as-you-go on top.</p></details>
       </div>
     </div>
   </section>
@@ -485,7 +506,7 @@
       <h2>Publish your next recording in minutes</h2>
       <p class="lead">From Zoom to YouTube <b>and into your course</b> — automatically, even at 4&nbsp;GB.
         No subscription to start. GST invoice. Done before your coffee.</p>
-      <a class="btn primary big" href="/register">Start free — first upload's on us</a>
+      <a class="btn primary big" href="/register">Start free — first GB's on us</a>
       <div style="margin-top:18px"><a class="btn kb-btn big" href="/knowledge-base">Browse the Knowledge Base</a></div>
       <p class="muted" style="margin-top:10px">See exactly how VideoRouter removes the busywork after every live session.</p>
     </div>
