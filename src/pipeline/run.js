@@ -65,8 +65,14 @@ async function getRules(tenantId) {
 // Fathom download: resolve a signed MP4 URL via Fathom's official download API,
 // then stream that single file to disk — fast, resumable, real byte size, and no
 // HLS remux or per-segment request storm against Fathom. A stall aborts and errors.
-async function fathomDownloadToFile(account, recordingId, dest, onProgress) {
-  const { url, sizeBytes } = await fathom.resolveDownloadUrl(account, recordingId);
+async function fathomDownloadToFile(account, recordingId, dest, onProgress, hooks = {}) {
+  // Fathom renders the MP4 on demand: signal "generating" while we poll (so the
+  // queue shows that, with no misleading byte counter), then "transfer start" the
+  // instant the signed URL is ready and real bytes begin.
+  const { url, sizeBytes } = await fathom.resolveDownloadUrl(account, recordingId, {
+    onStatus: () => hooks.onGenerating?.(),
+  });
+  hooks.onTransferStart?.(sizeBytes);
   return streamToFile(url, dest, onProgress, { totalHint: sizeBytes });
 }
 
@@ -156,10 +162,18 @@ async function downloadUploadFinish(ctx, rec, rule, downloadFn, counts, details,
       progress?.startPhase('download');
       const dlStart = Date.now();
       // Download to a partial file, then atomically promote it to the cache path
-      // so cachePath only ever holds a complete file.
-      size = await downloadFn(partial, (done, total) => progress?.update(done, total));
+      // so cachePath only ever holds a complete file. The hooks let a source that
+      // must prepare a file first (Fathom generates its MP4 on demand) mark the
+      // "generating" wait separately from the real transfer, so the timer and byte
+      // counter start when bytes actually flow — not during generation. Zoom/local
+      // ignore the hooks and stream immediately (transferStart stays null).
+      let transferStart = null;
+      size = await downloadFn(partial, (done, total) => progress?.update(done, total), {
+        onGenerating: () => { if (progress && progress.phase !== 'generating') progress.startPhase('generating'); },
+        onTransferStart: (totalHint = 0) => { transferStart = Date.now(); progress?.startPhase('download', totalHint); },
+      });
       fs.renameSync(partial, cachePath);
-      dlMs = Date.now() - dlStart;
+      dlMs = Date.now() - (transferStart ?? dlStart);
       progress?.finishPhase();
       await updateRec(rec.id, {
         file_size_bytes: size,
@@ -288,7 +302,7 @@ async function processFathomRecording(ctx, rec, counts, details) {
   }
   await downloadUploadFinish(
     ctx, rec, rule,
-    (dest, onProgress) => fathomDownloadToFile(ctx.fathomAccount, rec.source_id, dest, onProgress),
+    (dest, onProgress, hooks) => fathomDownloadToFile(ctx.fathomAccount, rec.source_id, dest, onProgress, hooks),
     counts, details,
   );
 }
@@ -501,7 +515,7 @@ export async function manualPush(job) {
       } else {
         await downloadUploadFinish(
           ctx, rec, rule,
-          (dest, onProgress) => fathomDownloadToFile(ctx.fathomAccount, rec.source_id, dest, onProgress),
+          (dest, onProgress, hooks) => fathomDownloadToFile(ctx.fathomAccount, rec.source_id, dest, onProgress, hooks),
           counts, details, tracker,
         );
       }

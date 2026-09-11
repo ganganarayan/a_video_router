@@ -6,7 +6,7 @@ export class ProgressTracker {
   constructor(onUpdate) {
     this.onUpdate = onUpdate;
     this.startedAt = Date.now();
-    this.phase = null; // 'download' | 'upload' | 'done'
+    this.phase = null; // 'generating' | 'download' | 'upload' | 'done'
     this.total = 0;
     this.done = 0;
     this.phaseStartedAt = null;

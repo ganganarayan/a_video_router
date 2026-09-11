@@ -460,6 +460,8 @@ function qSize(j) {
 function qSpeed(j) {
   if (j.status !== 'processing' || !j.progress) return '—';
   const phase = j.progress.phase;
+  // Fathom prepares its MP4 before any bytes move — no speed to show yet.
+  if (phase === 'generating') return '<span class="muted">generating…</span>';
   // Local uploads have no download leg — the "download" phase is just a local
   // file move, so its speed is meaningless. Only the ↑ upload leg is real.
   if (j.source === 'local' && phase !== 'upload') return '<span class="muted">local file</span>';
@@ -505,9 +507,11 @@ function qLog(j) {
     return `${stats}${ytStatusNote(j.youtube_status)}${links ? '<br>' + links : ''}`;
   }
   const phase = j.progress?.phase;
-  const label = phase === 'upload'
-    ? 'uploading to YouTube'
-    : (j.source === 'local' ? 'preparing local file' : (phase === 'download' ? 'downloading' : (j.status || '')));
+  const label = phase === 'generating'
+    ? 'Fathom is generating the MP4 (no transfer yet)'
+    : phase === 'upload'
+      ? 'uploading to YouTube'
+      : (j.source === 'local' ? 'preparing local file' : (phase === 'download' ? 'downloading' : (j.status || '')));
   return `<span class="muted">${esc(label)}…</span>`;
 }
 function qAction(j) {
