@@ -287,3 +287,111 @@ export async function testConnection(account) {
   log(`zoom test ok: ${me.email}`);
   return { ok: true, detail: `Connected as ${me.email}` };
 }
+
+// ---------- cloud recording storage ----------
+
+// Zoom reports sizes as unit strings ("5 GB", "100MB", "1.2TB") on the billing and
+// report endpoints, and as plain byte counts on the recordings endpoints. Normalise
+// everything to bytes; returns null for anything we cannot read.
+export function parseStorageSize(v) {
+  if (v === null || v === undefined || v === '') return null;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  const m = String(v).trim().match(/^([\d.]+)\s*(B|KB|MB|GB|TB|PB)?$/i);
+  if (!m) return null;
+  const n = Number(m[1]);
+  if (!Number.isFinite(n)) return null;
+  const mult = { B: 1, KB: 1024, MB: 1024 ** 2, GB: 1024 ** 3, TB: 1024 ** 4, PB: 1024 ** 5 };
+  return n * mult[(m[2] || 'B').toUpperCase()];
+}
+
+// Sums total_size over every cloud recording we can list, walking backward one
+// month at a time (Zoom caps each query at a one-month range). Only the running
+// totals are kept — the meeting payloads are never collected.
+async function sumRecordingBytes(token, { months, trash = false }) {
+  let bytes = 0;
+  let count = 0;
+  const seen = new Set();
+  let to = new Date();
+  for (let month = 0; month < months; month++) {
+    const from = new Date(to.getTime() - 30 * 24 * 3600 * 1000);
+    let nextPageToken = '';
+    do {
+      const qs = new URLSearchParams({ from: isoDate(from), to: isoDate(to), page_size: '300' });
+      if (trash) { qs.set('trash', 'true'); qs.set('trash_type', 'meeting_recordings'); }
+      if (nextPageToken) qs.set('next_page_token', nextPageToken);
+      const data = await zoomGet(token, `/users/me/recordings?${qs}`);
+      for (const m of data.meetings || []) {
+        if (seen.has(m.uuid)) continue; // windows share a boundary day
+        seen.add(m.uuid);
+        bytes += Number(m.total_size) || 0;
+        count += 1;
+      }
+      nextPageToken = data.next_page_token || '';
+    } while (nextPageToken);
+    to = from;
+  }
+  return { bytes, count };
+}
+
+// Best-effort storage usage. Zoom has no single endpoint every account can read,
+// so we try three sources in descending order of quality:
+//   1. /accounts/me/plan/usage — exact used + quota, but master accounts only
+//   2. /report/cloud_recording — used + quota, needs report:read:admin, lags ~a day
+//   3. summing /users/me/recordings — always works, but counts only the recordings
+//      this app can list (this user's, inside the retention window) and sees no quota
+export async function getStorageUsage(account, { months = 12 } = {}) {
+  const token = await getAccessToken(account);
+  const out = {
+    used_bytes: null, limit_bytes: null, trash_bytes: null, recordings: null,
+    source: null, as_of: null, partial: false, note: '',
+  };
+
+  try {
+    const d = await zoomGet(token, '/accounts/me/plan/usage');
+    const r = d.plan_recording || {};
+    const freeUsed = parseStorageSize(r.free_storage_usage);
+    const paidUsed = parseStorageSize(r.paid_storage_usage);
+    if (freeUsed !== null || paidUsed !== null) {
+      const limit = [parseStorageSize(r.free_storage), parseStorageSize(r.paid_storage)]
+        .filter((n) => n !== null).reduce((a, b) => a + b, 0);
+      out.used_bytes = [freeUsed, paidUsed].filter((n) => n !== null).reduce((a, b) => a + b, 0);
+      out.limit_bytes = limit || null;
+      out.source = 'plan';
+      out.note = 'Reported by Zoom for the whole account.';
+      return out;
+    }
+  } catch { /* master-account only, or the scope is not granted — try the next source */ }
+
+  try {
+    const to = new Date();
+    const from = new Date(to.getTime() - 3 * 24 * 3600 * 1000);
+    const d = await zoomGet(token, `/report/cloud_recording?from=${isoDate(from)}&to=${isoDate(to)}`);
+    const rows = d.cloud_recording_storage || [];
+    const last = rows[rows.length - 1];
+    const used = last ? parseStorageSize(last.usage) : null;
+    if (used !== null) {
+      out.used_bytes = used;
+      out.limit_bytes = parseStorageSize(last.plan_usage) || null;
+      out.source = 'report';
+      out.as_of = last.date || null;
+      out.note = 'From Zoom’s own usage report, which trails about a day behind.';
+      return out;
+    }
+  } catch { /* report:read:admin not granted — fall back to adding the recordings up */ }
+
+  const totals = await sumRecordingBytes(token, { months });
+  out.used_bytes = totals.bytes;
+  out.recordings = totals.count;
+  out.source = 'recordings';
+  out.partial = true;
+  out.note = `Added up from your last ${months} months of cloud recordings. Zoom will not tell this app your plan’s quota, so enter it below to see how full you are.`;
+
+  // Recordings in the Zoom trash still occupy the quota for 30 days after deletion,
+  // which is a common reason the dashboard reads fuller than the recording list.
+  try {
+    const trash = await sumRecordingBytes(token, { months: 1, trash: true });
+    out.trash_bytes = trash.bytes;
+  } catch { /* trash listing is optional */ }
+
+  return out;
+}

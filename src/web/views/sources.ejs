@@ -1,5 +1,20 @@
 <%- include('partials/head') %>
 <h1>Source videos</h1>
+
+<div class="card" id="zs-card" style="display:none">
+  <div class="row" style="justify-content:space-between; align-items:baseline; gap:8px">
+    <h2 style="margin:0">Zoom cloud storage</h2>
+    <span class="muted" id="zs-src" style="font-size:12px"></span>
+  </div>
+  <div id="zs-headline" style="font-size:22px; font-weight:700; margin:10px 0 8px">Checking…</div>
+  <div class="pbar" id="zs-bar" style="display:none"><span></span></div>
+  <div id="zs-detail" class="muted" style="margin-top:10px; font-size:13px"></div>
+  <div class="row" id="zs-limit-row" style="display:none; margin-top:12px; align-items:center">
+    <label class="muted" style="font-size:13px" for="zs-limit">Your Zoom plan's storage (GB)</label>
+    <input id="zs-limit" type="number" min="0" step="0.5" style="width:110px" placeholder="e.g. 5">
+    <button id="zs-limit-save">Save</button>
+  </div>
+</div>
 <p class="muted">Live listing of your latest 20 recordings from Zoom and Fathom, matched against the pipeline log.
 Each row has its own buttons: <b>Push to YouTube</b> uploads the recording, then <b>Push to LMS</b>
 registers that video in your course (it stays active after the YouTube upload so you can push to the
@@ -217,6 +232,93 @@ async function loadMeta() {
     .filter(r => r.lms_course_id)
     .map(r => ({ label: `${r.pattern} → ${r.lms_course_id}`, course_id: r.lms_course_id, module_id: r.lms_module_id }));
 }
+
+function fmtGb(n) { return (Number(n || 0) / 1024 ** 3).toFixed(2) + ' GB'; }
+
+function renderStorage(s) {
+  const card = document.getElementById('zs-card');
+  const headline = document.getElementById('zs-headline');
+  const bar = document.getElementById('zs-bar');
+  const detail = document.getElementById('zs-detail');
+  const srcNote = document.getElementById('zs-src');
+  const limitRow = document.getElementById('zs-limit-row');
+
+  if (!s.connected) { card.style.display = 'none'; return; }
+  card.style.display = '';
+
+  if (s.error) {
+    headline.innerHTML = '<span class="badge err">Could not read your Zoom storage</span>';
+    bar.style.display = 'none';
+    detail.textContent = s.error;
+    srcNote.textContent = '';
+    limitRow.style.display = 'none';
+    return;
+  }
+
+  const used = fmtGb(s.used_bytes);
+  const pct = s.percent;
+  const bits = [];
+
+  if (pct === null || pct === undefined) {
+    headline.innerHTML = esc(used) + ' used';
+    bar.style.display = 'none';
+  } else {
+    const kind = pct >= 90 ? 'err' : (pct >= 70 ? 'warn' : 'ok');
+    const colour = pct >= 90 ? 'var(--err)' : (pct >= 70 ? 'var(--warn)' : 'var(--ok)');
+    const label = pct >= 90 ? 'almost full' : (pct >= 70 ? 'filling up' : 'room to record');
+    headline.innerHTML = esc(used) + ' of ' + esc(fmtGb(s.limit_bytes))
+      + ' <span class="muted" style="font-weight:400; font-size:15px">(' + pct.toFixed(0) + '% used)</span> '
+      + '<span class="badge ' + kind + '" style="vertical-align:middle">' + label + '</span>';
+    bar.style.display = '';
+    const fill = bar.querySelector('span');
+    fill.style.width = Math.max(pct, 1) + '%';
+    fill.style.background = colour;
+    if (pct >= 85) {
+      bits.push('Zoom refuses to start a cloud recording once the account is full. '
+        + 'Free space up by pushing recordings to YouTube below, then using Delete from Zoom.');
+    }
+    if (s.limit_source === 'manual') bits.push('Quota as you entered it, not read from Zoom.');
+  }
+
+  if (s.trash_bytes) {
+    bits.push('Another ' + fmtGb(s.trash_bytes) + ' sits in the Zoom trash, which keeps using the quota for 30 days after deletion.');
+  }
+  if (s.note) bits.push(s.note);
+  if (s.recordings !== null && s.recordings !== undefined) bits.push(s.recordings + ' recording(s) counted.');
+  if (s.as_of) bits.push('As of ' + esc(s.as_of) + '.');
+  detail.innerHTML = bits.map(esc).join(' ');
+
+  srcNote.textContent = s.source === 'plan' ? '— from your Zoom plan'
+    : (s.source === 'report' ? '— from Zoom’s usage report' : '— added up from your recordings');
+
+  limitRow.style.display = s.limit_source === 'zoom' ? 'none' : 'flex';
+  const input = document.getElementById('zs-limit');
+  if (document.activeElement !== input) input.value = s.manual_limit_gb || '';
+}
+
+async function loadStorage(refresh) {
+  const headline = document.getElementById('zs-headline');
+  try {
+    headline.textContent = 'Checking Zoom storage…';
+    renderStorage(await api('/sources/zoom/storage' + (refresh ? '?refresh=1' : '')));
+  } catch (e) {
+    renderStorage({ connected: true, error: e.message });
+  }
+}
+
+document.getElementById('zs-limit-save').onclick = async (ev) => {
+  const btn = ev.currentTarget;
+  btn.disabled = true;
+  try {
+    await api('/settings', { method: 'POST', body: { zoom_storage_limit_gb: document.getElementById('zs-limit').value.trim() } });
+    toast('Saved — the gauge now shows how full Zoom is.');
+    await loadStorage(false);
+  } catch (e) {
+    toast(e.message, 'err');
+  } finally {
+    btn.disabled = false;
+  }
+};
 
 async function load() {
   const btn = document.getElementById('refresh');
@@ -659,8 +761,9 @@ document.getElementById('up-go').onclick = async () => {
   xhr.send(file);
 };
 
-document.getElementById('refresh').onclick = load;
+document.getElementById('refresh').onclick = () => { loadStorage(true); load(); };
 loadMeta().then(() => { fillUploadSelects(); return load(); }).catch(e => toast(e.message, 'err'));
+loadStorage(false);
 pollQueue();
 </script>
 <%- include('partials/foot') %>

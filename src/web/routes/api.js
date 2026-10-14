@@ -961,6 +961,48 @@ apiRouter.post('/uploads', wrap(async (req, res) => {
 
 // Download a Zoom recording straight to the user's computer (FREE — not metered).
 // Streams from Zoom through the app to the browser; nothing is buffered or stored.
+// Zoom cloud-recording storage, for the gauge at the top of Sources. The lookup
+// costs several Zoom calls, so it is cached briefly per tenant; ?refresh=1 skips it.
+const zoomStorageCache = new Map(); // tenantId -> { at, data }
+const ZOOM_STORAGE_TTL_MS = 5 * 60 * 1000;
+
+apiRouter.get('/sources/zoom/storage', wrap(async (req, res) => {
+  const tid = T(req);
+  const account = await zoom.getZoomAccount(tid);
+  if (!account) return res.json({ connected: false });
+
+  const settings = await getTenantSettings(tid);
+  const manualGb = Number(settings.zoom_storage_limit_gb) || 0;
+
+  let usage = null;
+  let cachedAt = null;
+  const hit = zoomStorageCache.get(tid);
+  if (req.query.refresh !== '1' && hit && Date.now() - hit.at < ZOOM_STORAGE_TTL_MS) {
+    usage = hit.data;
+    cachedAt = hit.at;
+  } else {
+    try {
+      usage = await zoom.getStorageUsage(account);
+    } catch (err) {
+      return res.json({ connected: true, error: err.message, manual_limit_gb: manualGb || null });
+    }
+    if (zoomStorageCache.size > 500) zoomStorageCache.clear(); // keep the cache bounded
+    zoomStorageCache.set(tid, { at: Date.now(), data: usage });
+    cachedAt = Date.now();
+  }
+
+  const limitBytes = usage.limit_bytes || (manualGb > 0 ? manualGb * 1024 ** 3 : null);
+  res.json({
+    connected: true,
+    ...usage,
+    limit_bytes: limitBytes,
+    limit_source: usage.limit_bytes ? 'zoom' : (manualGb > 0 ? 'manual' : null),
+    manual_limit_gb: manualGb || null,
+    percent: limitBytes ? Math.min(100, (usage.used_bytes / limitBytes) * 100) : null,
+    checked_at: new Date(cachedAt).toISOString(),
+  });
+}));
+
 apiRouter.get('/sources/zoom/download', wrap(async (req, res) => {
   const tid = T(req);
   const sourceId = String(req.query.source_id || '');
@@ -1275,7 +1317,7 @@ apiRouter.delete('/rules/:id', requireOwner, wrap(async (req, res) => {
 
 // ---------- settings (per-tenant) ----------
 
-const SETTING_KEYS = ['rolling_window_days', 'zoom_delete_mode', 'email_to', 'email_from', 'gstin', 'gst_business_name'];
+const SETTING_KEYS = ['rolling_window_days', 'zoom_delete_mode', 'zoom_storage_limit_gb', 'email_to', 'email_from', 'gstin', 'gst_business_name'];
 
 apiRouter.get('/settings', wrap(async (req, res) => {
   const s = await getTenantSettings(T(req));
@@ -1293,6 +1335,10 @@ apiRouter.post('/settings', requireOwner, wrap(async (req, res) => {
   }
   if (body.rolling_window_days && !(Number(body.rolling_window_days) >= 1)) {
     return res.status(400).json({ error: 'rolling_window_days must be >= 1.' });
+  }
+  if (body.zoom_storage_limit_gb !== undefined && String(body.zoom_storage_limit_gb).trim() !== ''
+      && !(Number(body.zoom_storage_limit_gb) >= 0)) {
+    return res.status(400).json({ error: 'Zoom storage limit must be a number of GB (or blank).' });
   }
   // GSTIN is optional; if given, normalise (no spaces, uppercase) and sanity-check the 15-char format.
   if (body.gstin !== undefined) {
