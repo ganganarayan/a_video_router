@@ -233,7 +233,7 @@ export function createServer() {
   const PUBLIC_PATHS = ['/', '/faq', '/knowledge-base', '/privacy', '/terms', '/refund', '/shipping', '/contact'];
   const KB_PATHS = KB_TOPICS.map((t) => `/knowledge-base/${t.slug}`);
   const PRIVATE_PATHS = ['/api/', '/oauth/', '/dbadmin', '/admin', '/login', '/reset', '/set-password',
-    '/runs', '/sources', '/logs', '/connections', '/routing', '/schedules', '/team', '/billing',
+    '/runs', '/transfers', '/sources', '/logs', '/connections', '/routing', '/schedules', '/team', '/billing',
     '/settings', '/help', '/visitors', '/traffic'];
   const baseUrl = (req) => `${req.protocol}://${req.get('host')}`;
 
@@ -297,7 +297,11 @@ export function createServer() {
       (req, res) => res.render(route, { page: route, title, user: req.user }));
   }
 
-  const pages = { connections: 'Connections', routing: 'Routing', runs: 'Runs', sources: 'Sources', logs: 'Logs', schedules: 'Schedules', team: 'Team', billing: 'Billing', settings: 'Settings', help: 'Help' };
+  // The Transfers page was called Sources until Oct 2026 — keep old bookmarks and
+  // any links already sent to clients working.
+  app.get('/sources', (_req, res) => res.redirect(301, '/transfers'));
+
+  const pages = { connections: 'Connections', routing: 'Routing', runs: 'Runs', transfers: 'Transfers', logs: 'Logs', schedules: 'Schedules', team: 'Team', billing: 'Billing', settings: 'Settings', help: 'Help' };
   for (const [route, title] of Object.entries(pages)) {
     app.get(`/${route}`, requirePageAuth, resolveTenant, requireTenant,
       (req, res) => res.render(route, { page: route, title, user: req.user }));

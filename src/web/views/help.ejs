@@ -64,7 +64,7 @@ const KB = [
         <ol class="kb-steps">
           <li><b>Connections</b> — connect Zoom / Fathom (sources) and YouTube / LMS (destinations).</li>
           <li><b>Routing</b> — decide which source title patterns go to which YouTube channel / LMS course.</li>
-          <li><b>Schedules</b> — set when automatic pulls run (or push manually from Sources).</li>
+          <li><b>Schedules</b> — set when automatic pulls run (or push manually from Transfers).</li>
           <li><b>Runs / Logs</b> — watch transfers live and check results.</li>
         </ol>` },
 
@@ -151,16 +151,16 @@ const KB = [
         retried automatically on the next run once a matching rule exists.</p>` },
 
   // ---------------- SOURCES & MANUAL PUSH ----------------
-  { id: 'push-single', cat: 'Sources & manual push', q: 'Push a single recording right now',
+  { id: 'push-single', cat: 'Transfers & manual push', q: 'Push a single recording right now',
     a: `<ol class="kb-steps">
-          <li>Open <b>Sources</b> and find the recording.</li>
+          <li>Open <b>Transfers</b> and find the recording.</li>
           <li>(Optional) set a YouTube <b>title</b>/<b>description</b>, and pick the file and channel.</li>
           <li>Click <b>Push to YouTube</b> — it uploads the recording right away.</li>
           <li>Once it's on YouTube, click <b>Push to LMS</b> to file it into a course. This is a separate action, so you can do it later.</li>
         </ol>
         <div class="kb-note">Prefer the raw file? <b>Download</b> saves the original Zoom recording straight to your computer, free — no Zoom login.</div>` },
-  { cat: 'Sources & manual push', q: 'Delete a recording from Zoom',
-    a: `<p>Deletion is <b>manual only</b> — the pipeline never auto-deletes. On <b>Sources</b>, the
+  { cat: 'Transfers & manual push', q: 'Delete a recording from Zoom',
+    a: `<p>Deletion is <b>manual only</b> — the pipeline never auto-deletes. On <b>Transfers</b>, the
         <b>Delete from Zoom</b> button unlocks only after the recording has a YouTube video ID (i.e. it's
         safely uploaded). You do it from the dashboard, without signing into Zoom.</p>` },
 
