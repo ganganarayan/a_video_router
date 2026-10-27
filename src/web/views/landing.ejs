@@ -47,15 +47,19 @@
     body{margin:0;background:var(--bg);color:var(--text);
       font-family:var(--font-sans);font-size:var(--fs-body);line-height:var(--lh-body);-webkit-font-smoothing:antialiased}
     a{color:var(--accent);text-decoration:none}
-    .wrap{max-width:1240px;margin:0 auto;padding:0 28px}
-    .btn{display:inline-block;padding:12px 22px;border-radius:8px;font-weight:600;border:1px solid var(--line);
+    .wrap{max-width:var(--container-marketing);margin:0 auto;padding:0 var(--gutter)}
+    .btn{display:inline-block;padding:12px 22px;border-radius:var(--r-control);font-weight:600;white-space:nowrap;border:1px solid var(--line);
       background:var(--panel2);color:var(--text);cursor:pointer}
     .btn.primary{background:linear-gradient(135deg,var(--accent),var(--brand-active));border:none;color:var(--brand-contrast)}
-    .btn.big{padding:15px 30px;font-size:17px}
+    .btn.big{padding:15px 30px;font-size:var(--fs-title-3)}
+    @media (max-width:560px){
+      header .btn{padding:var(--sp-2) var(--sp-3);font-size:var(--fs-small)}
+    }
 
-    header{position:sticky;top:0;z-index:20;background:rgba(15,20,32,.85);backdrop-filter:blur(8px);
+    header{position:sticky;top:0;z-index:20;background:var(--surface-raised);backdrop-filter:blur(8px);
       border-bottom:1px solid var(--line)}
-    header .wrap{display:flex;align-items:center;justify-content:space-between;height:62px}
+    header .wrap{display:flex;align-items:center;justify-content:space-between;
+      gap:var(--sp-3);min-height:62px;padding-top:var(--sp-2);padding-bottom:var(--sp-2)}
     .brand{font-weight:800;font-size:19px;letter-spacing:.2px}
     .brand span{background:linear-gradient(135deg,var(--accent),var(--brand-active));-webkit-background-clip:text;background-clip:text;color:transparent}
     .hero-visual{display:flex;justify-content:center;margin:10px auto 0;max-width:840px}
