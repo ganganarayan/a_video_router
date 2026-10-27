@@ -41,7 +41,7 @@
     <div class="field" style="flex:1 1 420px"><label>Video embed URL or code</label>
       <textarea id="landing-video" rows="3" placeholder="https://…/embed/…  — or paste the full embed code" style="width:100%"></textarea></div>
     <button class="primary" id="landing-save">Save</button>
-    <a id="landing-preview" href="/" target="_blank">Open landing ↗</a>
+    <a id="landing-preview" href="/" target="_blank">Open landing <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a>
   </div>
 </div>
 
@@ -111,7 +111,7 @@
   <h2>Platform email</h2>
   <p class="muted">Account used to send self-serve <b>password reset</b> emails. Without this, "Forgot
   password" can't email a link.</p>
-  <p class="muted" style="border-left:3px solid #4a7; padding-left:10px">⚡ <b>Recommended: ZeptoMail (Zoho's HTTP API).</b>
+  <p class="muted callout"><b>Recommended: ZeptoMail (Zoho's HTTP API).</b>
   This host blocks outbound SMTP, so plain SMTP/Zoho times out. ZeptoMail sends over HTTPS and works here.
   In <b>ZeptoMail</b> (zoho.com/zeptomail): add &amp; verify the domain <span class="mono">divineleads.guru</span>,
   create a <b>Mail Agent</b>, copy its <b>Send Mail Token</b>, and paste it below. Set the From address to a
@@ -180,14 +180,14 @@
 <script>
 function rupees(paise) {
   if (paise == null) return '—';
-  return '₹' + (Number(paise) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return '₹' + (Number(paise) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 // GB balances are byte-accurate (fractional). Always show exactly 2 decimals so
 // the credit count is simple and consistent to read (e.g. 5.00, 12.34 GB).
 function fmtGb(n) {
   if (n == null) return '—';
-  return (Number(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return (Number(n) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 // Actual data uploaded, in binary units (matches unit_bytes = 1 GiB).
@@ -197,7 +197,7 @@ function fmtBytes(bytes) {
   const units = ['KB', 'MB', 'GB', 'TB', 'PB'];
   let v = n / 1024, i = 0;
   while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
-  return v.toLocaleString(undefined, { maximumFractionDigits: v < 10 ? 2 : 1 }) + ' ' + units[i];
+  return v.toLocaleString('en-IN', { maximumFractionDigits: v < 10 ? 2 : 1 }) + ' ' + units[i];
 }
 
 const PROVIDER_LABELS = { razorpay: 'Razorpay', easebuzz: 'Easebuzz', phonepe: 'PhonePe' };
@@ -274,7 +274,7 @@ document.getElementById('meta-test').onclick = async () => {
   out.style.display = ''; out.textContent = 'Sending test event to Meta…';
   try {
     const r = await api('/admin/meta/test', { method: 'POST', body: { test_event_code: document.getElementById('meta-testcode').value.trim() } });
-    out.textContent = (r.ok ? '✓ accepted' : '✗ failed') + ' (HTTP ' + (r.status || '-') + ')\n' + (r.response || r.error || '');
+    out.textContent = (r.ok ? 'accepted' : 'failed') + ' (HTTP ' + (r.status || '-') + ')\n' + (r.response || r.error || '');
   } catch (e) { out.textContent = e.message; }
 };
 
@@ -392,8 +392,8 @@ document.getElementById('email-test').onclick = async () => {
   try {
     const r = await api('/admin/email/test', { method: 'POST', body: {} });
     const via = r.used?.provider === 'zeptomail' ? ' via ZeptoMail' : (r.used?.provider === 'smtp' ? ' via SMTP' : '');
-    out.textContent = '✓ Sent a test email to ' + r.to + via + '. Check that inbox.';
-  } catch (e) { out.textContent = '✗ ' + e.message; }
+    out.textContent = 'Sent a test email to ' + r.to + via + '. Check that inbox.';
+  } catch (e) { out.textContent = e.message; }
 };
 
 document.getElementById('ao-plan-save').onclick = async () => {
@@ -461,7 +461,7 @@ async function load() {
 function refHost(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; } }
 function acqDate(iso) {
   if (!iso) return '—';
-  try { return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); }
+  try { return fmtDateOnly(iso); }  // DD-MM-YYYY IST, never the browser locale
   catch { return String(iso).slice(0, 10); }
 }
 function acqCell(t) {

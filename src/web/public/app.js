@@ -33,10 +33,67 @@ function esc(s) {
   }[c]));
 }
 
+// ---------- icons (UI-STRICTURES.md §6) ----------
+// Lucide paths, 16px in controls and 20px in nav rows, stroke 1.75. No icon is a
+// text character and no emoji appears in the UI, so every tick, cross, arrow and
+// eye in the product comes from here.
+const ICONS = {
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  x: '<path d="M18 6 6 18M6 6l12 12"/>',
+  'chevron-down': '<path d="m6 9 6 6 6-6"/>',
+  'chevron-right': '<path d="m9 18 6-6-6-6"/>',
+  'external-link': '<path d="M15 3h6v6"/><path d="M10 14 21 3"/>'
+    + '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+  eye: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>',
+  'eye-off': '<path d="M10.7 5.1A7 7 0 0 1 12 5c6.4 0 10 7 10 7a18 18 0 0 1-2.2 3.1"/>'
+    + '<path d="M6.6 6.6A18 18 0 0 0 2 12s3.6 7 10 7a9 9 0 0 0 3.9-.9"/>'
+    + '<path d="m2 2 20 20"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/>',
+  copy: '<rect x="9" y="9" width="12" height="12" rx="2"/>'
+    + '<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+  inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/>'
+    + '<path d="M5.4 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.4-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.8 1.1Z"/>',
+  'alert-triangle': '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/>'
+    + '<path d="M12 9v4"/><path d="M12 17h.01"/>',
+};
+// `name` must be a key above; `cls` adds sizing such as 'icon-20'.
+function icon(name, cls) {
+  const d = ICONS[name];
+  if (!d) return '';
+  return `<svg class="icon${cls ? ' ' + cls : ''}" viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
+}
+// A tick or dash for a boolean table cell, with a label for screen readers.
+function boolCell(on, labels) {
+  const [yes, no] = labels || ['yes', 'no'];
+  return on
+    ? `<span class="ok-mark" title="${esc(yes)}">${icon('check')}<span class="sr-only">${esc(yes)}</span></span>`
+    : `<span class="meta" title="${esc(no)}">—</span>`;
+}
+
+// ---------- dates ----------
+// Everything a person reads is DD-MM-YYYY (plus HH:MM, 24-hour, when the time
+// matters) in IST, computed from a fixed +05:30 offset. The browser's locale and
+// timezone are never trusted: toLocaleString() with no locale renders US order
+// for most visitors and on the server. Machine-facing fields stay ISO-8601 UTC.
+const IST_OFFSET_MIN = 330;
+function istParts(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const t = new Date(d.getTime() + IST_OFFSET_MIN * 60 * 1000);
+  const p = (n) => String(n).padStart(2, '0');
+  return {
+    dd: p(t.getUTCDate()), mm: p(t.getUTCMonth() + 1), yyyy: t.getUTCFullYear(),
+    hh: p(t.getUTCHours()), mi: p(t.getUTCMinutes()),
+  };
+}
 function fmtDate(iso) {
   if (!iso) return '—';
-  const d = new Date(iso);
-  return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  const p = istParts(iso);
+  return p ? `${p.dd}-${p.mm}-${p.yyyy} ${p.hh}:${p.mi}` : '—';
+}
+function fmtDateOnly(iso) {
+  if (!iso) return '—';
+  const p = istParts(iso);
+  return p ? `${p.dd}-${p.mm}-${p.yyyy}` : '—';
 }
 
 function statusBadge(status) {

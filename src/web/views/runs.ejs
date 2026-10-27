@@ -96,7 +96,7 @@ async function loadRecordings() {
       <td>${linkWithCopy(r.youtube_url)}</td>
       <td>${r.lms_lesson_url ? `<a href="${esc(r.lms_lesson_url)}" target="_blank">lesson</a>` : (r.lms_status === 'failed' ? '<span class="badge err">failed</span>' : '—')}</td>
       <td>${statusBadge(r.status)}</td>
-      <td>${r.source_deleted ? '✓' : '—'}</td>
+      <td>${boolCell(r.source_deleted, ['deleted from source', 'still on source'])}</td>
       <td>${r.youtube_video_id ? `<button data-edit="${r.id}">Edit title/desc</button>` : ''}</td>
     </tr>
     <tr id="editrow-${r.id}" style="display:none"><td colspan="8">

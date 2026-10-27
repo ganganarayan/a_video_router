@@ -478,3 +478,18 @@ td button, td .btn, th button,
     min-height: 44px;
   }
 }
+
+/* ---------- status marks in table cells ---------- */
+.ok-mark { color: var(--success); display: inline-flex; align-items: center; }
+/* Accessible label for an icon-only cell (§6 — icon-only controls carry a name) */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+/* ---------- callout (a recommendation inside a form card) ---------- */
+.callout {
+  border-left: 3px solid var(--brand);
+  padding-left: var(--sp-3);
+  margin: var(--sp-3) 0;
+}

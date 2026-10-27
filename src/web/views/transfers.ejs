@@ -104,7 +104,7 @@ let lmsOptions = []; // {label, course_id, module_id}
 let queueTimer = null;
 
 function channelSelect(source, i, item) {
-  if (item.youtube_url) return '<span class="muted">on YouTube ✓</span>';
+  if (item.youtube_url) return `<span class="badge ok">${icon('check')} on YouTube</span>`;
   const opts = channels.map(c =>
     `<option value="${c.id}">${esc(c.label)}${c.connected ? '' : ' (not connected)'}</option>`).join('');
   return `<select data-ch="${source}:${i}" title="YouTube channel to upload to">
@@ -113,7 +113,7 @@ function channelSelect(source, i, item) {
 
 function lmsSelect(source, i, item) {
   if (!lmsOptions.length) return '';
-  if (item.lms_lesson_url) return '<span class="muted">in LMS ✓</span>';
+  if (item.lms_lesson_url) return `<span class="badge ok">${icon('check')} in LMS</span>`;
   const opts = lmsOptions.map((o, k) =>
     `<option value="${k}">${esc(o.label)}</option>`).join('');
   return `<select data-lms="${source}:${i}" title="LMS course to push into">
@@ -189,7 +189,7 @@ function pushCell(source, i, item) {
 
   // --- YouTube leg ---
   if (item.youtube_url) {
-    parts.push('<span class="muted">on YouTube ✓</span>');
+    parts.push(`<span class="badge ok">${icon('check')} on YouTube</span>`);
   } else {
     parts.push(`${titleDescFields(source, i, item)}
       ${fileSelect(source, i, item)}
@@ -201,7 +201,7 @@ function pushCell(source, i, item) {
   // Enabled only once the video is on YouTube AND an LMS course exists; otherwise
   // disabled with a tooltip that says exactly what's needed.
   if (item.lms_lesson_url) {
-    parts.push('<span class="muted">in LMS ✓</span>');
+    parts.push(`<span class="badge ok">${icon('check')} in LMS</span>`);
   } else {
     const onYt = Boolean(item.youtube_url);
     const hasLms = lmsOptions.length > 0;
@@ -445,7 +445,7 @@ function renderZoom(s) {
       <td>${fmtMin(z.duration_minutes)}</td>
       <td>${fmtBytes(z.total_bytes)}</td>
       <td>${z.speaker_view
-        ? `<span class="badge ok" title="${esc(z.speaker_view)}">✓</span>`
+        ? `<span class="badge ok" title="${esc(z.speaker_view)}">${icon('check')}<span class="sr-only">available</span></span>`
         : '<span class="badge warn">missing</span>'}</td>
       <td>${z.downloaded ? '<span class="badge ok">Downloaded</span>' : '<span class="badge">Not downloaded</span>'}</td>
       <td>${pipelineBadge(z)}${z.source_deleted ? ' <span class="badge ok">deleted on Zoom</span>' : ''}</td>

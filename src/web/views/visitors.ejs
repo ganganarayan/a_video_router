@@ -101,7 +101,7 @@ async function loadRecent() {
       <td>${esc(v.landing_path || '—')}</td>
       <td>${esc(v.utm_source || '—')}${v.utm_medium ? ' / ' + esc(v.utm_medium) : ''}</td>
       <td>${esc(v.utm_campaign || '—')}</td>
-      <td>${v.fbclid ? '✔' : '—'}</td>
+      <td>${boolCell(v.fbclid, ['has fbclid', 'no fbclid'])}</td>
       <td>${esc(v.country || '—')}</td>
       <td>${esc(v.city || '—')}</td>
       <td>${esc((v.device_type || '') + ' ' + (v.browser || ''))}</td>
