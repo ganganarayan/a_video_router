@@ -1,0 +1,180 @@
+/* ============================================================================
+   AVideoRouter design tokens — the single source of colour, size, spacing and
+   radius for the whole product. See UI-STRICTURES.md §1-§5.
+
+   Rules this file exists to enforce:
+     - No component may contain a literal colour, font size, spacing value or
+       radius. Use the semantic names below.
+     - Both themes are authored explicitly. Dark is never derived by inverting
+       light.
+     - A colour that is not here is added here first, in both themes, with a
+       reason — it is not introduced at the call site.
+
+   The brand is AVideoRouter blue, not the Assess360 green: these are separate
+   products and the strictures' palette is scoped to its own identity.
+   ========================================================================== */
+
+/* ---------- light (default) ---------- */
+:root,
+:root[data-theme="light"] {
+  /* surfaces */
+  --surface-page:     #ffffff;
+  --surface-raised:   #f8fafc;
+  --surface-sunken:   #f1f5f9;
+  --surface-overlay:  #ffffff;
+
+  /* text — tertiary is the smallest permitted text colour */
+  --text-primary:     #0b1220;
+  --text-secondary:   #475569;
+  --text-tertiary:    #64748b;
+  --text-inverse:     #ffffff;
+
+  /* lines */
+  --line-subtle:      #e8edf3;
+  --line-default:     #d7dfe9;
+  --line-strong:      #b6c2d1;
+
+  /* brand */
+  --brand:            #2f68e0;
+  --brand-hover:      #2757bd;
+  --brand-active:     #1f479b;
+  --brand-contrast:   #ffffff;
+  --brand-wash:       #e8eefc;   /* tinted backgrounds only */
+
+  /* status — each a distinct hue, never the brand */
+  --success:          #15803d;
+  --success-wash:     #e7f6ec;
+  --warning:          #b45309;
+  --warning-wash:     #fdf3e3;
+  --danger:           #b91c1c;
+  --danger-wash:      #fdecec;
+  --info:             #1d4ed8;
+  --info-wash:        #e8eefc;
+
+  /* focus */
+  --focus-ring:       #2563eb;
+
+  /* elevation — light gets one hairline shadow on cards, nothing heavier */
+  --shadow-card:      0 1px 2px rgba(11, 18, 32, .06);
+  --shadow-overlay:   0 10px 30px rgba(11, 18, 32, .16);
+  --scrim:            rgba(11, 18, 32, .45);   /* modal backdrops */
+}
+
+/* ---------- dark ---------- */
+:root[data-theme="dark"] {
+  --surface-page:     #0b1220;
+  --surface-raised:   #121a2b;
+  --surface-sunken:   #080d18;
+  --surface-overlay:  #162034;
+
+  --text-primary:     #f2f6fb;
+  --text-secondary:   #aab8c9;
+  --text-tertiary:    #8496aa;
+  --text-inverse:     #0b1220;
+
+  --line-subtle:      #1b2537;
+  --line-default:     #263349;
+  --line-strong:      #3a4a66;
+
+  /* lifted for dark, and deliberately not the same hex as light. The contrast
+     colour flips to near-black: white on a lifted blue fails 4.5:1. */
+  --brand:            #5c93ff;
+  --brand-hover:      #7aa8ff;
+  --brand-active:     #4178e0;
+  --brand-contrast:   #06101f;
+  --brand-wash:       #142340;
+
+  --success:          #35c46b;
+  --success-wash:     #10261a;
+  --warning:          #e0a33a;
+  --warning-wash:     #2a2010;
+  --danger:           #ef6565;
+  --danger-wash:      #2b1414;
+  --info:             #6ea0ff;
+  --info-wash:        #111c33;
+
+  --focus-ring:       #6ea0ff;
+
+  /* dark uses borders and surface lift, not shadows — overlays only */
+  --shadow-card:      none;
+  --shadow-overlay:   0 10px 30px rgba(0, 0, 0, .5);
+  --scrim:            rgba(0, 0, 0, .6);
+
+  /* The legacy --panel2 meant "one step away from the panel": that is a sunken
+     tint in light, but a lift in dark, where sunken sits below the page. This
+     selector outranks the alias block below, so it wins in dark. */
+  --panel2: var(--surface-overlay);
+}
+
+/* ---------- typography (§2) ----------
+   One family: Inter variable. Nothing between these sizes; 10px is banned. */
+:root {
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+  --fs-display: 38px;  --lh-display: 44px;
+  --fs-title-1: 30px;  --lh-title-1: 36px;
+  --fs-title-2: 22px;  --lh-title-2: 28px;
+  --fs-title-3: 17px;  --lh-title-3: 24px;
+  --fs-body:    15px;  --lh-body:    24px;
+  --fs-small:   13px;  --lh-small:   20px;
+  --fs-micro:   12px;  --lh-micro:   16px;
+}
+
+/* ---------- spacing (§3) ---------- */
+:root {
+  --sp-1:  4px;
+  --sp-2:  8px;
+  --sp-3:  12px;
+  --sp-4:  16px;
+  --sp-5:  20px;   /* field group to next field group */
+  --sp-6:  24px;
+  --sp-8:  32px;
+  --sp-12: 48px;
+  --sp-16: 64px;
+  --sp-24: 96px;
+}
+
+/* ---------- radius (§5) — 8 controls, 12 cards, 999 pills. No 10, no 16. ---- */
+:root {
+  --r-control: 8px;
+  --r-card:    12px;
+  --r-pill:    999px;
+}
+
+/* ---------- containers (§4) ---------- */
+:root {
+  --container-app:       1180px;
+  --container-marketing: 1200px;
+  --measure:             68ch;   /* reading text cap */
+  --gutter:              24px;
+  --header-h:            56px;
+}
+@media (max-width: 720px) {
+  :root { --gutter: 16px; }      /* never smaller than 16 */
+}
+
+/* ---------- motion (§16) ---------- */
+:root {
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  --dur-hover: 150ms;
+  --dur-panel: 220ms;
+}
+
+/* ============================================================================
+   Legacy aliases. The templates still reference the pre-token variable names in
+   roughly a hundred places; these keep them resolving to the new palette while
+   those call sites migrate. Nothing new may use them.
+   ========================================================================== */
+:root {
+  --bg:     var(--surface-page);
+  --panel:  var(--surface-raised);
+  --panel2: var(--surface-sunken);
+  --line:   var(--line-default);
+  --text:   var(--text-primary);
+  --muted:  var(--text-secondary);
+  --accent: var(--brand);
+  --ok:     var(--success);
+  --warn:   var(--warning);
+  --err:    var(--danger);
+}

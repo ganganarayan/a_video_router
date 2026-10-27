@@ -4,6 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>VideoRouter — <%= title %></title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap">
   <link rel="stylesheet" href="/public/style.css">
   <script src="/public/theme.js"></script>
   <script src="/public/app.js"></script>
@@ -11,7 +14,7 @@
 </head>
 <body>
 <nav>
-  <span class="brand"><span style="color:var(--accent)">A</span>Video<span style="color:var(--accent)">Router</span></span>
+  <span class="brand"><span class="brand-a">A</span>Video<span class="brand-a">Router</span></span>
   <a class="tab <%= page === 'admin' ? 'active' : '' %>" id="nav-admin" href="/admin" style="display:none">Admin</a>
   <a class="tab <%= page === 'visitors' ? 'active' : '' %>" id="nav-visitors" href="/visitors" style="display:none">Visitors</a>
   <a class="tab <%= page === 'traffic' ? 'active' : '' %>" id="nav-traffic" href="/traffic" style="display:none">Traffic</a>
@@ -32,10 +35,10 @@
 <div id="ctxbar"></div>
 <%
   // Contextual help: map each page to the most relevant Help article, deep-linked.
-  const HELP_MAP = { connections: 'connect-zoom', routing: 'routing', sources: 'push-single',
+  const HELP_MAP = { connections: 'connect-zoom', routing: 'routing', transfers: 'push-single',
     schedules: 'schedules', runs: 'runs', logs: 'runs', billing: 'billing', team: 'team',
     settings: 'getting-started' };
   const helpId = HELP_MAP[page];
 %>
-<% if (helpId) { %><a class="help-fab" href="/help#<%= helpId %>" title="Help for this page" aria-label="Help for this page">?</a><% } %>
+<% if (helpId) { %><a class="help-fab" href="/help#<%= helpId %>" title="Help for this page" aria-label="Help for this page"><svg class="icon icon-20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg></a><% } %>
 <main class="page-<%= page %>">

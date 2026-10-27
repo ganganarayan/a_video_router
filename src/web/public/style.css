@@ -1,178 +1,480 @@
+/* ============================================================================
+   AVideoRouter interface. Every value here comes from tokens.css — see
+   UI-STRICTURES.md. Do not introduce a literal colour, font size, spacing value
+   or radius in this file or in a template.
+   ========================================================================== */
+@import url("/public/tokens.css");
+
 * { box-sizing: border-box; }
-:root {
-  --bg: #0f1420; --panel: #1a2233; --panel2: #223048; --line: #2e3d5c;
-  --text: #e8edf7; --muted: #93a1bd; --accent: #4f8cff; --ok: #2ecc71;
-  --warn: #f1c40f; --err: #e74c3c;
-}
-:root[data-theme="light"] {
-  --bg: #f6f8fc; --panel: #ffffff; --panel2: #eef2f8; --line: #d6deea;
-  --text: #151a22; --muted: #5b6b84; --accent: #2f68e0; --ok: #1e9e56;
-  --warn: #b9820a; --err: #d64535;
-}
+
+html { -webkit-text-size-adjust: 100%; }
+
 body {
-  margin: 0; background: var(--bg); color: var(--text);
-  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  margin: 0;
+  background: var(--surface-page);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-weight: 400;
+  /* §15.1 — no horizontal page scroll at any width */
+  overflow-x: hidden;
 }
-a { color: var(--accent); text-decoration: none; }
+
+a { color: var(--brand); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
-nav {
-  display: flex; align-items: center; gap: 4px; padding: 10px 20px;
-  background: var(--panel); border-bottom: 1px solid var(--line);
+/* ---------- §15.4 focus floor: a visible ring on every interactive element --- */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--r-control);
 }
-nav .brand { font-weight: 700; margin-right: 18px; color: var(--text); }
-nav a.tab { padding: 6px 12px; border-radius: 6px; color: var(--muted); }
-nav a.tab.active, nav a.tab:hover { background: var(--panel2); color: var(--text); text-decoration: none; }
+
+/* ---------- §16 motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+}
+
+/* ============================================================================
+   Typography (§2). Nothing between these sizes. 10px is banned.
+   ========================================================================== */
+h1, .title-1 {
+  font-size: var(--fs-title-1); line-height: var(--lh-title-1);
+  font-weight: 700; letter-spacing: -.02em;
+  margin: 0 0 var(--sp-4); color: var(--text-primary);
+}
+h2, .title-2 {
+  font-size: var(--fs-title-2); line-height: var(--lh-title-2);
+  font-weight: 650; letter-spacing: 0;
+  margin: 0 0 var(--sp-3); color: var(--text-primary);
+}
+h3, .title-3 {
+  font-size: var(--fs-title-3); line-height: var(--lh-title-3);
+  font-weight: 600; margin: 0 0 var(--sp-2); color: var(--text-primary);
+}
+.display {
+  font-size: var(--fs-display); line-height: var(--lh-display);
+  font-weight: 700; letter-spacing: -.02em;
+}
+.small { font-size: var(--fs-small); line-height: var(--lh-small); }
+/* §2 — micro is for all-caps group labels and nothing else */
+.micro {
+  font-size: var(--fs-micro); line-height: var(--lh-micro);
+  font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+/* Help text is secondary, never tertiary. Tertiary is timestamps and counts. */
+.muted { color: var(--text-secondary); }
+.meta  { color: var(--text-tertiary); font-size: var(--fs-small); line-height: var(--lh-small); }
+.mono  { font-family: var(--font-mono); font-size: var(--fs-small); }
+.nowrap { white-space: nowrap; }
+/* §4 — reading text is capped, not the full container width */
+.measure { max-width: var(--measure); }
+
+/* ============================================================================
+   App shell
+   ========================================================================== */
+nav {
+  display: flex; align-items: center; gap: var(--sp-1);
+  padding: var(--sp-2) var(--gutter);
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--line-default);
+  min-height: var(--header-h);
+  flex-wrap: wrap;
+}
+nav .brand {
+  font-size: var(--fs-title-3); line-height: var(--lh-title-3);
+  font-weight: 700; margin-right: var(--sp-4); color: var(--text-primary);
+}
+nav a.tab {
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-control);
+  color: var(--text-secondary);
+  font-size: var(--fs-small); line-height: var(--lh-small);
+  position: relative;
+  transition: background-color var(--dur-hover) var(--ease), color var(--dur-hover) var(--ease);
+}
+/* §8.3 — active and hover must differ by two properties, not one.
+   Hover: raised surface only. Active: wash + brand indicator + primary text. */
+nav a.tab:hover { background: var(--surface-sunken); color: var(--text-primary); text-decoration: none; }
+nav a.tab.active {
+  background: var(--brand-wash); color: var(--text-primary); font-weight: 600;
+}
+nav a.tab.active::after {
+  content: ""; position: absolute; left: var(--sp-3); right: var(--sp-3); bottom: -1px;
+  height: 2px; background: var(--brand); border-radius: var(--r-pill);
+}
 nav form { margin-left: auto; }
 
-main { max-width: 1200px; margin: 24px auto; padding: 0 20px; }
-/* Data-heavy pages get more of the screen so their wide tables fit without a
-   horizontal scroll (still centered, still padded). */
-main.page-admin, main.page-logs, main.page-sources,
-main.page-visitors, main.page-traffic { max-width: min(1760px, 96vw); }
-/* Dense tables: tighter cells + let long links/names truncate with ellipsis
-   instead of forcing the row wide. */
-main.page-admin table, main.page-logs table { font-size: 12.5px; }
-main.page-admin th, main.page-admin td,
-main.page-logs th, main.page-logs td { padding: 7px 8px; }
+main {
+  /* §4 — one content container, the same on every route. No page overrides it. */
+  max-width: var(--container-app);
+  margin: var(--sp-6) auto;
+  padding: 0 var(--gutter);
+}
+
+/* Dense tables stay inside .table-wrap, which scrolls on its own; the page
+   itself never scrolls sideways. */
 td.trunc { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-h1 { font-size: 20px; margin: 0 0 16px; }
-h2 { font-size: 15px; margin: 0 0 12px; color: var(--text); }
 
+/* ============================================================================
+   Cards (§5) — 12 radius, hairline border, one soft shadow in light only
+   ========================================================================== */
 .card {
-  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
-  padding: 16px 18px; margin-bottom: 18px;
+  background: var(--surface-raised);
+  border: 1px solid var(--line-subtle);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-card);
+  padding: var(--sp-6);
+  margin-bottom: var(--sp-4);   /* §3 — gap between cards is 16 */
 }
-.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; }
-.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
+@media (max-width: 720px) {
+  .card { padding: var(--sp-5); }  /* 20 on mobile */
+}
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: var(--sp-4); }
+.row { display: flex; gap: var(--sp-3); flex-wrap: wrap; align-items: flex-end; }
 
-label { display: block; font-size: 12px; color: var(--muted); margin: 8px 0 4px; }
-input, select {
-  width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--line);
-  background: var(--bg); color: var(--text); font: inherit;
+/* §9 — page template: title once, then an optional one-line description */
+.page-desc {
+  font-size: var(--fs-small); line-height: var(--lh-small);
+  color: var(--text-secondary); margin: 0 0 var(--sp-6); max-width: var(--measure);
 }
-input:focus, select:focus { outline: 1px solid var(--accent); }
+
+/* ============================================================================
+   Forms (§11)
+   ========================================================================== */
+label {
+  display: block;
+  font-size: var(--fs-body); line-height: var(--lh-body);
+  color: var(--text-primary);
+  margin: 0 0 var(--sp-2);     /* label to field is 8 */
+}
+label .req { color: var(--danger); margin-left: var(--sp-1); }
+
+input, select, textarea {
+  width: 100%;
+  padding: var(--sp-2) var(--sp-3);   /* 12 horizontal, 8 vertical */
+  min-height: 44px;                    /* §15.5 tap target */
+  border-radius: var(--r-control);
+  border: 1px solid var(--line-default);
+  background: var(--surface-page);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  transition: border-color var(--dur-hover) var(--ease);
+}
+input:hover, select:hover, textarea:hover { border-color: var(--line-strong); }
+
+/* §11 bans the browser's own select chrome. Rebuilding every dropdown as a
+   custom listbox would rewrite working flows, so the native control is kept for
+   its behaviour and keyboard support while its chrome is replaced: the arrow is
+   an inline SVG (not a text glyph, per §6) tinted by the theme.
+   The stroke hex is spelled out because a data URI cannot resolve var(); the two
+   values are --text-secondary in light and dark. Change them together. */
+select {
+  appearance: none; -webkit-appearance: none;
+  padding-right: var(--sp-8);
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--sp-3) center;
+}
+:root[data-theme="dark"] select {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23aab8c9' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+select::-ms-expand { display: none; }
+
+/* §11 — field width follows content. Only sentences get the full width. */
 .field { flex: 1 1 180px; }
+.field-narrow { flex: 0 0 240px; max-width: 240px; }
+input[type="number"], input[type="date"], input[type="time"] { max-width: 240px; }
 
-button {
-  padding: 8px 14px; border-radius: 6px; border: 1px solid var(--line);
-  background: var(--panel2); color: var(--text); cursor: pointer; font: inherit;
+/* §11 — help text under the field, small, secondary, 6px off the field */
+.help {
+  display: block; margin-top: 6px;
+  font-size: var(--fs-small); line-height: var(--lh-small);
+  color: var(--text-secondary);
 }
-button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-button.danger { color: var(--err); }
-button:disabled { opacity: .5; cursor: default; }
+/* §11 — validation under the field, in danger, with an icon */
+.err-text {
+  display: flex; gap: var(--sp-1); align-items: center; margin-top: 6px;
+  font-size: var(--fs-small); line-height: var(--lh-small); color: var(--danger);
+}
+.fieldset { margin-bottom: var(--sp-5); }  /* field group to next group is 20 */
 
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
-th { color: var(--muted); font-weight: 600; white-space: nowrap; }
-tr:hover td { background: rgba(255,255,255,.02); }
+/* ============================================================================
+   Buttons (§7) — three variants, two sizes, exactly one primary per region
+   ========================================================================== */
+button, .btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2);
+  min-height: 44px; padding: var(--sp-2) var(--sp-4);
+  border-radius: var(--r-control);
+  border: 1px solid var(--line-default);
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body); line-height: var(--lh-body); font-weight: 500;
+  cursor: pointer;
+  transition: background-color var(--dur-hover) var(--ease), border-color var(--dur-hover) var(--ease),
+              color var(--dur-hover) var(--ease);
+}
+button:hover, .btn:hover { background: var(--surface-sunken); text-decoration: none; }
+
+/* primary — the one action the user came to the screen to do */
+button.primary, .btn.primary {
+  background: var(--brand); border-color: var(--brand); color: var(--brand-contrast); font-weight: 600;
+}
+button.primary:hover, .btn.primary:hover { background: var(--brand-hover); border-color: var(--brand-hover); }
+button.primary:active, .btn.primary:active { background: var(--brand-active); border-color: var(--brand-active); }
+
+/* ghost — table rows and toolbars */
+button.ghost, .btn.ghost { border-color: transparent; color: var(--text-secondary); }
+button.ghost:hover, .btn.ghost:hover { background: var(--surface-sunken); color: var(--text-primary); }
+
+/* danger — destructive confirmation only */
+button.danger, .btn.danger { border-color: var(--line-default); color: var(--danger); }
+button.danger:hover, .btn.danger:hover { background: var(--danger-wash); border-color: var(--danger); }
+button.danger.primary, .btn.danger.primary {
+  background: var(--danger); border-color: var(--danger); color: var(--text-inverse);
+}
+
+/* §7 — 36px compact for toolbars and table rows, 44px default */
+button.compact, .btn.compact {
+  min-height: 36px; padding: var(--sp-1) var(--sp-3);
+  font-size: var(--fs-small); line-height: var(--lh-small);
+}
+button:disabled, .btn:disabled { opacity: .5; cursor: default; }
+button:disabled:hover { background: transparent; }
+
+/* ============================================================================
+   Tables
+   ========================================================================== */
+table { width: 100%; border-collapse: collapse; font-size: var(--fs-small); line-height: var(--lh-small); }
+th, td { text-align: left; padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--line-subtle); vertical-align: top; }
+th {
+  color: var(--text-tertiary); font-weight: 600; white-space: nowrap;
+  font-size: var(--fs-micro); line-height: var(--lh-micro); letter-spacing: .06em; text-transform: uppercase;
+}
+tr:hover td { background: var(--surface-sunken); }
 .table-wrap { overflow-x: auto; }
 
+/* ============================================================================
+   Badges (§5 — pills are 999)
+   ========================================================================== */
 .badge {
-  display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px;
-  background: var(--panel2); color: var(--muted); white-space: nowrap;
+  display: inline-block; padding: 2px var(--sp-2);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-small); line-height: var(--lh-small); font-weight: 500;
+  background: var(--surface-sunken); color: var(--text-secondary); white-space: nowrap;
 }
-.badge.ok { background: rgba(46,204,113,.15); color: var(--ok); }
-.badge.warn { background: rgba(241,196,15,.15); color: var(--warn); }
-.badge.err { background: rgba(231,76,60,.15); color: var(--err); }
-/* On the auth cards (login / forgot / reset / set-password) the badge carries a
-   full sentence, not a one-word chip — let it wrap and sit as a block so it stays
-   inside the 360px card instead of overflowing on the nowrap pill style. */
+.badge.ok   { background: var(--success-wash); color: var(--success); }
+.badge.warn { background: var(--warning-wash); color: var(--warning); }
+.badge.err  { background: var(--danger-wash);  color: var(--danger); }
+.badge.info { background: var(--info-wash);    color: var(--info); }
+/* On the auth cards the badge carries a full sentence, not a one-word chip. */
 .login-box .badge {
-  display: block; white-space: normal; padding: 8px 12px;
-  font-size: 13px; line-height: 1.5; border-radius: 8px;
+  display: block; white-space: normal; padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-control);
 }
 
-.stat { text-align: center; }
-.stat .num { font-size: 26px; font-weight: 700; }
-.stat .lbl { color: var(--muted); font-size: 12px; }
+/* ============================================================================
+   Empty state (§10) — one component, used everywhere
+   ========================================================================== */
+.empty {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  padding: var(--sp-12) var(--sp-6); gap: var(--sp-2);
+}
+.empty svg { width: 32px; height: 32px; color: var(--text-tertiary); margin-bottom: var(--sp-2); }
+.empty .what {
+  font-size: var(--fs-title-3); line-height: var(--lh-title-3);
+  font-weight: 600; color: var(--text-primary);
+}
+.empty .why {
+  font-size: var(--fs-small); line-height: var(--lh-small);
+  color: var(--text-secondary); max-width: var(--measure);
+}
+.empty > button, .empty > .btn { margin-top: var(--sp-2); }
 
-.muted { color: var(--muted); }
-.mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+/* ============================================================================
+   Stat tiles (§14) — equal height, label + value, money no different in colour
+   ========================================================================== */
+.stat {
+  display: flex; flex-direction: column; justify-content: flex-start;
+  gap: var(--sp-1); height: 100%; text-align: left;
+}
+.stat .num {
+  font-size: var(--fs-title-1); line-height: var(--lh-title-1);
+  font-weight: 700; color: var(--text-primary); letter-spacing: -.02em;
+}
+.stat .lbl {
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro); line-height: var(--lh-micro);
+  font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+}
+.stat .chg { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--text-secondary); }
+.grid.stats { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); align-items: stretch; }
+.grid.stats > .card { margin-bottom: 0; }
 
+/* ============================================================================
+   Progress bar
+   ========================================================================== */
 .pbar {
-  width: 130px; height: 10px; border-radius: 6px; background: var(--panel2);
+  width: 130px; height: 8px; border-radius: var(--r-pill);
+  background: var(--surface-sunken);
   overflow: hidden; display: inline-block; vertical-align: middle;
 }
-.pbar > span { display: block; height: 100%; background: var(--accent); width: 0; transition: width .4s ease; }
+/* §15.6 — a bar at 0% renders empty. No min-width, no fill at zero. */
+.pbar > span {
+  display: block; height: 100%; background: var(--brand); width: 0;
+  transition: width var(--dur-panel) var(--ease);
+}
 .pbar.indet > span { width: 35%; animation: indet 1.1s infinite ease-in-out; }
 @keyframes indet { 0% { margin-left: -35%; } 100% { margin-left: 100%; } }
-.nowrap { white-space: nowrap; }
 
-.ctxbar { padding: 8px 20px; font-size: 13px; }
-.ctxbar.on { background: rgba(79,140,255,.15); border-bottom: 1px solid var(--accent); color: var(--text); }
-.ctxbar.staff { background: rgba(241,196,15,.12); border-bottom: 1px solid var(--warn); color: var(--warn); }
+/* ============================================================================
+   Context bar (impersonation / staff notice)
+   ========================================================================== */
+.ctxbar { padding: var(--sp-2) var(--gutter); font-size: var(--fs-small); line-height: var(--lh-small); }
+.ctxbar.on {
+  background: var(--info-wash); border-bottom: 1px solid var(--info); color: var(--text-primary);
+}
+.ctxbar.staff {
+  background: var(--warning-wash); border-bottom: 1px solid var(--warning); color: var(--text-primary);
+}
 .ctxbar a { font-weight: 600; }
 
+/* ---------- inline copy button (ghost, compact) ---------- */
 button.copy {
-  padding: 1px 7px; font-size: 12px; line-height: 1.5; vertical-align: middle;
-  min-width: 46px;
+  min-height: 28px; padding: 0 var(--sp-2);
+  font-size: var(--fs-small); line-height: var(--lh-small);
+  vertical-align: middle; min-width: 46px;
+  border-color: transparent; color: var(--text-secondary);
 }
-button.copy.copied { color: var(--ok); border-color: var(--ok); }
+button.copy:hover { background: var(--surface-sunken); color: var(--text-primary); }
+button.copy.copied { color: var(--success); border-color: var(--success); }
 
+/* ---------- toast ---------- */
 #toast {
-  position: fixed; bottom: 20px; right: 20px; padding: 12px 18px; border-radius: 8px;
-  background: var(--panel2); border: 1px solid var(--line); display: none; max-width: 420px; z-index: 10;
+  position: fixed; bottom: var(--sp-5); right: var(--sp-5);
+  padding: var(--sp-3) var(--sp-4); border-radius: var(--r-control);
+  background: var(--surface-overlay); border: 1px solid var(--line-default);
+  box-shadow: var(--shadow-overlay);
+  color: var(--text-primary);
+  display: none; max-width: 420px; z-index: 10;
 }
-#toast.ok { border-color: var(--ok); }
-#toast.err { border-color: var(--err); }
+#toast.ok  { border-color: var(--success); }
+#toast.err { border-color: var(--danger); }
 
-/* Paid-feature nav marker + upsell modal */
-.navlock { margin-left: 3px; color: var(--accent); font-weight: 700; }
+/* ============================================================================
+   Paid-feature marker + upsell modal
+   ========================================================================== */
+.navlock { margin-left: var(--sp-1); color: var(--brand); font-weight: 700; }
 #upsell-ov {
-  position: fixed; inset: 0; background: rgba(0, 0, 0, .5);
+  position: fixed; inset: 0; background: var(--scrim);
   display: none; align-items: center; justify-content: center; z-index: 100;
 }
 .upsell-box {
-  background: var(--panel2); border: 1px solid var(--line); border-radius: 12px;
-  padding: 22px; max-width: 420px; width: calc(100% - 40px);
+  background: var(--surface-overlay); border: 1px solid var(--line-default);
+  border-radius: var(--r-card); box-shadow: var(--shadow-overlay);
+  padding: var(--sp-6); max-width: 420px; width: calc(100% - var(--sp-8));
 }
 
 .login-box { max-width: 360px; margin: 12vh auto; }
 
-/* Pay-as-you-go top-up modal */
+/* ============================================================================
+   Top-up modal
+   ========================================================================== */
 .modal-backdrop {
-  position: fixed; inset: 0; background: rgba(0,0,0,.55);
-  display: none; align-items: flex-start; justify-content: center; z-index: 50; padding: 6vh 16px;
+  position: fixed; inset: 0; background: var(--scrim);
+  display: none; align-items: flex-start; justify-content: center; z-index: 50;
+  padding: 6vh var(--sp-4);
 }
 .modal-backdrop.open { display: flex; }
 .modal {
-  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
-  width: 100%; max-width: 440px; max-height: 84vh; overflow-y: auto; padding: 20px;
+  background: var(--surface-overlay); border: 1px solid var(--line-default);
+  border-radius: var(--r-card); box-shadow: var(--shadow-overlay);
+  width: 100%; max-width: 440px; max-height: 84vh; overflow-y: auto; padding: var(--sp-6);
 }
-.modal-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
-.modal-head h2 { font-size: 18px; margin: 0; }
-.modal-close { border: none; background: none; color: var(--muted); font-size: 20px; padding: 0 4px; }
+.modal-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: var(--sp-1); }
+.modal-head h2 { margin: 0; }
+.modal-close {
+  border: none; background: none; color: var(--text-secondary);
+  min-height: 36px; padding: 0 var(--sp-1);
+}
 .pack {
   width: 100%; text-align: left; display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; padding: 12px 14px; margin-top: 10px; border-radius: 10px;
-  border: 1px solid var(--line); background: var(--bg); cursor: pointer;
+  gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); margin-top: var(--sp-3);
+  border-radius: var(--r-control);
+  border: 1px solid var(--line-default); background: var(--surface-page); cursor: pointer;
+  min-height: 44px;
 }
-.pack:hover { border-color: var(--accent); background: var(--panel2); }
-.pack .videos { font-size: 15px; font-weight: 700; color: var(--text); }
-.pack .videos small { display: block; font-weight: 400; color: var(--muted); font-size: 12px; margin-top: 2px; }
+/* The radio-card pattern: tinted wash plus border on the chosen card. This is
+   the product's selection language — reuse it anywhere selection exists. */
+.pack:hover, .pack.selected { border-color: var(--brand); background: var(--brand-wash); }
+.pack .videos { font-size: var(--fs-body); line-height: var(--lh-body); font-weight: 700; color: var(--text-primary); }
+.pack .videos small {
+  display: block; font-weight: 400; color: var(--text-secondary);
+  font-size: var(--fs-small); line-height: var(--lh-small); margin-top: 2px;
+}
 .pack .amt { text-align: right; white-space: nowrap; }
-.pack .amt .total { font-size: 16px; font-weight: 700; color: var(--text); }
-.pack .amt .brk { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
+.pack .amt .total { font-size: var(--fs-title-3); line-height: var(--lh-title-3); font-weight: 700; color: var(--text-primary); }
+.pack .amt .brk {
+  display: block; font-size: var(--fs-small); line-height: var(--lh-small);
+  color: var(--text-secondary); margin-top: 2px;
+}
 
-/* Password show/hide eye toggle (eye.js) */
+/* ---------- password show/hide ---------- */
 .pw-wrap { position: relative; display: inline-block; width: 100%; }
-.pw-wrap > input { width: 100%; padding-right: 40px; box-sizing: border-box; }
+.pw-wrap > input { width: 100%; padding-right: 44px; }
 .pw-eye {
-  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
-  background: none; border: 0; cursor: pointer; padding: 2px 7px; margin: 0;
-  font-size: 15px; line-height: 1; opacity: .5; color: var(--muted);
+  position: absolute; right: var(--sp-1); top: 50%; transform: translateY(-50%);
+  background: none; border: 0; cursor: pointer;
+  min-height: 36px; padding: 0 var(--sp-2); margin: 0;
+  opacity: .6; color: var(--text-secondary);
 }
-.pw-eye:hover { opacity: .85; }
-.pw-eye.on { opacity: 1; }
+.pw-eye:hover { opacity: 1; background: none; }
+.pw-eye svg { width: 18px; height: 18px; display: block; }
 
-/* Contextual per-page help button (head.ejs HELP_MAP) */
+/* ---------- contextual help button ---------- */
 .help-fab {
-  position: fixed; right: 18px; bottom: 18px; z-index: 40;
-  width: 40px; height: 40px; border-radius: 50%;
+  position: fixed; right: var(--sp-4); bottom: var(--sp-4); z-index: 40;
+  width: 44px; height: 44px; border-radius: var(--r-pill);
   display: flex; align-items: center; justify-content: center;
-  background: var(--accent); color: #fff; font-weight: 800; font-size: 20px;
-  text-decoration: none; box-shadow: 0 4px 14px rgba(0,0,0,.35);
-  opacity: .9; transition: opacity .12s, transform .12s;
+  background: var(--brand); color: var(--brand-contrast);
+  text-decoration: none; box-shadow: var(--shadow-overlay);
+  transition: background-color var(--dur-hover) var(--ease), transform var(--dur-hover) var(--ease);
 }
-.help-fab:hover { opacity: 1; transform: translateY(-2px); text-decoration: none; }
+.help-fab svg { width: 20px; height: 20px; }
+.help-fab:hover { background: var(--brand-hover); transform: translateY(-2px); text-decoration: none; }
+
+/* ---------- icons (§6) — Lucide, 16 in controls, 20 in nav rows, stroke 1.75 -- */
+.icon {
+  width: 16px; height: 16px; flex: none;
+  stroke: currentColor; stroke-width: 1.75; fill: none;
+  stroke-linecap: round; stroke-linejoin: round;
+  vertical-align: middle;
+}
+.icon-20 { width: 20px; height: 20px; }
+
+/* ---------- brand mark ---------- */
+nav .brand .brand-a { color: var(--brand); }
+
+/* ---------- §7 sizing by context ----------
+   Table rows and toolbars take the 36px compact size without every template
+   having to opt in; the 44px default stays for standalone page actions. */
+td button, td .btn, th button,
+.row > button, .row > .btn {
+  min-height: 36px; padding: var(--sp-1) var(--sp-3);
+  font-size: var(--fs-small); line-height: var(--lh-small);
+}
+/* §15.5 — on touch, the floor is 44x44 regardless of the visual size above. */
+@media (pointer: coarse) {
+  button, .btn, td button, td .btn, .row > button, .row > .btn, button.copy, .pw-eye, .modal-close {
+    min-height: 44px;
+  }
+}
