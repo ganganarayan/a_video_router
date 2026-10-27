@@ -36,11 +36,13 @@ const ld = [
   <% if (prev) { %><link rel="prev" href="<%= prevHref %>"><% } %>
   <% if (next) { %><link rel="next" href="<%= nextHref %>"><% } %>
   <script type="application/ld+json"><%- JSON.stringify(ld) %></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap">
+  <link rel="stylesheet" href="/public/tokens.css">
   <style>
-    :root{ --bg:#0f1420; --panel:#1a2233; --panel2:#223048; --line:#2e3d5c; --text:#e8edf7; --muted:#93a1bd; --accent:#4f8cff; --ok:#2ecc71; }
-    :root[data-theme="light"]{ --bg:#f6f8fc; --panel:#ffffff; --panel2:#eef2f8; --line:#d6deea; --text:#151a22; --muted:#5b6b84; --accent:#2f68e0; --ok:#1e9e56; }
     *{box-sizing:border-box}
-    body{margin:0;background:var(--bg);color:var(--text);font:16px/1.7 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-sans);font-size:var(--fs-body);line-height:var(--lh-body)}
     a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
     .wrap{max-width:820px;margin:0 auto;padding:0 20px}
     header.top{border-bottom:1px solid var(--line);padding:14px 0;position:sticky;top:0;background:var(--bg);z-index:5}

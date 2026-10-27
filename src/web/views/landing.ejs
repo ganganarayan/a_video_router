@@ -38,37 +38,32 @@
   }
   </script>
   <%- typeof pixelHead !== 'undefined' ? pixelHead : '' %>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap">
+  <link rel="stylesheet" href="/public/tokens.css">
   <style>
-    :root{
-      --bg:#0f1420; --panel:#1a2233; --panel2:#223048; --line:#2e3d5c;
-      --text:#e8edf7; --muted:#93a1bd; --accent:#4f8cff; --accent2:#7b5cff;
-      --ok:#2ecc71;
-    }
-    :root[data-theme="light"]{
-      --bg:#f6f8fc; --panel:#ffffff; --panel2:#eef2f8; --line:#d6deea;
-      --text:#151a22; --muted:#5b6b84; --accent:#2f68e0; --accent2:#6b4cff; --ok:#1e9e56;
-    }
     *{box-sizing:border-box}
     body{margin:0;background:var(--bg);color:var(--text);
-      font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+      font-family:var(--font-sans);font-size:var(--fs-body);line-height:var(--lh-body);-webkit-font-smoothing:antialiased}
     a{color:var(--accent);text-decoration:none}
     .wrap{max-width:1240px;margin:0 auto;padding:0 28px}
     .btn{display:inline-block;padding:12px 22px;border-radius:8px;font-weight:600;border:1px solid var(--line);
       background:var(--panel2);color:var(--text);cursor:pointer}
-    .btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;color:#fff}
+    .btn.primary{background:linear-gradient(135deg,var(--accent),var(--brand-active));border:none;color:var(--brand-contrast)}
     .btn.big{padding:15px 30px;font-size:17px}
 
     header{position:sticky;top:0;z-index:20;background:rgba(15,20,32,.85);backdrop-filter:blur(8px);
       border-bottom:1px solid var(--line)}
     header .wrap{display:flex;align-items:center;justify-content:space-between;height:62px}
     .brand{font-weight:800;font-size:19px;letter-spacing:.2px}
-    .brand span{background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+    .brand span{background:linear-gradient(135deg,var(--accent),var(--brand-active));-webkit-background-clip:text;background-clip:text;color:transparent}
     .hero-visual{display:flex;justify-content:center;margin:10px auto 0;max-width:840px}
     .hero-img{width:100%;height:auto;border-radius:16px;border:1px solid var(--line);box-shadow:0 20px 60px rgba(0,0,0,.4)}
 
     .hero{text-align:center;padding:70px 0 40px}
     .hero h1{font-size:clamp(30px,5vw,50px);line-height:1.1;margin:0 0 18px;font-weight:800}
-    .hero h1 .hl{background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+    .hero h1 .hl{background:linear-gradient(135deg,var(--accent),var(--brand-active));-webkit-background-clip:text;background-clip:text;color:transparent}
     .hero p.sub{font-size:clamp(17px,2.2vw,21px);color:var(--muted);max-width:720px;margin:0 auto 28px}
     .cta-row{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
     .tiny{color:var(--muted);font-size:13px;margin-top:14px}
@@ -91,7 +86,7 @@
     .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
     .step{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:22px}
     .step .n{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-weight:800;
-      background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;margin-bottom:12px}
+      background:linear-gradient(135deg,var(--accent),var(--brand-active));color:var(--brand-contrast);margin-bottom:12px}
     .step h3{margin:0 0 6px;font-size:18px}
     .step p{margin:0;color:var(--muted)}
 
