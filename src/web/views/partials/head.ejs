@@ -11,10 +11,15 @@
   <script src="/public/theme.js"></script>
   <script src="/public/app.js"></script>
   <script src="/public/eye.js"></script>
+  <script src="/public/shell.js"></script>
 </head>
 <body>
 <nav>
+  <button type="button" id="nav-burger" class="nav-burger" aria-label="Menu" aria-expanded="false" aria-controls="nav-tabs">
+    <svg class="icon icon-20" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+  </button>
   <span class="brand"><span class="brand-a">A</span>Video<span class="brand-a">Router</span></span>
+  <div class="nav-tabs" id="nav-tabs">
   <a class="tab <%= page === 'admin' ? 'active' : '' %>" id="nav-admin" href="/admin" style="display:none">Admin</a>
   <a class="tab <%= page === 'visitors' ? 'active' : '' %>" id="nav-visitors" href="/visitors" style="display:none">Visitors</a>
   <a class="tab <%= page === 'traffic' ? 'active' : '' %>" id="nav-traffic" href="/traffic" style="display:none">Traffic</a>
@@ -29,8 +34,31 @@
   <a class="tab <%= page === 'settings' ? 'active' : '' %>" href="/settings">Settings</a>
   <a class="tab <%= page === 'help' ? 'active' : '' %>" href="/help">Help</a>
   <a class="tab <%= page === 'knowledge-base' ? 'active' : '' %>" id="nav-kb" href="/knowledge-base">Knowledge Base</a>
-  <span data-theme-toggle style="margin-left:8px"></span>
-  <form method="post" action="/logout"><button type="submit">Log out</button></form>
+  </div>
+  <div class="nav-end">
+    <span data-theme-toggle></span>
+    <div class="acct">
+      <button type="button" id="acct-btn" class="acct-btn" aria-haspopup="menu" aria-expanded="false"
+              aria-label="Account menu" title="<%= user && user.email ? user.email : 'Account' %>">
+        <span class="acct-initial"><%= user && user.email ? user.email.charAt(0).toUpperCase() : '?' %></span>
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="acct-menu" id="acct-menu" role="menu" hidden>
+        <% if (user && user.email) { %>
+          <div class="acct-who">
+            <% if (user.name) { %><span class="acct-name"><%= user.name %></span><% } %>
+            <span class="acct-mail"><%= user.email %></span>
+          </div>
+        <% } %>
+        <a class="acct-item" role="menuitem" href="/settings">Settings</a>
+        <a class="acct-item" role="menuitem" href="/help">Help</a>
+        <form method="post" action="/logout" class="acct-form">
+          <button type="submit" class="acct-item acct-signout" role="menuitem">Log out</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="nav-scrim" id="nav-scrim" hidden></div>
 </nav>
 <div id="ctxbar"></div>
 <%

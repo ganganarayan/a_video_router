@@ -109,7 +109,6 @@ nav a.tab.active::after {
   content: ""; position: absolute; left: var(--sp-3); right: var(--sp-3); bottom: -1px;
   height: 2px; background: var(--brand); border-radius: var(--r-pill);
 }
-nav form { margin-left: auto; }
 
 main {
   /* §4 — one content container, the same on every route. No page overrides it. */
@@ -492,4 +491,78 @@ td button, td .btn, th button,
   border-left: 3px solid var(--brand);
   padding-left: var(--sp-3);
   margin: var(--sp-3) 0;
+}
+
+/* ============================================================================
+   App shell (§8). The nav is this product's header: sticky, brand on the left,
+   destinations in the middle, theme and account on the right. Below 900px the
+   destinations become an off-canvas drawer behind a hamburger — they never
+   stack above the content.
+   ========================================================================== */
+nav { position: sticky; top: 0; z-index: 30; flex-wrap: nowrap; }
+.nav-tabs { display: flex; align-items: center; gap: var(--sp-1); flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
+.nav-end { display: flex; align-items: center; gap: var(--sp-2); margin-left: auto; flex: none; }
+.nav-burger { display: none; border-color: transparent; color: var(--text-secondary); padding: 0 var(--sp-2); }
+.nav-burger:hover { background: var(--surface-sunken); color: var(--text-primary); }
+.nav-scrim { display: none; }
+
+/* ---------- account menu ---------- */
+.acct { position: relative; }
+.acct-btn {
+  display: inline-flex; align-items: center; gap: var(--sp-1);
+  min-height: 36px; padding: 0 var(--sp-1) 0 var(--sp-1);
+  border-color: transparent; color: var(--text-secondary);
+}
+.acct-btn:hover { background: var(--surface-sunken); color: var(--text-primary); }
+.acct-initial {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: var(--r-pill);
+  background: var(--brand-wash); color: var(--brand);
+  font-size: var(--fs-small); line-height: 1; font-weight: 700;
+}
+.acct-menu {
+  position: absolute; right: 0; top: calc(100% + var(--sp-2));
+  min-width: 220px; padding: var(--sp-2);
+  background: var(--surface-overlay); border: 1px solid var(--line-default);
+  border-radius: var(--r-card); box-shadow: var(--shadow-overlay); z-index: 40;
+}
+.acct-menu[hidden] { display: none; }
+.acct-who {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: var(--sp-2) var(--sp-3) var(--sp-3);
+  border-bottom: 1px solid var(--line-subtle); margin-bottom: var(--sp-2);
+}
+.acct-name { font-size: var(--fs-small); line-height: var(--lh-small); font-weight: 600; color: var(--text-primary); }
+.acct-mail { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--text-tertiary); word-break: break-all; }
+.acct-form { margin: 0; }
+.acct-item {
+  display: flex; align-items: center; width: 100%; text-align: left;
+  min-height: 36px; padding: 0 var(--sp-3); border: 0; background: none;
+  border-radius: var(--r-control);
+  color: var(--text-primary); font-size: var(--fs-small); line-height: var(--lh-small);
+}
+.acct-item:hover { background: var(--surface-sunken); text-decoration: none; }
+.acct-signout { color: var(--danger); }
+
+/* ---------- §8.4 mobile: a drawer, never a stack above the content ---------- */
+@media (max-width: 900px) {
+  .nav-burger { display: inline-flex; }
+  .nav-tabs {
+    position: fixed; top: 0; left: 0; bottom: 0; width: 264px; max-width: 86vw;
+    flex-direction: column; align-items: stretch; flex-wrap: nowrap;
+    gap: 2px; padding: var(--sp-4) var(--sp-3);
+    background: var(--surface-raised); border-right: 1px solid var(--line-default);
+    box-shadow: var(--shadow-overlay);
+    transform: translateX(-100%);
+    transition: transform var(--dur-panel) var(--ease);
+    overflow-y: auto; z-index: 45;
+  }
+  .nav-tabs.open { transform: translateX(0); }
+  .nav-tabs a.tab { padding: var(--sp-3); min-height: 44px; display: flex; align-items: center; }
+  /* the active indicator moves to the leading edge in a vertical list */
+  .nav-tabs a.tab.active::after {
+    left: 0; right: auto; top: var(--sp-2); bottom: var(--sp-2);
+    width: 2px; height: auto;
+  }
+  .nav-scrim.open { display: block; position: fixed; inset: 0; background: var(--scrim); z-index: 44; }
 }
