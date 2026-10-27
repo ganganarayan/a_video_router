@@ -1,6 +1,6 @@
 # VideoRouter — Landing Page Brief
 
-**Domain:** `vr.divineleads.guru` (single host — public landing at `/`, app behind `/login`).
+**Domain:** `avr.divineleads.guru` (single host — public landing at `/`, app behind `/login`).
 Payments (Razorpay Checkout) run from this same subdomain of the already-approved
 `divineleads.guru`, so the landing page doubles as the Razorpay-approval website and the sales page.
 

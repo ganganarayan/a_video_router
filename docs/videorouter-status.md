@@ -12,7 +12,9 @@ A multi-tenant SaaS that **automatically routes recordings from Zoom & Fathom �
 ## Tech stack & deployment
 - Node 22 (ESM), Express, raw `pg` (no ORM), EJS server-rendered views, bcryptjs, JWT cookie sessions.
 - Hosted on **Railway** (Docker, `node:22-slim` + ffmpeg). Postgres on Railway.
-- Two environments: **prod** (`videorouter`, branch `main`) and **staging** (`videorouter-staging`, branch `orbitq`), deployed via `npm run deploy:prod` / `deploy:staging` (guarded scripts refuse wrong branch / dirty tree).
+- Two environments: **prod** (`videorouter`, branch `main`) at https://avr.divineleads.guru and **staging** (`videorouter-staging`, branch `orbitq`) at https://videorouter-staging.up.railway.app, deployed via `npm run deploy:prod` / `deploy:staging` (guarded scripts refuse wrong branch / dirty tree).
+- **Custom domain is live:** https://avr.divineleads.guru is the single prod host — public landing at `/`, app behind `/login`, Razorpay Checkout on this already-approved subdomain of `divineleads.guru`. `PUBLIC_URL`, the Google OAuth redirect URIs and the Razorpay webhook all point at it.
+- Verify any deploy with a public `GET /api/version` on the host above and compare `sha` to the pushed commit.
 - Self-service DB backup/restore via `/dbadmin/export` + `/dbadmin/import` (Hobby plan has no managed backups), gated by `PASSWORD_RESET_KEY`.
 
 ---
@@ -62,7 +64,6 @@ A multi-tenant SaaS that **automatically routes recordings from Zoom & Fathom �
 ### Immediate
 - **Live Razorpay browser test** on staging (test card) to confirm wallet credit end-to-end.
 - **Flip Phase 2 (billing) + landing page to prod** — safe; billing stays dormant until live Razorpay keys are entered on prod `/admin`.
-- **Custom domain** `vr.divineleads.guru` (single host: landing at `/`, app behind `/login`, Razorpay Checkout on the approved subdomain). DNS CNAME → Railway; then set `PUBLIC_URL`, update Google OAuth redirect URIs + Razorpay webhook. _(User adding the domain now.)_
 
 ### Payment gateways (accounts activating)
 - **PhonePe adapter** (~48h to account activation): OAuth token → `/checkout/v2/pay` PayPage redirect → Order-Status + webhook.

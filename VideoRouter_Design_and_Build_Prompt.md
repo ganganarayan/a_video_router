@@ -251,7 +251,7 @@ All accounts are connected here and stored encrypted in Postgres — **no provid
 DATABASE_URL             # Railway Postgres
 SETTINGS_ENCRYPTION_KEY  # 32-byte key for AES-256-GCM of stored secrets
 JWT_SECRET               # dashboard sessions
-PUBLIC_URL               # e.g. https://videorouter.up.railway.app (OAuth callback base)
+PUBLIC_URL               # e.g. https://avr.divineleads.guru (OAuth callback base)
 ADMIN_EMAIL              # first-run admin bootstrap
 ADMIN_PASSWORD           # first-run admin bootstrap (change after login)
 ```

@@ -18,7 +18,7 @@ Everything is managed from a JWT-protected **admin dashboard**: `/runs`, `/conne
 | `DATABASE_URL` | Postgres connection string (Railway injects it) |
 | `SETTINGS_ENCRYPTION_KEY` | 32-byte hex key for encrypting stored secrets — `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
 | `JWT_SECRET` | signs dashboard sessions — generate the same way |
-| `PUBLIC_URL` | the deployed base URL, e.g. `https://videorouter.up.railway.app` (no trailing slash) |
+| `PUBLIC_URL` | the deployed base URL — prod is `https://avr.divineleads.guru`, staging `https://videorouter-staging.up.railway.app` (no trailing slash) |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | first-run admin login (change the password in Settings after first login) |
 
 ## Deploy to Railway
