@@ -35,6 +35,7 @@ const itemList = {
     main{padding:32px 0 12px}
     h1{font-size:2rem;margin:.2rem 0 .3rem}
     .lead{color:var(--muted);margin:0 0 1.4rem;max-width:70ch}
+    .sec{font-size:var(--fs-title-2);line-height:var(--lh-title-2);font-weight:650;margin:var(--sp-12) 0 var(--sp-2)}
     .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
     .card{display:block;border:1px solid var(--line);border-radius:12px;padding:18px;background:var(--panel);transition:border-color .12s,transform .12s}
     .card:hover{border-color:var(--accent);transform:translateY(-2px);text-decoration:none}
@@ -64,6 +65,19 @@ const itemList = {
           <h2><%= t.title %></h2>
           <p><%= t.teaser %></p>
           <span class="go">Read →</span>
+        </a>
+      <% }); %>
+    </div>
+
+    <h2 class="sec" id="comparisons">How it compares to other tools</h2>
+    <p class="lead">A row-by-row breakdown against each alternative, including the cases where the
+      other tool is the better choice.</p>
+    <div class="cards">
+      <% comparisons.forEach(function (c) { %>
+        <a class="card" href="/compare/<%= c.slug %>">
+          <h2>AVideoRouter vs <%= c.name %></h2>
+          <p><%= c.teaser %></p>
+          <span class="go">Compare &rarr;</span>
         </a>
       <% }); %>
     </div>

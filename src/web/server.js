@@ -20,6 +20,7 @@ import * as billing from '../billing.js';
 import { getConfigValue } from '../db.js';
 import { LEGAL, LEGAL_ORDER, LAST_UPDATED } from './content/legal.js';
 import { KB_TOPICS } from './content/kb.js';
+import { COMPARISONS } from './content/comparisons.js';
 
 const LEGAL_LABELS = { privacy: 'Privacy', terms: 'Terms', refund: 'Refund', shipping: 'Shipping', contact: 'Contact us' };
 const LEGAL_LINKS = LEGAL_ORDER.map((slug) => ({ href: `/${slug}`, label: LEGAL_LABELS[slug] }));
@@ -188,7 +189,7 @@ export function createServer() {
         cfg = billing.defaultBillingConfig();
       }
       const packs = billing.PACK_PRESETS.map((u) => billing.packQuote(u, cfg));
-      res.render('landing', { videoUrl, packs, alwaysOnPricePaise: cfg.alwaysOnPricePaise });
+      res.render('landing', { videoUrl, packs, alwaysOnPricePaise: cfg.alwaysOnPricePaise, comparisons: COMPARISONS });
     } catch (err) { next(err); }
   });
 
@@ -214,7 +215,8 @@ export function createServer() {
   // Public Knowledge Base (anonymous, crawlable) — pain-point/solution pages for
   // prospects and AI search. Distinct from the in-app Help center. Index + one
   // page per topic; /knowledge-base/:slug falls through to 404 for unknown slugs.
-  app.get('/knowledge-base', (_req, res) => res.render('kb-index', { topics: KB_TOPICS }));
+  app.get('/knowledge-base', (_req, res) =>
+    res.render('kb-index', { topics: KB_TOPICS, comparisons: COMPARISONS }));
   app.get('/knowledge-base/:slug', (req, res, next) => {
     const i = KB_TOPICS.findIndex((t) => t.slug === req.params.slug);
     if (i < 0) return next();
@@ -228,10 +230,27 @@ export function createServer() {
   });
 
   // Crawlability: allow bots on public pages, keep them off the auth-walled app,
+  // One comparison page per alternative tool. Listed in the Knowledge Base and
+  // linked from the landing page; unknown slugs fall through to 404.
+  app.get('/compare', (_req, res) => res.redirect(301, '/knowledge-base#comparisons'));
+  app.get('/compare/:slug', (req, res, next) => {
+    const i = COMPARISONS.findIndex((c) => c.slug === req.params.slug);
+    if (i === -1) return next();
+    res.render('compare', {
+      item: COMPARISONS[i],
+      prev: i > 0 ? COMPARISONS[i - 1] : null,
+      next: i < COMPARISONS.length - 1 ? COMPARISONS[i + 1] : null,
+      others: COMPARISONS.filter((_, j) => j !== i),
+      index: i,
+      total: COMPARISONS.length,
+    });
+  });
+
   // and advertise the sitemap. Base URL is taken from the request so it matches
   // whichever host is being crawled.
   const PUBLIC_PATHS = ['/', '/faq', '/knowledge-base', '/privacy', '/terms', '/refund', '/shipping', '/contact'];
   const KB_PATHS = KB_TOPICS.map((t) => `/knowledge-base/${t.slug}`);
+  const COMPARE_PATHS = ['/compare', ...COMPARISONS.map((c) => `/compare/${c.slug}`)];
   const PRIVATE_PATHS = ['/api/', '/oauth/', '/dbadmin', '/admin', '/login', '/reset', '/set-password',
     '/runs', '/transfers', '/sources', '/logs', '/connections', '/routing', '/schedules', '/team', '/billing',
     '/settings', '/help', '/visitors', '/traffic'];
@@ -247,7 +266,7 @@ export function createServer() {
   app.get('/sitemap.xml', (req, res) => {
     const base = baseUrl(req);
     const today = new Date().toISOString().slice(0, 10);
-    const urls = [...PUBLIC_PATHS, ...KB_PATHS].map((p) =>
+    const urls = [...PUBLIC_PATHS, ...KB_PATHS, ...COMPARE_PATHS].map((p) =>
       `  <url><loc>${base}${p}</loc><lastmod>${today}</lastmod></url>`).join('\n');
     res.type('application/xml').send(
       `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`);
@@ -275,6 +294,9 @@ export function createServer() {
       '',
       '## Knowledge Base topics',
       ...KB_TOPICS.map((t) => `- [${t.title}](${base}/knowledge-base/${t.slug}): ${t.teaser}`),
+      '',
+      '## Tool comparisons',
+      ...COMPARISONS.map((c) => `- [${c.title}](${base}/compare/${c.slug}): ${c.teaser}`),
       '',
       '## Policies',
       `- [Privacy](${base}/privacy)`,

@@ -1,0 +1,221 @@
+<%
+// Public, server-rendered tool comparison page. Locals: item, prev, next, index, total.
+const prevHref = prev ? `/compare/${prev.slug}` : '/knowledge-base';
+const nextHref = next ? `/compare/${next.slug}` : '/knowledge-base';
+const strip = (h) => h.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+const VERDICT = {
+  yes:     { cls: 'y', label: 'Yes' },
+  partial: { cls: 'p', label: 'Partly' },
+  no:      { cls: 'n', label: 'No' },
+};
+const ld = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'Article',
+    headline: item.title,
+    description: item.metaDescription,
+    keywords: item.keywords.join(', '),
+    articleBody: strip(item.summary) + ' ' + strip(item.theirStrengths) + ' ' + strip(item.verdict),
+    about: `Comparison of AVideoRouter and ${item.name} for moving Zoom and Fathom recordings to YouTube and an LMS`,
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: '/' },
+      { '@type': 'ListItem', position: 2, name: 'Knowledge Base', item: '/knowledge-base' },
+      { '@type': 'ListItem', position: 3, name: item.title, item: `/compare/${item.slug}` },
+    ],
+  },
+];
+%>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title><%= item.title %> — AVideoRouter</title>
+  <meta name="description" content="<%= item.metaDescription %>">
+  <meta name="keywords" content="<%= item.keywords.join(', ') %>">
+  <link rel="canonical" href="/compare/<%= item.slug %>">
+  <% if (prev) { %><link rel="prev" href="<%= prevHref %>"><% } %>
+  <% if (next) { %><link rel="next" href="<%= nextHref %>"><% } %>
+  <script type="application/ld+json"><%- JSON.stringify(ld) %></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap">
+  <link rel="stylesheet" href="/public/tokens.css">
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--surface-page);color:var(--text-primary);
+      font-family:var(--font-sans);font-size:var(--fs-body);line-height:var(--lh-body);overflow-x:hidden}
+    a{color:var(--brand);text-decoration:none} a:hover{text-decoration:underline}
+    :where(a,button):focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px;border-radius:var(--r-control)}
+    .wrap{max-width:900px;margin:0 auto;padding:0 var(--gutter)}
+    .icon{width:16px;height:16px;flex:none;stroke:currentColor;stroke-width:1.75;fill:none;
+      stroke-linecap:round;stroke-linejoin:round;vertical-align:middle}
+
+    header.top{border-bottom:1px solid var(--line-default);padding:var(--sp-3) 0;position:sticky;top:0;
+      background:var(--surface-raised);z-index:5}
+    header.top .row{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3)}
+    .navbtn{display:inline-flex;align-items:center;gap:var(--sp-1);min-height:36px;padding:0 var(--sp-3);
+      border:1px solid var(--line-default);border-radius:var(--r-control);background:var(--surface-page);
+      color:var(--text-primary);font-weight:600;white-space:nowrap;font-size:var(--fs-small)}
+    .navbtn:hover{border-color:var(--brand);text-decoration:none}
+    .right{display:flex;align-items:center;gap:var(--sp-2)}
+    .signup{display:inline-flex;align-items:center;min-height:36px;padding:0 var(--sp-4);
+      border-radius:var(--r-control);background:var(--brand);color:var(--brand-contrast);
+      font-weight:700;white-space:nowrap;font-size:var(--fs-small)}
+    .signup:hover{background:var(--brand-hover);text-decoration:none}
+
+    .crumb{color:var(--text-tertiary);font-size:var(--fs-small);line-height:var(--lh-small);margin:var(--sp-5) 0 var(--sp-1)}
+    main{padding:var(--sp-2) 0 var(--sp-3)}
+    h1{font-size:var(--fs-title-1);line-height:var(--lh-title-1);font-weight:700;letter-spacing:-.02em;margin:var(--sp-1) 0 var(--sp-3)}
+    h2{font-size:var(--fs-title-2);line-height:var(--lh-title-2);font-weight:650;margin:0 0 var(--sp-3)}
+    .kind{display:inline-block;padding:2px var(--sp-2);border-radius:var(--r-pill);
+      background:var(--surface-sunken);color:var(--text-secondary);
+      font-size:var(--fs-small);line-height:var(--lh-small);margin-bottom:var(--sp-3)}
+    .lede{color:var(--text-secondary);max-width:var(--measure)}
+    .block{border:1px solid var(--line-subtle);border-radius:var(--r-card);padding:var(--sp-6);
+      margin:var(--sp-4) 0;background:var(--surface-raised);box-shadow:var(--shadow-card)}
+    .block.theirs{border-left:4px solid var(--info)}
+    .block.verdict{border-left:4px solid var(--brand)}
+    .block p{margin:0 0 var(--sp-2)} .block p:last-child{margin-bottom:0}
+    .block.theirs h2{color:var(--info)}
+
+    /* the breakdown: one row per capability, with the reason behind the verdict */
+    .bd-wrap{overflow-x:auto}
+    table.bd{width:100%;border-collapse:collapse;min-width:640px}
+    table.bd th,table.bd td{text-align:left;padding:var(--sp-3);border-bottom:1px solid var(--line-subtle);vertical-align:top}
+    table.bd thead th{font-size:var(--fs-micro);line-height:var(--lh-micro);font-weight:600;
+      letter-spacing:.06em;text-transform:uppercase;color:var(--text-tertiary);white-space:nowrap}
+    table.bd thead th.us{color:var(--brand)}
+    table.bd tbody th{font-weight:600;font-size:var(--fs-small);line-height:var(--lh-small);width:30%}
+    table.bd td.us{background:var(--brand-wash)}
+    .mark{display:inline-flex;align-items:center;gap:var(--sp-1);font-size:var(--fs-small);
+      line-height:var(--lh-small);font-weight:600;white-space:nowrap}
+    .mark.y{color:var(--success)} .mark.p{color:var(--warning)} .mark.n{color:var(--text-tertiary)}
+    .why{color:var(--text-secondary);font-size:var(--fs-small);line-height:var(--lh-small)}
+
+    .cta{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-4);margin:var(--sp-8) 0 var(--sp-2)}
+    .cta .big{display:inline-flex;align-items:center;min-height:44px;padding:0 var(--sp-6);
+      border-radius:var(--r-control);background:var(--brand);color:var(--brand-contrast);font-weight:700}
+    .cta .big:hover{background:var(--brand-hover);text-decoration:none}
+    .others{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:var(--sp-3);margin:var(--sp-6) 0}
+    .others a{display:block;padding:var(--sp-4);border:1px solid var(--line-default);
+      border-radius:var(--r-card);background:var(--surface-raised);color:var(--text-primary)}
+    .others a:hover{border-color:var(--brand);background:var(--brand-wash);text-decoration:none}
+    .others .nm{font-weight:700}
+    .others .ts{display:block;color:var(--text-secondary);font-size:var(--fs-small);line-height:var(--lh-small);margin-top:var(--sp-1)}
+    .pager{display:flex;justify-content:space-between;gap:var(--sp-3);margin:var(--sp-6) 0 var(--sp-3);
+      border-top:1px solid var(--line-subtle);padding-top:var(--sp-4)}
+    .pager a{color:var(--text-secondary);font-size:var(--fs-small)} .pager a:hover{color:var(--brand)}
+    footer{border-top:1px solid var(--line-subtle);margin-top:var(--sp-6);padding:var(--sp-5) 0;
+      color:var(--text-secondary);font-size:var(--fs-small);line-height:var(--lh-small);text-align:center}
+    footer .links{display:flex;flex-wrap:wrap;gap:var(--sp-4);justify-content:center;margin-bottom:var(--sp-2)}
+    @media(max-width:560px){ .navbtn .lbl{display:none} }
+    @media (prefers-reduced-motion: reduce){ *{transition-duration:.001ms !important} }
+  </style>
+  <script src="/public/theme.js"></script>
+  <%- typeof pixelHead !== 'undefined' ? pixelHead : '' %>
+</head>
+<body>
+  <header class="top"><div class="wrap"><div class="row">
+    <a class="navbtn" href="/knowledge-base" title="Knowledge Base" aria-label="Back to Knowledge Base">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg><span class="lbl">Back</span>
+    </a>
+    <div class="right">
+      <span data-theme-toggle></span>
+      <a class="signup" href="/register">Free sign up</a>
+    </div>
+  </div></div></header>
+
+  <main><div class="wrap">
+    <div class="crumb">
+      <a href="/">Home</a> &rsaquo; <a href="/knowledge-base">Knowledge Base</a> &rsaquo;
+      <span>Comparison <%= index + 1 %> of <%= total %></span>
+    </div>
+    <h1><%= item.title %></h1>
+    <span class="kind"><%= item.kind %></span>
+    <div class="lede"><%- item.summary %></div>
+
+    <h2 style="margin-top:var(--sp-8)">The complete breakdown</h2>
+    <div class="bd-wrap">
+      <table class="bd">
+        <thead>
+          <tr>
+            <th scope="col">Capability</th>
+            <th scope="col" class="us">AVideoRouter</th>
+            <th scope="col"><%= item.name %></th>
+            <th scope="col">Why</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% item.rows.forEach((r) => { const u = VERDICT[r.us], t = VERDICT[r.them]; %>
+            <tr>
+              <th scope="row"><%= r.cap %></th>
+              <td class="us">
+                <span class="mark <%= u.cls %>">
+                  <% if (r.us === 'yes') { %><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+                  <% } else if (r.us === 'no') { %><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                  <% } else { %><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg><% } %>
+                  <%= u.label %>
+                </span>
+              </td>
+              <td>
+                <span class="mark <%= t.cls %>">
+                  <% if (r.them === 'yes') { %><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+                  <% } else if (r.them === 'no') { %><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                  <% } else { %><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg><% } %>
+                  <%= t.label %>
+                </span>
+              </td>
+              <td class="why"><%= r.detail %></td>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="block theirs">
+      <h2>When <%= item.name %> is the better choice</h2>
+      <%- item.theirStrengths %>
+    </div>
+
+    <div class="block verdict">
+      <h2>The verdict</h2>
+      <%- item.verdict %>
+    </div>
+
+    <div class="cta">
+      <a class="big" href="/register">Free sign up — first GB's on us</a>
+      <a href="/#compare-tools">All comparisons</a>
+    </div>
+
+    <h2 style="margin-top:var(--sp-8)">Compare with something else</h2>
+    <div class="others">
+      <% others.forEach((o) => { %>
+        <a href="/compare/<%= o.slug %>">
+          <span class="nm">AVideoRouter vs <%= o.name %></span>
+          <span class="ts"><%= o.teaser %></span>
+        </a>
+      <% }); %>
+    </div>
+
+    <div class="pager">
+      <a href="<%= prevHref %>"><%= prev ? '← vs ' + prev.name : '← Knowledge Base' %></a>
+      <a href="<%= nextHref %>" style="text-align:right"><%= next ? 'vs ' + next.name + ' →' : 'Knowledge Base →' %></a>
+    </div>
+  </div></main>
+
+  <footer><div class="wrap">
+    <div class="links">
+      <a href="/">Home</a><a href="/knowledge-base">Knowledge Base</a><a href="/faq">FAQ</a>
+      <a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/contact">Contact us</a>
+    </div>
+    <div style="margin-bottom:var(--sp-1)">Support: <a href="mailto:connect@divineleads.guru?subject=AVideoRouter">connect@divineleads.guru</a></div>
+    <div>&copy; <%= new Date().getFullYear() %> AVideoRouter &middot; an app by Divine Leads</div>
+  </div></footer>
+  <script src="/public/beacon.js"></script>
+</body>
+</html>

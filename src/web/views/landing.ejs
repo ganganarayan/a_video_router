@@ -110,6 +110,19 @@
     table.cmp .n{color:var(--muted)}
     table.cmp .p{color:var(--muted);font-size:13px}
     .cmp-note{color:var(--muted);font-size:13px;margin-top:14px;text-align:center}
+    .cmp-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:var(--sp-4)}
+    .cmp-card{display:flex;flex-direction:column;gap:var(--sp-1);padding:var(--sp-6);
+      border:1px solid var(--line-default);border-radius:var(--r-card);background:var(--panel);
+      color:var(--text);transition:border-color var(--dur-hover) var(--ease),background-color var(--dur-hover) var(--ease)}
+    .cmp-card:hover{border-color:var(--brand);background:var(--brand-wash);text-decoration:none}
+    .cmp-kind{font-size:var(--fs-micro);line-height:var(--lh-micro);font-weight:600;letter-spacing:.06em;
+      text-transform:uppercase;color:var(--text-tertiary)}
+    .cmp-name{font-size:var(--fs-title-3);line-height:var(--lh-title-3);font-weight:700;color:var(--text-primary)}
+    .cmp-teaser{color:var(--text-secondary);font-size:var(--fs-small);line-height:var(--lh-small)}
+    .cmp-go{display:inline-flex;align-items:center;gap:var(--sp-1);margin-top:var(--sp-2);
+      color:var(--brand);font-weight:700;font-size:var(--fs-small);line-height:var(--lh-small)}
+    .cmp-icon{width:16px;height:16px;flex:none;stroke:currentColor;stroke-width:1.75;fill:none;
+      stroke-linecap:round;stroke-linejoin:round}
 
     .price{max-width:520px;margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:32px;text-align:center}
     .price .amt{font-size:44px;font-weight:800}
@@ -507,6 +520,27 @@
       <a class="btn primary big" href="/register">Start free — first GB's on us</a>
       <div style="margin-top:18px"><a class="btn kb-btn big" href="/knowledge-base">Browse the Knowledge Base</a></div>
       <p class="muted" style="margin-top:10px">See exactly how VideoRouter removes the busywork after every live session.</p>
+    </div>
+  </section>
+
+  <section id="compare-tools">
+    <div class="wrap">
+      <h2>How AVideoRouter compares to other tools</h2>
+      <p class="lead">The table above in full, one alternative at a time — every capability, the
+        reasoning behind each verdict, and the cases where the other tool is genuinely the better
+        choice.</p>
+      <div class="cmp-cards">
+        <% comparisons.forEach(function (c) { %>
+          <a class="cmp-card" href="/compare/<%= c.slug %>">
+            <span class="cmp-kind"><%= c.kind %></span>
+            <span class="cmp-name">AVideoRouter vs <%= c.name %></span>
+            <span class="cmp-teaser"><%= c.teaser %></span>
+            <span class="cmp-go">Full breakdown
+              <svg class="cmp-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+            </span>
+          </a>
+        <% }); %>
+      </div>
     </div>
   </section>
 
