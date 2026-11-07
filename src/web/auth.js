@@ -106,6 +106,43 @@ async function loadSessionUser(req) {
   return user;
 }
 
+// Resolve the session into one of three states so a transient DB error is never
+// mistaken for a logged-out user. Previously any failure here (including a
+// Railway Postgres bounce / cold wake) was swallowed as "no user", which bounced
+// the person to /login on the next page or API call, i.e. random logouts while
+// just switching between menus.
+//   'none'  -> no or invalid session, or the user was deleted  (-> /login)
+//   'error' -> valid session but the user lookup failed (DB hiccup)  (-> retry, stay signed in)
+//   'ok'    -> the user row
+async function resolveSessionUser(req) {
+  const session = verifySession(req);
+  if (!session?.sub) return { state: 'none' };
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const user = await getUserByEmail(session.sub);
+      if (!user || user.deleted_at) return { state: 'none' };
+      return { state: 'ok', user };
+    } catch (err) {
+      if (attempt === 0) { await new Promise((r) => setTimeout(r, 250)); continue; } // one quick retry for a waking DB
+      return { state: 'error', err };
+    }
+  }
+  return { state: 'error' };
+}
+
+// Shown (HTTP 503) when the session is valid but the DB is momentarily
+// unreachable. It auto-refreshes, so the person's navigation self-heals once the
+// DB is back instead of dumping them on the login page.
+const RETRY_HTML = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">`
+  + `<meta name="viewport" content="width=device-width, initial-scale=1">`
+  + `<meta http-equiv="refresh" content="3"><title>Reconnecting</title>`
+  + `<link rel="stylesheet" href="/public/style.css"></head>`
+  + `<body><main style="max-width:480px;text-align:center">`
+  + `<h1>Reconnecting</h1>`
+  + `<p class="meta">The database is waking up. This page retries on its own, so you stay signed in.</p>`
+  + `<p class="meta"><a href="">Retry now</a></p>`
+  + `</main></body></html>`;
+
 function toReqUser(u) {
   return {
     id: u.id,
@@ -131,9 +168,10 @@ async function staffLocked(user) {
 }
 
 export async function requirePageAuth(req, res, next) {
-  const u = await loadSessionUser(req).catch(() => null);
-  if (!u) return res.redirect('/login');
-  req.user = toReqUser(u);
+  const r = await resolveSessionUser(req);
+  if (r.state === 'error') return res.status(503).type('html').send(RETRY_HTML); // DB blip: retry, do NOT log out
+  if (r.state === 'none') return res.redirect('/login');
+  req.user = toReqUser(r.user);
   // Force the first-login password set before anything else.
   if (req.user.mustChangePassword && req.path !== '/set-password') {
     return res.redirect('/set-password');
@@ -143,9 +181,12 @@ export async function requirePageAuth(req, res, next) {
 }
 
 export async function requireApiAuth(req, res, next) {
-  const u = await loadSessionUser(req).catch(() => null);
-  if (!u) return res.status(401).json({ error: 'unauthorized' });
-  req.user = toReqUser(u);
+  const r = await resolveSessionUser(req);
+  // 503 (not 401) on a DB blip: the client only redirects to /login on 401, so a
+  // transient error now surfaces as a retryable toast instead of a logout.
+  if (r.state === 'error') return res.status(503).json({ error: 'Temporarily unavailable, please retry.', transient: true });
+  if (r.state === 'none') return res.status(401).json({ error: 'unauthorized' });
+  req.user = toReqUser(r.user);
   if (req.user.mustChangePassword) {
     return res.status(409).json({ error: 'password change required', redirect: '/set-password' });
   }
@@ -162,9 +203,10 @@ export async function getOptionalUser(req) {
 
 // Valid session but tolerant of must-change (used by the set-password endpoints).
 export async function requireSessionOnly(req, res, next) {
-  const u = await loadSessionUser(req).catch(() => null);
-  if (!u) return res.redirect('/login');
-  req.user = toReqUser(u);
+  const r = await resolveSessionUser(req);
+  if (r.state === 'error') return res.status(503).type('html').send(RETRY_HTML);
+  if (r.state === 'none') return res.redirect('/login');
+  req.user = toReqUser(r.user);
   next();
 }
 
