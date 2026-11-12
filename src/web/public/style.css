@@ -427,17 +427,30 @@ button.copy.copied { color: var(--success); border-color: var(--success); }
   color: var(--text-secondary); margin-top: 2px;
 }
 
-/* ---------- password show/hide ---------- */
+/* ---------- password show/hide + copy ---------- */
 .pw-wrap { position: relative; display: inline-block; width: 100%; }
-.pw-wrap > input { width: 100%; padding-right: 44px; }
-.pw-eye {
-  position: absolute; right: var(--sp-1); top: 50%; transform: translateY(-50%);
+/* Room on the right for the copy button and the eye button, side by side. */
+.pw-wrap > input { width: 100%; padding-right: 80px; }
+.pw-eye, .pw-copy {
+  position: absolute; top: 50%; transform: translateY(-50%);
   background: none; border: 0; cursor: pointer;
   min-height: 36px; padding: 0 var(--sp-2); margin: 0;
   opacity: .6; color: var(--text-secondary);
 }
-.pw-eye:hover { opacity: 1; background: none; }
-.pw-eye svg { width: 18px; height: 18px; display: block; }
+.pw-eye { right: var(--sp-1); }
+.pw-copy { right: calc(var(--sp-1) + 36px); }
+.pw-eye:hover, .pw-copy:hover { opacity: 1; background: none; }
+.pw-copy.ok { opacity: 1; color: var(--success); }
+.pw-eye svg, .pw-copy svg { width: 18px; height: 18px; display: block; }
+
+/* A quiet "generate a value" action under a secret field (e.g. webhook secret). */
+.pw-gen {
+  margin-top: var(--sp-2);
+  background: none; border: 0; padding: 0; min-height: auto;
+  color: var(--brand); font-size: var(--fs-small); line-height: var(--lh-small);
+  cursor: pointer; text-align: left;
+}
+.pw-gen:hover { background: none; color: var(--brand-hover); text-decoration: underline; }
 
 /* ---------- contextual help button ---------- */
 .help-fab {
@@ -473,9 +486,10 @@ td button, td .btn, th button,
 }
 /* §15.5 — on touch, the floor is 44x44 regardless of the visual size above. */
 @media (pointer: coarse) {
-  button, .btn, td button, td .btn, .row > button, .row > .btn, button.copy, .pw-eye, .modal-close {
+  button, .btn, td button, td .btn, .row > button, .row > .btn, button.copy, .pw-eye, .pw-copy, .modal-close {
     min-height: 44px;
   }
+  .pw-gen { min-height: 32px; }
 }
 
 /* ---------- status marks in table cells ---------- */

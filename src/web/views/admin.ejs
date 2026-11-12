@@ -28,7 +28,9 @@
   <div class="row" style="align-items:flex-end; flex-wrap:wrap">
     <div class="field"><label>Key ID</label><input id="rzp-keyid" placeholder="rzp_test_..." style="min-width:220px"></div>
     <div class="field"><label>Key secret</label><input id="rzp-secret" type="password" autocomplete="new-password" placeholder="leave blank to keep"></div>
-    <div class="field"><label>Webhook secret</label><input id="rzp-webhook" type="password" autocomplete="new-password" placeholder="leave blank to keep"></div>
+    <div class="field"><label>Webhook secret</label>
+      <input id="rzp-webhook" type="password" autocomplete="new-password" placeholder="leave blank to keep">
+      <button type="button" id="rzp-webhook-gen" class="pw-gen">Generate a random secret</button></div>
     <button class="primary" id="rzp-save">Save keys</button>
   </div>
   <div class="row" style="align-items:flex-end; flex-wrap:wrap; margin-top:14px; border-top:1px solid var(--line); padding-top:14px">
@@ -459,6 +461,25 @@ document.getElementById('rzp-save').onclick = async () => {
     toast('Razorpay keys saved.');
     loadConfig();
   } catch (e) { toast(e.message, 'err'); }
+};
+
+// Make a strong random webhook secret, drop it into the field (kept hidden), and
+// put it on the clipboard so it can be pasted into Razorpay's webhook settings.
+// Use the same value in both places, then Save keys to store it here.
+document.getElementById('rzp-webhook-gen').onclick = () => {
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  const secret = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  const f = document.getElementById('rzp-webhook');
+  f.value = secret;
+  const done = () => toast('Webhook secret generated and copied. Paste the same value into Razorpay, then Save keys.');
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(secret).then(done).catch(() => {
+      toast('Webhook secret generated. Use the copy button next to the field, then Save keys.');
+    });
+  } else {
+    toast('Webhook secret generated. Use the copy button next to the field, then Save keys.');
+  }
 };
 
 async function load() {
